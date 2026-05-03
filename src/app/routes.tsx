@@ -16,6 +16,7 @@ import GuiaMetodologicaView from './components/phases/GuiaMetodologicaView';
 import ArtefactosView from './components/phases/ArtefactosView';
 import ExternalSurveyView from './components/survey/ExternalSurveyView';
 import AdminPanelView from './components/admin/AdminPanelView';
+import Papelera from './pages/Papelera';
 import PlaceholderPage from './components/layout/PlaceholderPage';
 
 /**
@@ -70,17 +71,18 @@ export const router = createBrowserRouter([
             ),
           },
 
-          // Panel de administración
+          // Panel de administración y Papelera
           { path: 'admin', Component: AdminPanelView },
+          { path: 'papelera', Component: Papelera },
 
           // Detalle y resumen de proyecto (rutas dinámicas — :id se resuelve vía useParams)
           { path: 'project/:id', Component: ProjectDetailView },
           { path: 'project/:id/summary', Component: ProjectSummaryView },
 
           // Fases específicas (:id + :phaseNum capturados con useParams para queries a Supabase)
-          { path: 'project/:id/phase/1', Component: IdoneidadModule },
+          { path: 'project/:id/phase/1', Component: DocumentacionModule },
           { path: 'project/:id/phase/2', Component: EntrevistasModule },
-          { path: 'project/:id/phase/3', Component: DocumentacionModule },
+          { path: 'project/:id/phase/3', Component: IdoneidadModule },
           { path: 'project/:id/phase/4', Component: TipoProyectosModule },
           { path: 'project/:id/phase/5', Component: MadurezModule },
           { path: 'project/:id/phase/6', Component: EnfoqueModule },

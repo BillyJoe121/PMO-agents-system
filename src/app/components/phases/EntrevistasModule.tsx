@@ -1,22 +1,18 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, Plus, Pencil, Trash2, X, Save, Loader2, AlertTriangle, Send,
-  User, Briefcase, FileText, CheckCircle2, MessageSquare, Brain, ChevronDown,
+  Plus, Pencil, Trash2, X, Save, Loader2, AlertTriangle, Send,
+  User, Briefcase, FileText, CheckCircle2, MessageSquare, Sparkles, ChevronDown,
   Calendar, Clock, MousePointerClick, Upload, Paperclip, FileUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
+import { useEntrevistas, type EntrevistaLocal as Entrevista, type EntrevistasDiagnosis } from '../../hooks/useEntrevistas';
+import PhaseHeader from './_shared/PhaseHeader';
+import NextPhaseButton from './_shared/NextPhaseButton';
 
-interface Entrevista {
-  id: string;
-  nombre: string;
-  cargo: string;
-  area: string;
-  notas: string;
-  createdAt: string;
-}
+// Using Entrevista from hook now
 
 // ---------------------------------------------------------------------------
 // Panel mode type
@@ -40,29 +36,26 @@ function ConfirmModal({ open, count, onCancel, onConfirm, isLoading }: ConfirmMo
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onCancel} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6">
-            <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={20} className="text-amber-600" />
-              </div>
+            onClick={onCancel} className="absolute inset-0 bg-neutral-900/30 backdrop-blur-sm" />
+          <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="relative bg-white rounded-2xl w-full max-w-md z-10 p-6 border border-neutral-200/70" style={{ boxShadow: '0 24px 64px -16px rgba(0,0,0,0.18)' }}>
+            <div className="flex items-start gap-4 mb-6">
               <div>
-                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Enviar al Agente 1</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">
-                  Se enviarán <strong>{count} entrevistas</strong> al Agente 1 para análisis consolidado.
-                  La edición quedará <strong>bloqueada</strong> una vez confirmado.
+                <h3 className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>¿Enviar al Agente 2?</h3>
+                <p className="text-neutral-500 text-[13px] leading-relaxed">
+                  Se enviarán <span className="text-neutral-900" style={{ fontWeight: 500 }}>{count} entrevistas</span> al Agente 2 para análisis consolidado. La edición quedará bloqueada una vez confirmado.
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50 transition-colors" style={{ fontWeight: 500 }}>
+            <div className="flex gap-2">
+              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
                 Cancelar
               </button>
               <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#030213', fontWeight: 600 }}>
-                {isLoading ? <><Loader2 size={14} className="animate-spin" /> Enviando...</> : <><Send size={14} /> Confirmar</>}
+                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
+                style={{ background: '#0a0a0a', fontWeight: 500 }}>
+                {isLoading ? <><Loader2 size={13} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Confirmar</>}
               </button>
             </div>
           </motion.div>
@@ -84,16 +77,16 @@ function EmptyStatePanel() {
       exit={{ opacity: 0, y: -8 }}
       className="flex flex-col items-center justify-center h-full min-h-[420px] text-center px-8"
     >
-      <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-5">
-        <MousePointerClick size={28} className="text-gray-400" />
+      <div className="w-14 h-14 rounded-2xl bg-neutral-50 border border-neutral-200/80 flex items-center justify-center mb-5">
+        <MousePointerClick size={20} className="text-neutral-400" strokeWidth={1.5} />
       </div>
-      <p className="text-gray-700 mb-1" style={{ fontWeight: 600 }}>Selecciona una entrevista</p>
-      <p className="text-gray-400 text-sm leading-relaxed max-w-xs">
+      <p className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.005em' }}>Selecciona una entrevista</p>
+      <p className="text-neutral-500 text-[13px] leading-relaxed max-w-xs">
         Haz clic en cualquier entrevistado de la lista para ver el contenido completo aquí.
       </p>
-      <div className="mt-6 flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-dashed border-gray-200">
-        <Plus size={14} className="text-gray-400" />
-        <span className="text-gray-400 text-xs">O crea una nueva con el botón de la izquierda</span>
+      <div className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-dashed border-neutral-200">
+        <Plus size={12} className="text-neutral-400" strokeWidth={1.75} />
+        <span className="text-neutral-400 text-[11px]">O crea una nueva con el botón de la izquierda</span>
       </div>
     </motion.div>
   );
@@ -119,71 +112,85 @@ function DetailPanel({ entrevista, onEdit, onDelete }: DetailPanelProps) {
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-zinc-900 flex items-center justify-center flex-shrink-0">
-            <User size={20} className="text-white" />
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-neutral-900 flex items-center justify-center flex-shrink-0">
+            <User size={16} className="text-white" strokeWidth={1.75} />
           </div>
-          <div>
-            <h2 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+          <div className="min-w-0">
+            <h2 className="text-neutral-900 tracking-tight truncate" style={{ fontWeight: 500, fontSize: '1.0625rem', letterSpacing: '-0.01em' }}>
               {entrevista.nombre}
             </h2>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="flex items-center gap-1.5 text-gray-500 text-sm">
-                <Briefcase size={12} />
+            <div className="flex items-center gap-2 mt-1 text-[12px]">
+              <span className="flex items-center gap-1.5 text-neutral-500">
+                <Briefcase size={11} strokeWidth={1.75} />
                 {entrevista.cargo}
               </span>
-              {entrevista.area && (
-                <span className="text-gray-300">·</span>
-              )}
-              {entrevista.area && (
-                <span className="text-gray-400 text-sm">{entrevista.area}</span>
-              )}
+              {entrevista.area && <><span className="text-neutral-300">·</span><span className="text-neutral-400">{entrevista.area}</span></>}
             </div>
           </div>
         </div>
-        {/* Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={onEdit}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 hover:border-gray-300 transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[12px] hover:border-neutral-300 hover:bg-neutral-50 transition-all"
             style={{ fontWeight: 500 }}
           >
-            <Pencil size={13} />
+            <Pencil size={11} strokeWidth={1.75} />
             Editar
           </button>
           <button
             onClick={onDelete}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-100 text-red-500 text-sm hover:bg-red-50 hover:border-red-200 transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-rose-100 text-rose-600 text-[12px] hover:bg-rose-50 hover:border-rose-200 transition-all"
             style={{ fontWeight: 500 }}
           >
-            <Trash2 size={13} />
+            <Trash2 size={11} strokeWidth={1.75} />
             Eliminar
           </button>
         </div>
       </div>
 
       {/* Metadata strip */}
-      <div className="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100">
-        <div className="flex items-center gap-1.5 text-gray-400 text-xs">
-          <Calendar size={12} />
-          <span>Registrada: <strong className="text-gray-600">{entrevista.createdAt}</strong></span>
+      <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-100 text-[11px] text-neutral-400">
+        <div className="flex items-center gap-1.5">
+          <Calendar size={11} strokeWidth={1.75} />
+          <span>Registrada · <span className="text-neutral-700 tabular-nums" style={{ fontWeight: 500 }}>{entrevista.createdAt}</span></span>
         </div>
-        <div className="flex items-center gap-1.5 text-gray-400 text-xs">
-          <Clock size={12} />
-          <span><strong className="text-gray-600">{entrevista.notas.length}</strong> caracteres</span>
+        <div className="flex items-center gap-1.5">
+          <Clock size={11} strokeWidth={1.75} />
+          <span className="tabular-nums"><span className="text-neutral-700" style={{ fontWeight: 500 }}>{entrevista.notas.length}</span> caracteres</span>
         </div>
       </div>
 
+      {entrevista.fileName && (
+        <div className="mb-6">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Archivo adjunto</p>
+          <a
+            href={entrevista.storagePath}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors w-full group"
+          >
+            <div className="w-8 h-8 rounded-lg bg-white border border-indigo-100/50 flex items-center justify-center flex-shrink-0 group-hover:border-indigo-200 transition-colors">
+              <FileText size={14} className="text-indigo-500" strokeWidth={1.75} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>{entrevista.fileName}</p>
+              <p className="text-indigo-500 text-[11px]">Ver documento original ↗</p>
+            </div>
+          </a>
+        </div>
+      )}
+
       {/* Notes body */}
       <div className="flex-1">
-        <div className="flex items-center gap-1.5 mb-3">
-          <FileText size={14} className="text-gray-400" />
-          <p className="text-gray-500 text-xs uppercase tracking-wider" style={{ fontWeight: 700 }}>
+        <div className="flex items-center gap-2 mb-3">
+          <FileText size={12} className="text-neutral-400" strokeWidth={1.75} />
+          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>
             Notas / Transcripción
           </p>
         </div>
-        <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 min-h-[200px]">
-          <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">
+        <div className="bg-neutral-50 rounded-xl border border-neutral-200/70 p-4 min-h-[200px]">
+          <p className="text-neutral-700 text-[13px] leading-relaxed whitespace-pre-wrap">
             {entrevista.notas}
           </p>
         </div>
@@ -213,8 +220,8 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
   const [isDragging, setIsDragging] = useState(false);
   const [isReading, setIsReading] = useState(false);
 
-  const READABLE_TYPES = ['text/plain', 'text/markdown', 'text/x-markdown'];
-  const ACCEPTED = '.txt,.md,.pdf,.doc,.docx';
+  const READABLE_TYPES = ['text/csv'];
+  const ACCEPTED = '.csv,.pdf';
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -223,20 +230,33 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
   };
 
   const processFile = (file: File) => {
-    const canRead = READABLE_TYPES.includes(file.type) || file.name.endsWith('.txt') || file.name.endsWith('.md');
-    setAttachedFile({ name: file.name, size: file.size, parsed: canRead });
-
-    if (canRead) {
-      setIsReading(true);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        onChange('notas', text);
-        setIsReading(false);
-      };
-      reader.onerror = () => setIsReading(false);
-      reader.readAsText(file, 'UTF-8');
+    if (file.name.match(/\.(pdf)$/i)) {
+      // Es un PDF, lo adjuntamos para enviarlo al agente directamente
+      setAttachedFile({ name: file.name, size: file.size, parsed: false });
+      onChange('file', file);
+      toast.success('Archivo PDF adjuntado para análisis');
+      return;
     }
+
+    if (!READABLE_TYPES.includes(file.type) && !file.name.match(/\.(csv)$/i)) {
+      toast.error('Formato no permitido', { description: 'Sube un archivo .pdf o .csv.' });
+      return;
+    }
+
+    setIsReading(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      onChange('notas', text);
+      setAttachedFile({ name: file.name, size: file.size, parsed: true });
+      setIsReading(false);
+      toast.success('Texto extraído correctamente');
+    };
+    reader.onerror = () => {
+      toast.error('Error al leer el archivo');
+      setIsReading(false);
+    };
+    reader.readAsText(file);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -255,7 +275,7 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
 
   const handleRemoveFile = () => {
     setAttachedFile(null);
-    onChange('notas', '');
+    onChange('file', null);
   };
 
   return (
@@ -266,59 +286,59 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
       exit={{ opacity: 0, x: -12 }}
       className="flex flex-col h-full"
     >
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-gray-800" style={{ fontWeight: 600 }}>{title}</h3>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.005em' }}>{title}</h3>
         <button
           onClick={onCancel}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
         >
-          <X size={16} />
+          <X size={14} strokeWidth={1.75} />
         </button>
       </div>
 
       <div className="flex flex-col gap-4 flex-1">
         {/* Nombre */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-gray-600 text-sm flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-            <User size={13} /> Nombre del entrevistado
+          <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
+            <User size={11} strokeWidth={1.75} /> Nombre del entrevistado
           </label>
           <input
             type="text"
             value={formData.nombre}
             onChange={e => onChange('nombre', e.target.value)}
             placeholder="Ej: Juan Carlos Restrepo"
-            className={`w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all bg-white
-              ${formErrors.nombre ? 'border-red-400 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:border-gray-400 focus:ring-2 focus:ring-gray-100'}
+            className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
+              ${formErrors.nombre ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
             `}
           />
-          {formErrors.nombre && <p className="text-red-500 text-xs">{formErrors.nombre}</p>}
+          {formErrors.nombre && <p className="text-rose-500 text-[11px]">{formErrors.nombre}</p>}
         </div>
 
         {/* Cargo + Área */}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
-            <label className="text-gray-600 text-sm flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-              <Briefcase size={13} /> Cargo / Rol
+            <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
+              <Briefcase size={11} strokeWidth={1.75} /> Cargo / Rol
             </label>
             <input
               type="text"
               value={formData.cargo}
               onChange={e => onChange('cargo', e.target.value)}
               placeholder="Ej: Gerente de Operaciones"
-              className={`w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all bg-white
-                ${formErrors.cargo ? 'border-red-400 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:border-gray-400 focus:ring-2 focus:ring-gray-100'}
+              className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
+                ${formErrors.cargo ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
               `}
             />
-            {formErrors.cargo && <p className="text-red-500 text-xs">{formErrors.cargo}</p>}
+            {formErrors.cargo && <p className="text-rose-500 text-[11px]">{formErrors.cargo}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-gray-600 text-sm" style={{ fontWeight: 500 }}>Área / Departamento</label>
+            <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Área / Departamento</label>
             <input
               type="text"
               value={formData.area}
               onChange={e => onChange('area', e.target.value)}
               placeholder="Ej: TI, Finanzas…"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all bg-white focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+              className="w-full px-3.5 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none transition-all bg-white focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 placeholder:text-neutral-400"
             />
           </div>
         </div>
@@ -327,17 +347,17 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
         <div className="flex flex-col gap-1.5 flex-1">
           {/* Label row */}
           <div className="flex items-center justify-between">
-            <label className="text-gray-600 text-sm flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-              <FileText size={13} /> Notas / Transcripción
+            <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
+              <FileText size={11} strokeWidth={1.75} /> Notas / Transcripción
             </label>
             {/* Upload button */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all text-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-500 hover:text-neutral-900 hover:bg-neutral-50 transition-all text-[11px]"
               style={{ fontWeight: 500 }}
             >
-              <FileUp size={12} />
+              <FileUp size={11} strokeWidth={1.75} />
               Cargar transcripción
             </button>
             <input
@@ -358,18 +378,17 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
                 exit={{ opacity: 0, y: -4, height: 0 }}
                 className="overflow-hidden"
               >
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${
-                  attachedFile.parsed
-                    ? 'bg-green-50 border-green-200 text-green-700'
-                    : 'bg-amber-50 border-amber-200 text-amber-700'
-                }`}>
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${attachedFile.parsed
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : 'bg-amber-50 border-amber-200 text-amber-700'
+                  }`}>
                   <Paperclip size={11} className="flex-shrink-0" />
                   <span className="flex-1 truncate" style={{ fontWeight: 500 }}>{attachedFile.name}</span>
                   <span className="opacity-60 flex-shrink-0">{formatSize(attachedFile.size)}</span>
                   {attachedFile.parsed ? (
-                    <span className="flex-shrink-0 opacity-70">· Texto extraído</span>
+                    <span className="flex-shrink-0 opacity-70">· Texto extraído con éxito</span>
                   ) : (
-                    <span className="flex-shrink-0 opacity-70">· Solo referencia</span>
+                    <span className="flex-shrink-0 opacity-70 text-indigo-600">· PDF Adjunto para Agente</span>
                   )}
                   <button
                     onClick={handleRemoveFile}
@@ -379,8 +398,8 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
                   </button>
                 </div>
                 {!attachedFile.parsed && (
-                  <p className="text-amber-600 text-xs mt-1 pl-1">
-                    Los archivos PDF y Word no se pueden extraer automáticamente. Pegue el texto manualmente o cargue un archivo .txt.
+                  <p className="text-indigo-600 text-[11px] mt-1.5 pl-1 leading-relaxed">
+                    El agente 1 analizará este PDF automáticamente junto con las notas adicionales que escribas.
                   </p>
                 )}
               </motion.div>
@@ -389,13 +408,12 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
 
           {/* Dropzone + Textarea */}
           <div
-            className={`relative flex-1 rounded-xl border-2 transition-all ${
-              isDragging
-                ? 'border-zinc-400 bg-zinc-50'
-                : formErrors.notas
-                  ? 'border-red-400'
-                  : 'border-gray-200'
-            }`}
+            className={`relative flex-1 rounded-xl border transition-all ${isDragging
+              ? 'border-neutral-400 bg-neutral-50'
+              : formErrors.notas
+                ? 'border-rose-400'
+                : 'border-neutral-200/80'
+              }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
@@ -433,7 +451,7 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
             <textarea
               value={formData.notas}
               onChange={e => onChange('notas', e.target.value)}
-              placeholder="Escriba o pegue aquí la transcripción, o arrastre un archivo .txt sobre este campo…"
+              placeholder="Escriba o pegue aquí la transcripción, o arrastre un archivo .csv sobre este campo…"
               rows={8}
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-y bg-white leading-relaxed border-0 focus:ring-0"
             />
@@ -441,32 +459,31 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
 
           {formErrors.notas && <p className="text-red-500 text-xs">{formErrors.notas}</p>}
           <div className="flex items-center justify-between">
-            <p className="text-gray-400 text-xs flex items-center gap-1">
+            <p className="text-neutral-400 text-xs flex items-center gap-1">
               <Upload size={10} />
-              Soporta .txt · .md · .pdf · .doc · .docx — o arrastra aquí
+              Soporta archivos .pdf o .csv
             </p>
-            <p className="text-gray-400 text-xs">{formData.notas.length} caracteres</p>
+            <p className="text-neutral-400 text-xs">{formData.notas.length} caracteres</p>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             onClick={onCancel}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors"
             style={{ fontWeight: 500 }}
           >
-            <X size={14} /> Cancelar
+            <X size={13} /> Cancelar
           </button>
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={{ y: -1 }} whileTap={{ y: 0 }}
             onClick={onSave}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm transition-all"
-            style={{ background: '#030213', fontWeight: 600 }}
+            className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-full text-white text-[13px] transition-all"
+            style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
           >
-            <Save size={14} />
-            {mode === 'edit' ? 'Actualizar Entrevista' : 'Guardar Entrevista'}
+            <Save size={13} />
+            {mode === 'edit' ? 'Actualizar entrevista' : 'Guardar entrevista'}
           </motion.button>
         </div>
       </div>
@@ -492,7 +509,6 @@ const MOCK_AGENT_DIAGNOSIS = {
 // Main component
 // ---------------------------------------------------------------------------
 export default function EntrevistasModule() {
-  // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getProject, updatePhaseStatus } = useApp();
@@ -501,38 +517,49 @@ export default function EntrevistasModule() {
   const phase = project?.phases.find(p => p.number === 2);
   const isCompleted = phase?.status === 'completado';
 
-  // ---- Interviews data ----
-  const [entrevistas, setEntrevistas] = useState<Entrevista[]>([
-    {
-      id: 'e1', nombre: 'Ricardo Montoya', cargo: 'Director de Proyectos', area: 'PMO',
-      notas: 'La organización no cuenta con una metodología estándar. Cada equipo trabaja con sus propias herramientas y criterios de éxito independientes.\n\nHay una necesidad urgente de unificación: al menos tres iniciativas en curso están duplicando esfuerzos en definición de requerimientos.\n\nEl entrevistado considera que una PMO centralizada podría reducir el tiempo de entrega en un 30%.',
-      createdAt: '10/03/2024',
-    },
-    {
-      id: 'e2', nombre: 'Claudia Herrera', cargo: 'Gerente de TI', area: 'Tecnología',
-      notas: 'Los proyectos tecnológicos carecen de seguimiento formal. Las fechas de entrega raramente se cumplen por falta de visibilidad del portafolio.\n\nSe identificaron al menos 5 proyectos con scope creep no documentado. La ausencia de un PMO impacta directamente la calidad del software entregado.\n\nSugiere comenzar con un piloto de gestión de proyectos en el área de infraestructura.',
-      createdAt: '11/03/2024',
-    },
-  ]);
+  // ---- Real hook state ----
+  const {
+    entrevistas,
+    setEntrevistas,
+    isLoadingData,
+    isProcessing,
+    diagnosis,
+    fetchInitialData,
+    saveEntrevista,
+    deleteEntrevista,
+    processPhase,
+  } = useEntrevistas(projectId!);
+
+  type PanelMode = 'empty' | 'detail' | 'new' | 'edit';
 
   // ---- Master-Detail state ----
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>('empty');
 
   // ---- Form state ----
-  const EMPTY_FORM = { nombre: '', cargo: '', area: '', notas: '' };
+  const EMPTY_FORM = { nombre: '', cargo: '', area: '', notas: '', file: undefined as File | undefined };
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // ---- Send & processing state ----
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   // ---- Completed view accordion ----
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // TODO: fetch('public.iteraciones_agente').filter('fase_numero', 2)
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  useEffect(() => {
+    if (isProcessing) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isProcessing]);
 
   // ---- Handlers ----
   const handleSelectInterview = (e: Entrevista) => {
@@ -573,32 +600,48 @@ export default function EntrevistasModule() {
     const errs: Record<string, string> = {};
     if (!formData.nombre.trim()) errs.nombre = 'El nombre es requerido.';
     if (!formData.cargo.trim()) errs.cargo = 'El cargo es requerido.';
-    if (!formData.notas.trim()) errs.notas = 'Las notas de la entrevista son requeridas.';
+    if (!formData.notas.trim() && !formData.file) errs.notas = 'Las notas o el archivo de la entrevista son requeridos.';
     return errs;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const errs = validateForm();
     if (Object.keys(errs).length > 0) { setFormErrors(errs); return; }
 
-    if (panelMode === 'edit' && selectedId) {
-      setEntrevistas(prev =>
-        prev.map(e => e.id === selectedId ? { ...e, ...formData } : e)
-      );
-      toast.success('Entrevista actualizada');
-      setPanelMode('detail'); // return to detail view
-    } else {
-      const newE: Entrevista = {
-        id: `e${Date.now()}`,
-        ...formData,
-        createdAt: new Date().toLocaleDateString('es-CO'),
-      };
-      setEntrevistas(prev => [...prev, newE]);
-      setSelectedId(newE.id);
-      setPanelMode('detail'); // show new entry as selected detail
-      toast.success('Entrevista guardada');
+    const loadingToast = toast.loading('Guardando...');
+
+    try {
+      if (panelMode === 'edit' && selectedId) {
+        const existing = entrevistas.find(e => e.id === selectedId);
+        if (existing) {
+          const payload = { ...existing, ...formData };
+          const result = await saveEntrevista(payload);
+          setEntrevistas(prev =>
+            prev.map(e => e.id === selectedId ? { ...e, ...payload, storagePath: result.storagePath, fileName: result.fileName } : e)
+          );
+        }
+        toast.success('Entrevista actualizada', { id: loadingToast });
+        setPanelMode('detail');
+      } else {
+        const newE: Entrevista = {
+          id: `local_${Date.now()}`, // Temporary local ID
+          ...formData,
+          createdAt: new Date().toLocaleDateString('es-CO'),
+        };
+        const result = await saveEntrevista(newE);
+        newE.id = result.dbId;
+        newE.dbId = result.dbId;
+        newE.storagePath = result.storagePath;
+        newE.fileName = result.fileName;
+        setEntrevistas(prev => [...prev, newE]);
+        setSelectedId(result.dbId);
+        setPanelMode('detail');
+        toast.success('Entrevista guardada', { id: loadingToast });
+      }
+      setFormErrors({});
+    } catch (error) {
+      toast.error('Error al guardar la entrevista', { id: loadingToast });
     }
-    setFormErrors({});
   };
 
   const handleCancelForm = () => {
@@ -621,66 +664,46 @@ export default function EntrevistasModule() {
 
   const handleConfirmSend = async () => {
     setIsSending(true);
-    // TODO: axios.post(N8N_WEBHOOK_AGENTE_1, { proyecto_id, entrevistas: arrayData })
-    // TODO: Supabase Realtime para detectar cuando output_json de Fase 2 esté listo
-    await new Promise(r => setTimeout(r, 600));
-    setIsSending(false);
     setShowConfirm(false);
-    setIsProcessing(true);
     updatePhaseStatus(projectId!, 2, 'procesando');
 
-    setTimeout(() => {
-      setIsProcessing(false);
-      updatePhaseStatus(projectId!, 2, 'completado', 'Análisis consolidado de entrevistas completado. Temas recurrentes identificados: falta de estandarización, comunicación interdepartamental deficiente, y necesidad urgente de gobernanza.');
-      toast.success('¡Fase 2 completada!', { description: 'El Agente 1 ha finalizado el análisis de entrevistas.' });
-    }, 4500);
+    try {
+      const result = await processPhase();
+      if (result) {
+        updatePhaseStatus(projectId!, 2, 'completado', 'Análisis consolidado de entrevistas completado.');
+        toast.success('¡Fase 2 completada!', { description: 'El Agente ha finalizado el análisis de entrevistas.' });
+        await fetchInitialData();
+      }
+    } catch {
+      updatePhaseStatus(projectId!, 2, 'disponible');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (!project) return null;
+
+  if (isLoadingData) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-screen bg-[#fafaf9] gap-3">
+        <Loader2 className="animate-spin text-neutral-400" size={24} />
+        <span className="text-neutral-500 text-[13px]" style={{ fontWeight: 500 }}>Cargando datos de la fase...</span>
+      </div>
+    );
+  }
 
   // Derive currently selected interview object
   const selectedEntrevista = entrevistas.find(e => e.id === selectedId) ?? null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ------------------------------------------------------------------ */}
-      {/* Header */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-6xl mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors group">
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-              {project.companyName}
-            </button>
-            <span className="text-gray-300">/</span>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 700 }}>2</div>
-              <span className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Registro de Entrevistas</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-gray-500 text-sm">
-              <strong style={{ color: '#030213' }}>{entrevistas.length}</strong> entrevistas registradas
-            </span>
-            {!isCompleted && !isProcessing && (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={handleMarkComplete}
-                disabled={entrevistas.length === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: '#030213', fontWeight: 600 }}
-              >
-                <Send size={14} />
-                Marcar como completo
-              </motion.button>
-            )}
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#fafaf9]">
+      <PhaseHeader
+        projectId={projectId!}
+        companyName={project.companyName}
+        phaseNumber={2}
+        phaseName="Registro de Entrevistas"
+        eyebrow={isCompleted ? 'Completada' : `${entrevistas.length} entrevistas`}
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* Processing overlay */}
@@ -688,16 +711,15 @@ export default function EntrevistasModule() {
       <AnimatePresence>
         {isProcessing && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full border-4 border-blue-100 flex items-center justify-center mx-auto mb-5">
-                <Loader2 size={36} className="text-blue-600 animate-spin" />
-              </div>
-              <h2 className="text-gray-900 mb-2" style={{ fontWeight: 700, fontSize: '1.25rem' }}>
-                Agente 1 en proceso
-              </h2>
-              <p className="text-gray-500 text-sm">El Agente 1 está consolidando el análisis de las entrevistas...</p>
+            className="fixed inset-0 z-40 bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center">
+            <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+              <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
             </div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+            <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
+              Consolidando entrevistas
+            </h2>
+            <p className="text-neutral-500 text-[13px] mt-2">El Agente está analizando los registros…</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -705,43 +727,81 @@ export default function EntrevistasModule() {
       {/* ------------------------------------------------------------------ */}
       {/* Main content */}
       {/* ------------------------------------------------------------------ */}
-      <div className="max-w-6xl mx-auto px-8 py-8">
+      <div className="max-w-[1100px] mx-auto px-10 py-10">
+        <div className="mb-10">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 2 · Entrevistas a stakeholders</p>
+          <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+            {isCompleted ? 'Entrevistas analizadas' : 'Registro de entrevistas'}
+          </h1>
+          <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+            {isCompleted ? 'El Agente 2 consolidó hallazgos, temas recurrentes y patrones de conversación.' : 'Documente las conversaciones con stakeholders clave. El Agente 2 analizará patrones y temas emergentes.'}
+          </p>
+
+          <div className="grid grid-cols-3 gap-px bg-neutral-200/60 rounded-2xl overflow-hidden mt-7 border border-neutral-200/60">
+            <div className="bg-white px-5 py-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Entrevistas</p>
+              <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                {entrevistas.length}
+              </p>
+            </div>
+            <div className="bg-white px-5 py-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Áreas cubiertas</p>
+              <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                {new Set(entrevistas.map(e => e.area)).size}
+              </p>
+            </div>
+            <div className="bg-white px-5 py-4">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Estado</p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className={`w-1.5 h-1.5 rounded-full ${isCompleted ? 'bg-emerald-500' : 'bg-neutral-900'}`} />
+                <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>
+                  {isCompleted ? 'Completada' : 'En curso'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
         {isCompleted ? (
           /* ======================================================= */
           /* COMPLETED VIEW                                           */
           /* ======================================================= */
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div className="flex items-center gap-2 mb-6">
-              <CheckCircle2 size={18} className="text-green-500" />
-              <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>Entrevistas Analizadas</h1>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-5 gap-5">
               {/* Read-only accordion list */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-gray-800 mb-4" style={{ fontWeight: 600 }}>Entrevistas Registradas ({entrevistas.length})</h3>
-                <div className="space-y-3">
+              <div className="col-span-2 order-2 bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Entrevistas registradas</h3>
+                  <span className="text-[11px] text-neutral-400 tabular-nums">{entrevistas.length}</span>
+                </div>
+                <div className="space-y-2">
                   {entrevistas.map(e => (
                     <div key={e.id}>
                       <button
                         onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
-                        className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                        className="w-full flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
                       >
                         <div className="flex items-center gap-3 text-left">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                            <User size={14} className="text-blue-600" />
+                          <div className="w-8 h-8 rounded-full bg-white border border-neutral-200/80 flex items-center justify-center">
+                            <User size={13} className="text-neutral-700" strokeWidth={1.75} />
                           </div>
                           <div>
-                            <p className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>{e.nombre}</p>
-                            <p className="text-gray-400 text-xs">{e.cargo} · {e.area}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>{e.nombre}</p>
+                              {e.fileName && (
+                                <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1">
+                                  <Paperclip size={10} /> PDF
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-neutral-500 text-[11px]">{e.cargo} · {e.area}</p>
                           </div>
                         </div>
-                        <ChevronDown size={14} className={`text-gray-400 transition-transform ${expandedId === e.id ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={13} className={`text-neutral-400 transition-transform ${expandedId === e.id ? 'rotate-180' : ''}`} strokeWidth={1.75} />
                       </button>
                       <AnimatePresence>
                         {expandedId === e.id && (
                           <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-                            <p className="text-gray-600 text-sm p-3 leading-relaxed bg-gray-50 rounded-b-xl border-t border-gray-100 whitespace-pre-wrap">
+                            <p className="text-neutral-700 text-[13px] p-4 leading-relaxed bg-neutral-50 rounded-b-xl border-t border-neutral-100 whitespace-pre-wrap">
                               {e.notas}
                             </p>
                           </motion.div>
@@ -753,68 +813,130 @@ export default function EntrevistasModule() {
               </div>
 
               {/* Agent diagnosis */}
-              <div className="rounded-2xl border-2 shadow-sm p-6" style={{ borderColor: '#030213', background: 'linear-gradient(135deg, #f5f5f7 0%, #ffffff 100%)' }}>
-                <div className="flex items-center gap-2 mb-5">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: '#030213' }}>
-                    <Brain size={14} />
+              {diagnosis && (
+                <div className="col-span-3 order-1 flex flex-col gap-5">
+
+                  {/* Top Summary Card */}
+                  <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                    <div className="flex items-center gap-2.5 mb-5">
+                      <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+                        <Sparkles size={13} strokeWidth={1.75} />
+                      </div>
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Diagnóstico — Agente 1 · Entrevistas</span>
+                    </div>
+
+                    <p className="text-neutral-700 text-[14px] leading-relaxed mb-6">
+                      {diagnosis.summary || 'El Agente 1 ha consolidado los hallazgos de las entrevistas.'}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {diagnosis.numero_entrevistados !== undefined && (
+                        <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100 flex flex-col justify-center">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Entrevistados Analizados</p>
+                          <p className="text-neutral-900 text-xl" style={{ fontWeight: 500 }}>{typeof diagnosis.numero_entrevistados === 'number' ? Number(diagnosis.numero_entrevistados.toFixed(1)) : diagnosis.numero_entrevistados}</p>
+                        </div>
+                      )}
+                      {diagnosis.advertencia_fuente_unica && (
+                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex flex-col justify-center">
+                          <p className="text-[11px] uppercase tracking-[0.14em] text-amber-600 mb-1" style={{ fontWeight: 500 }}>Advertencia</p>
+                          <p className="text-amber-800 text-[12px] leading-relaxed">Fuente única detectada. Perspectiva limitada de la organización.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-sm" style={{ fontWeight: 700, color: '#030213' }}>Diagnóstico — Agente 1</span>
-                </div>
 
-                <div className="mb-4">
-                  <p className="text-gray-700 text-xs uppercase tracking-wider mb-2" style={{ fontWeight: 700 }}>Temas Recurrentes</p>
-                  <div className="flex flex-wrap gap-2">
-                    {MOCK_AGENT_DIAGNOSIS.temas.map((t, i) => (
-                      <span key={i} className="px-2.5 py-1 rounded-full text-xs" style={{ background: '#e9ebef', color: '#030213', fontWeight: 500 }}>
-                        {t}
-                      </span>
-                    ))}
+                  {/* Recurring Themes & Key Findings */}
+                  <div className="grid grid-cols-2 gap-5">
+                    {diagnosis.recurring_themes && diagnosis.recurring_themes.length > 0 && (
+                      <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Temas Recurrentes</p>
+                        <div className="space-y-4">
+                          {diagnosis.recurring_themes.map((theme, i) => (
+                            <div key={i} className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
+                              <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>{theme.theme}</p>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[10px]" style={{ fontWeight: 500 }}>{theme.frequency}</span>
+                                <span className="text-neutral-400 text-[11px] truncate">Por: {theme.mentioned_by.join(', ')}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {diagnosis.key_findings && diagnosis.key_findings.length > 0 && (
+                      <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Hallazgos Clave</p>
+                        <ul className="space-y-3">
+                          {diagnosis.key_findings.map((finding, i) => (
+                            <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
+                              <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-900 flex-shrink-0" />
+                              {finding}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                <div className="mb-4">
-                  <p className="text-gray-700 text-xs uppercase tracking-wider mb-2" style={{ fontWeight: 700 }}>Hallazgos Principales</p>
-                  <ul className="space-y-2">
-                    {MOCK_AGENT_DIAGNOSIS.hallazgos.map((h, i) => (
-                      <li key={i} className="flex items-start gap-2 text-gray-600 text-sm">
-                        <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: '#030213' }} />
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                  {/* Critical Voices */}
+                  {diagnosis.critical_voices && diagnosis.critical_voices.length > 0 && (
+                    <div className="rounded-2xl border border-rose-100 bg-rose-50/30 p-6">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-rose-500 mb-4" style={{ fontWeight: 500 }}>Voces Críticas</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        {diagnosis.critical_voices.map((voice, i) => (
+                          <div key={i} className="p-4 bg-white rounded-xl border border-rose-100">
+                            <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>{voice.interviewee_name}</p>
+                            <p className="text-rose-600 text-[12px] leading-relaxed mb-2">"{voice.key_insight}"</p>
+                            <span className="inline-block px-2 py-0.5 bg-neutral-100 text-neutral-500 rounded text-[10px]" style={{ fontWeight: 500 }}>Relevancia: {voice.relevance}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                <div className="p-3 bg-white rounded-xl border border-gray-200">
-                  <p className="text-gray-700 text-xs uppercase tracking-wider mb-2" style={{ fontWeight: 700 }}>Análisis Estratégico</p>
-                  <p className="text-gray-600 text-sm leading-relaxed">{MOCK_AGENT_DIAGNOSIS.analisis}</p>
+                  {/* Recomendaciones */}
+                  {diagnosis.recommendations && diagnosis.recommendations.length > 0 && (
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-6">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-indigo-500 mb-4" style={{ fontWeight: 500 }}>Recomendaciones</p>
+                      <ul className="space-y-3">
+                        {diagnosis.recommendations.map((rec, i) => (
+                          <li key={i} className="flex items-start gap-3 text-neutral-700 text-[13px] leading-relaxed">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-2 flex-shrink-0" />
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                 </div>
-              </div>
+              )}
             </div>
           </motion.div>
         ) : (
           /* ======================================================= */
           /* ACTIVE VIEW — Master-Detail                              */
           /* ======================================================= */
-          <div className="grid grid-cols-5 gap-6">
+          <div className="grid grid-cols-5 gap-5">
             {/* ---- LEFT: Interview list ---- */}
             <div className="col-span-2 flex flex-col">
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                 onClick={handleNewInterview}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed text-sm mb-4 transition-all hover:bg-zinc-50 hover:border-zinc-400"
-                style={{ borderColor: '#030213', color: '#030213', fontWeight: 600 }}
+                className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-neutral-300 text-neutral-700 text-[13px] mb-4 transition-all hover:bg-white hover:border-neutral-400"
+                style={{ fontWeight: 500 }}
               >
-                <Plus size={16} />
-                Agregar Nueva Entrevista
+                <Plus size={14} strokeWidth={1.75} />
+                Agregar nueva entrevista
               </motion.button>
 
               {/* List */}
               <div className="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
                 {entrevistas.length === 0 && (
-                  <div className="text-center py-8 text-gray-400">
-                    <MessageSquare size={28} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">No hay entrevistas aún</p>
+                  <div className="text-center py-10 text-neutral-400">
+                    <MessageSquare size={22} className="mx-auto mb-2 opacity-40" strokeWidth={1.5} />
+                    <p className="text-[13px]">No hay entrevistas aún</p>
                   </div>
                 )}
                 {entrevistas.map(e => {
@@ -822,51 +944,48 @@ export default function EntrevistasModule() {
                   return (
                     <motion.div
                       key={e.id}
-                      initial={{ opacity: 0, x: -10 }}
+                      initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       onClick={() => handleSelectInterview(e)}
-                      className={`bg-white rounded-xl border p-4 cursor-pointer transition-all shadow-sm
+                      className={`bg-white rounded-xl border p-4 cursor-pointer transition-all
                         ${isSelected
-                          ? 'border-zinc-800 ring-2 ring-zinc-100 shadow-md'
-                          : 'border-gray-100 hover:border-gray-300 hover:shadow-md'
+                          ? 'border-neutral-900'
+                          : 'border-neutral-200/70 hover:border-neutral-300'
                         }
                       `}
+                      style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                     >
-                      {/* Top row */}
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-zinc-900' : 'bg-gray-100'}`}>
-                            <User size={14} className={isSelected ? 'text-white' : 'text-gray-500'} />
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-neutral-900' : 'bg-neutral-50 border border-neutral-200/70'}`}>
+                            <User size={13} className={isSelected ? 'text-white' : 'text-neutral-600'} strokeWidth={1.75} />
                           </div>
-                          <div>
-                            <p className="text-gray-800 text-sm" style={{ fontWeight: isSelected ? 700 : 600 }}>
+                          <div className="min-w-0">
+                            <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>
                               {e.nombre}
                             </p>
-                            <p className="text-gray-500 text-xs flex items-center gap-1 mt-0.5">
-                              <Briefcase size={10} /> {e.cargo}
+                            <p className="text-neutral-500 text-[11px] flex items-center gap-1 mt-0.5 truncate">
+                              <Briefcase size={9} strokeWidth={1.75} /> {e.cargo}
                             </p>
                           </div>
                         </div>
-                        {/* Quick delete — stops propagation */}
                         <button
                           onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id); }}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-300 hover:text-rose-600 hover:bg-rose-50 transition-colors flex-shrink-0"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={12} strokeWidth={1.75} />
                         </button>
                       </div>
 
-                      {/* Notes preview */}
-                      <p className="text-gray-400 text-xs line-clamp-2 leading-relaxed pl-10">
+                      <p className="text-neutral-500 text-[11px] line-clamp-2 leading-relaxed pl-10">
                         {e.notas}
                       </p>
 
-                      {/* Footer */}
                       <div className="flex items-center justify-between mt-2 pl-10">
-                        <p className="text-gray-300 text-xs">{e.createdAt}</p>
+                        <p className="text-neutral-400 text-[11px] tabular-nums">{e.createdAt}</p>
                         {isSelected && (
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#030213', color: '#fff', fontWeight: 600 }}>
-                            Seleccionado
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-neutral-500" style={{ fontWeight: 500 }}>
+                            <span className="w-1 h-1 rounded-full bg-neutral-900" /> Seleccionado
                           </span>
                         )}
                       </div>
@@ -878,7 +997,7 @@ export default function EntrevistasModule() {
 
             {/* ---- RIGHT: Detail / Form / Empty ---- */}
             <div className="col-span-3">
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sticky top-24 min-h-[480px] flex flex-col">
+              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 sticky top-24 min-h-[480px] flex flex-col" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                 <AnimatePresence mode="wait">
                   {panelMode === 'empty' && (
                     <EmptyStatePanel key="empty" />
@@ -912,6 +1031,26 @@ export default function EntrevistasModule() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Bottom action */}
+      {/* ------------------------------------------------------------------ */}
+      {!isCompleted && !isProcessing && (
+        <div className="max-w-[1100px] mx-auto px-10 pb-12">
+          <div className="flex justify-end pt-8 border-t border-neutral-200/60">
+            <motion.button
+              whileHover={{ y: -1 }}
+              whileTap={{ y: 0 }}
+              onClick={handleMarkComplete}
+              disabled={entrevistas.length === 0}
+              className="px-6 py-3 rounded-full text-white text-[13px] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+            >
+              Marcar fase como completada
+            </motion.button>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Confirm Modal */}
       {/* ------------------------------------------------------------------ */}
       <ConfirmModal
@@ -921,6 +1060,8 @@ export default function EntrevistasModule() {
         onConfirm={handleConfirmSend}
         isLoading={isSending}
       />
+
+      <NextPhaseButton projectId={projectId!} nextPhase={3} prevPhase={1} show={isCompleted} />
     </div>
   );
 }

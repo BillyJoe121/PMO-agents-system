@@ -6,6 +6,7 @@ import {
   LogOut,
   ChevronRight,
   Shield,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SoundToggleButton } from '../ui/SoundToggleButton';
@@ -18,8 +19,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { icon: <LayoutDashboard size={20} />, label: 'Inicio', path: '/dashboard' },
-  { icon: <Shield size={20} />, label: 'Administración', path: '/dashboard/admin' },
-  { icon: <Settings size={20} />, label: 'Ajustes', path: '/dashboard/ajustes' },
+  { icon: <Settings size={20} />, label: 'Ajustes', path: '/dashboard/admin' },
 ];
 
 export default function Sidebar() {
@@ -38,7 +38,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[72px] flex flex-col items-center py-6 z-50 border-r border-gray-100 bg-white shadow-sm">
+    <aside className="fixed left-0 top-0 h-screen w-[72px] flex flex-col items-center py-6 z-50 border-r border-gray-100 bg-white shadow-sm print:hidden">
       {/* Logo */}
       <div
         className="w-10 h-10 rounded-xl flex items-center justify-center mb-8 flex-shrink-0 cursor-pointer"
@@ -82,6 +82,28 @@ export default function Sidebar() {
             </motion.button>
           );
         })}
+
+        <>
+          <div className="w-8 h-px bg-gray-100 my-2 mx-auto" />
+          <motion.button
+            onClick={() => navigate('/dashboard/papelera')}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title="Papelera"
+            className={`relative w-full h-12 rounded-xl flex items-center justify-center transition-all group
+              ${isActive('/dashboard/papelera')
+                ? 'text-white shadow-md'
+                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+              }`}
+            style={isActive('/dashboard/papelera') ? { background: '#030213' } : {}}
+          >
+            <Trash2 size={20} />
+            <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+              Papelera
+              <ChevronRight size={10} className="inline ml-1" />
+            </div>
+          </motion.button>
+        </>
       </nav>
 
       {/* User avatar + Logout */}

@@ -4,9 +4,9 @@ import Sidebar from './Sidebar';
 
 export default function AppLayout() {
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-neutral-50 flex print:bg-white">
       <Sidebar />
-      <main className="flex-1 ml-[72px] min-h-screen overflow-auto">
+      <main className="flex-1 ml-[72px] print:ml-0 min-h-screen overflow-auto">
         <Outlet />
       </main>
       <Toaster position="top-right" richColors closeButton />

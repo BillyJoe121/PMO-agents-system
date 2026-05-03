@@ -1,9 +1,6 @@
 /**
  * AdminPanelView — Módulo 12: Panel de Administración
- * RF-AUTH-06: Gestión de usuarios auditores y banco de preguntas.
- * TODO: supabase.auth.admin.createUser() - Requiere Service Role Key
- * TODO: select * from banco_preguntas order by tipo_encuesta, dimension
- * TODO: update banco_preguntas set pregunta_texto = '...' where id = '...'
+ * Conectado a Supabase: profiles (usuarios) + banco_preguntas
  */
 
 import { useState } from 'react';
@@ -15,66 +12,12 @@ import {
   ToggleLeft, AlignLeft, List, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAdminUsers, useAdminQuestions, type AuditorUser, type BankQuestion, type QuestionType, type UserRole } from '../../hooks/useAdmin';
 
 /* ── Types ── */
 type AdminSection = 'usuarios' | 'preguntas';
-type UserRole = 'Auditor' | 'Admin';
-type SurveyType = 'Idoneidad' | 'Madurez Predictiva' | 'Madurez Ágil';
-type QuestionType = 'abierta' | 'si_no' | 'multiple';
-
-// Fase-level categories for navigation
 type FaseCategory = 'fase1' | 'fase5';
-type Fase5SubTab = 'Madurez Predictiva' | 'Madurez Ágil';
-
-interface AuditorUser {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  lastAccess: string;
-  active: boolean;
-}
-
-interface BankQuestion {
-  id: string;
-  text: string;
-  dimension: string;
-  surveyType: SurveyType;
-  type: QuestionType;
-  options?: string[];   // for 'multiple' type
-  isEditing?: boolean;
-  isNew?: boolean;      // true for newly added unsaved questions
-  // edit buffer fields
-  editText?: string;
-  editDimension?: string;
-  editType?: QuestionType;
-  editOptions?: string[];
-}
-
-/* ── Mock Data ── */
-const MOCK_USERS: AuditorUser[] = [
-  { id: 'u1', name: 'Ana García', email: 'a.garcia@icesi.edu.co', role: 'Admin', lastAccess: '26 Abr 2024', active: true },
-  { id: 'u2', name: 'Carlos Mejía', email: 'c.mejia@icesi.edu.co', role: 'Auditor', lastAccess: '25 Abr 2024', active: true },
-  { id: 'u3', name: 'Laura Torres', email: 'l.torres@icesi.edu.co', role: 'Auditor', lastAccess: '24 Abr 2024', active: true },
-  { id: 'u4', name: 'Pedro Ruiz', email: 'p.ruiz@icesi.edu.co', role: 'Auditor', lastAccess: '20 Abr 2024', active: false },
-  { id: 'u5', name: 'María López', email: 'm.lopez@icesi.edu.co', role: 'Auditor', lastAccess: '18 Abr 2024', active: true },
-];
-
-const MOCK_QUESTIONS: BankQuestion[] = [
-  { id: 'q1', text: '¿Existe un proceso formal de iniciación de proyectos documentado?', dimension: 'Procesos', surveyType: 'Idoneidad', type: 'si_no' },
-  { id: 'q2', text: '¿Los líderes de la organización apoyan activamente las iniciativas PMO?', dimension: 'Gobernanza', surveyType: 'Idoneidad', type: 'si_no' },
-  { id: 'q3', text: '¿El personal de proyectos cuenta con certificaciones reconocidas?', dimension: 'Personas', surveyType: 'Idoneidad', type: 'si_no' },
-  { id: 'q4', text: '¿Cómo calificaría la madurez de gestión de proyectos en su organización?', dimension: 'Cultura', surveyType: 'Idoneidad', type: 'multiple', options: ['Inicial — sin procesos definidos', 'En desarrollo — procesos parciales', 'Definido — procesos documentados', 'Gestionado — seguimiento activo', 'Optimizando — mejora continua'] },
-  { id: 'q5', text: 'Describa los principales desafíos actuales de gestión de proyectos en su organización.', dimension: 'Cultura', surveyType: 'Idoneidad', type: 'abierta' },
-  { id: 'q6', text: '¿Se utilizan herramientas tecnológicas para la gestión de portafolios?', dimension: 'Tecnología', surveyType: 'Madurez Predictiva', type: 'si_no' },
-  { id: 'q7', text: '¿Existe una gestión formal de riesgos con registro y seguimiento?', dimension: 'Procesos', surveyType: 'Madurez Predictiva', type: 'si_no' },
-  { id: 'q8', text: '¿Con qué frecuencia se generan informes de estado del portafolio?', dimension: 'Comunicación', surveyType: 'Madurez Predictiva', type: 'multiple', options: ['Diariamente', 'Semanalmente', 'Quincenalmente', 'Mensualmente', 'Sin frecuencia definida'] },
-  { id: 'q9', text: '¿Qué métricas de valor ganado (EVM) utilizan actualmente?', dimension: 'Métricas', surveyType: 'Madurez Predictiva', type: 'abierta' },
-  { id: 'q10', text: '¿Los sprints y ceremonias Scrum se realizan de forma consistente?', dimension: 'Procesos', surveyType: 'Madurez Ágil', type: 'si_no' },
-  { id: 'q11', text: '¿Se mide el velocity del equipo y se usa para planificación?', dimension: 'Métricas', surveyType: 'Madurez Ágil', type: 'si_no' },
-  { id: 'q12', text: '¿Cuál es el tamaño promedio de los sprints en su organización?', dimension: 'Procesos', surveyType: 'Madurez Ágil', type: 'multiple', options: ['1 semana', '2 semanas', '3 semanas', '4 semanas', 'No usamos sprints'] },
-  { id: 'q13', text: 'Describa cómo el equipo gestiona el Product Backlog y su priorización.', dimension: 'Procesos', surveyType: 'Madurez Ágil', type: 'abierta' },
-];
+type Fase5SubTab = 'madurez_predictiva' | 'madurez_agil';
 
 const DIMENSIONS = ['Procesos', 'Personas', 'Tecnología', 'Gobernanza', 'Métricas', 'Cultura', 'Comunicación'];
 
@@ -102,15 +45,16 @@ const QUESTION_TYPE_CONFIG: Record<QuestionType, { label: string; icon: React.Re
 
 /* ── Sub-components ── */
 function RoleBadge({ role }: { role: UserRole }) {
+  const isAdmin = role === 'admin';
   return (
     <span
       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs ${
-        role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+        isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
       }`}
       style={{ fontWeight: 600 }}
     >
-      {role === 'Admin' && <Shield size={10} />}
-      {role}
+      {isAdmin && <Shield size={10} />}
+      {isAdmin ? 'Admin' : 'Auditor'}
     </span>
   );
 }
@@ -138,8 +82,8 @@ function QuestionTypeBadge({ type }: { type: QuestionType }) {
 }
 
 /* ── Create User Drawer ── */
-function CreateUserDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', role: 'Auditor' as UserRole, password: '' });
+function CreateUserDrawer({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: (name: string, email: string, password: string, role: UserRole) => Promise<void> }) {
+  const [form, setForm] = useState({ name: '', email: '', role: 'auditor' as UserRole, password: '' });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -148,11 +92,15 @@ function CreateUserDrawer({ open, onClose }: { open: boolean; onClose: () => voi
       return;
     }
     setIsSaving(true);
-    // TODO: supabase.auth.admin.createUser() - Requiere Service Role Key
-    await new Promise(r => setTimeout(r, 800));
-    setIsSaving(false);
-    onClose();
-    toast.success(`Auditor "${form.name}" creado exitosamente.`);
+    try {
+      await onSave(form.name, form.email, form.password, form.role as UserRole);
+      onClose();
+      toast.success(`Auditor "${form.name}" creado exitosamente.`);
+    } catch (err) {
+      toast.error('Error creando el usuario. Verifica que el email no esté registrado.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -240,11 +188,98 @@ function CreateUserDrawer({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
+function EditUserDrawer({ user, onClose, onSave }: { user: AuditorUser | null; onClose: () => void; onSave: (id: string, name: string, role: UserRole) => Promise<void> }) {
+  const [form, setForm] = useState({ name: user?.name || '', role: user?.role || 'auditor' as UserRole });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Sync form when user prop changes
+  // We can just rely on the key prop changing to remount or use an effect
+  // useEffect is already imported at the top of the file
+  
+  const handleSave = async () => {
+    if (!form.name || !user) {
+      toast.error('El nombre es requerido.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onSave(user.id, form.name, form.role as UserRole);
+      onClose();
+      toast.success(`Usuario actualizado exitosamente.`);
+    } catch (err) {
+      toast.error('Error al actualizar el usuario.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex">
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={onClose} className="flex-1 bg-black/30 backdrop-blur-sm"
+        />
+        <motion.div
+          initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="w-96 bg-white h-full shadow-2xl flex flex-col"
+        >
+          <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+            <h3 className="text-gray-900" style={{ fontWeight: 700 }}>Editar Usuario</h3>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div>
+              <label className="block text-gray-700 text-sm mb-1.5" style={{ fontWeight: 600 }}>Nombre completo *</label>
+              <input
+                type="text"
+                defaultValue={user.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-gray-700 text-sm mb-1.5" style={{ fontWeight: 600 }}>Rol asignado</label>
+              <select
+                defaultValue={user.role}
+                onChange={e => setForm(p => ({ ...p, role: e.target.value as UserRole }))}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all bg-white"
+              >
+                <option value="auditor">Auditor</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div className="p-5 border-t border-gray-100 flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50 transition-colors" style={{ fontWeight: 500 }}>
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
+              style={{ background: '#030213', fontWeight: 600 }}
+            >
+              {isSaving ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : <><Save size={14} /> Guardar</>}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
 /* ── Users Section ── */
 function UsersSection() {
-  const [users, setUsers] = useState(MOCK_USERS);
+  const { users, isLoading: loadingUsers, createUser, toggleUserActive, updateUser } = useAdminUsers();
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editingUser, setEditingUser] = useState<AuditorUser | null>(null);
   const [sortField, setSortField] = useState<'name' | 'role' | 'lastAccess'>('name');
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -253,10 +288,15 @@ function UsersSection() {
     else { setSortField(field); setSortAsc(true); }
   };
 
-  const handleToggleActive = (id: string) => {
+  const handleToggleActive = async (id: string) => {
     const user = users.find(u => u.id === id);
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, active: !u.active } : u));
-    toast.success(`Cuenta de ${user?.name} ${user?.active ? 'desactivada' : 'activada'}.`);
+    if (!user) return;
+    try {
+      await toggleUserActive(id, user.active);
+      toast.success(`Cuenta de ${user.name} ${user.active ? 'desactivada' : 'activada'}.`);
+    } catch (err) {
+      toast.error('Error al cambiar el estado del usuario.');
+    }
   };
 
   const filtered = users
@@ -273,6 +313,11 @@ function UsersSection() {
 
   return (
     <>
+      {loadingUsers && (
+        <div className="flex items-center gap-2 text-gray-400 text-sm mb-4">
+          <Loader2 size={14} className="animate-spin" /> Cargando usuarios...
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-gray-900" style={{ fontWeight: 700 }}>Gestión de Auditores</h2>
@@ -353,6 +398,7 @@ function UsersSection() {
                 <td className="px-4 py-3.5">
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={() => setEditingUser(user)}
                       className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
                       title="Editar"
                     >
@@ -382,7 +428,8 @@ function UsersSection() {
         )}
       </div>
 
-      <CreateUserDrawer open={showCreate} onClose={() => setShowCreate(false)} />
+      <CreateUserDrawer open={showCreate} onClose={() => setShowCreate(false)} onSave={createUser} />
+      <EditUserDrawer key={editingUser?.id || 'empty'} user={editingUser} onClose={() => setEditingUser(null)} onSave={updateUser} />
     </>
   );
 }
@@ -577,8 +624,8 @@ function QuestionList({ questions, surveyType, onUpdate }: {
 }) {
   const [isSaving, setIsSaving] = useState<string | null>(null);
 
-  const list = questions.filter(q => q.surveyType === surveyType);
-  const others = questions.filter(q => q.surveyType !== surveyType);
+  const list = questions.filter(q => q.surveyType?.toLowerCase() === surveyType?.toLowerCase());
+  const others = questions.filter(q => q.surveyType?.toLowerCase() !== surveyType?.toLowerCase());
 
   const startEdit = (id: string) => {
     const updated = questions.map(q =>
@@ -734,15 +781,13 @@ function QuestionList({ questions, surveyType, onUpdate }: {
 
 /* ── Questions Bank Section ── */
 function QuestionsSection() {
-  const [questions, setQuestions] = useState<BankQuestion[]>(MOCK_QUESTIONS);
+  const { questions, isLoading: loadingQ, setQuestions, updateQuestion, insertQuestion, deleteQuestion, patchLocal } = useAdminQuestions();
   const [faseTab, setFaseTab] = useState<FaseCategory>('fase1');
-  const [fase5SubTab, setFase5SubTab] = useState<Fase5SubTab>('Madurez Predictiva');
+  const [fase5SubTab, setFase5SubTab] = useState<Fase5SubTab>('madurez_predictiva');
 
-  const activeSurveyType: SurveyType = faseTab === 'fase1'
-    ? 'Idoneidad'
-    : fase5SubTab;
+  const activeSurveyType = faseTab === 'fase1' ? 'Idoneidad' : (fase5SubTab === 'madurez_predictiva' ? 'Madurez Predictiva' : 'Madurez Ágil');
 
-  const countFor = (st: SurveyType) => questions.filter(q => q.surveyType === st).length;
+  const countFor = (st: string) => questions.filter(q => q.surveyType?.toLowerCase() === st?.toLowerCase()).length;
 
   const addQuestion = () => {
     const newQ: BankQuestion = {
@@ -838,19 +883,19 @@ function QuestionsSection() {
             className="overflow-hidden mb-4"
           >
             <div className="flex items-center gap-2">
-              {(['Madurez Predictiva', 'Madurez Ágil'] as Fase5SubTab[]).map(sub => (
+              {([['madurez_predictiva', 'Madurez Predictiva'], ['madurez_agil', 'Madurez Ágil']] as [Fase5SubTab, string][]).map(([value, label]) => (
                 <button
-                  key={sub}
-                  onClick={() => setFase5SubTab(sub)}
+                  key={value}
+                  onClick={() => setFase5SubTab(value)}
                   className={`px-4 py-2 rounded-xl text-xs transition-all ${
-                    fase5SubTab === sub
+                    fase5SubTab === value
                       ? 'text-white shadow-sm'
                       : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
-                  style={fase5SubTab === sub ? { background: '#030213', fontWeight: 600 } : { fontWeight: 500 }}
+                  style={fase5SubTab === value ? { background: '#030213', fontWeight: 600 } : { fontWeight: 500 }}
                 >
-                  {sub}
-                  <span className="ml-1.5 opacity-70">({countFor(sub)})</span>
+                  {label}
+                  <span className="ml-1.5 opacity-70">({countFor(label)})</span>
                 </button>
               ))}
             </div>
@@ -894,9 +939,9 @@ function QuestionsSection() {
 export default function AdminPanelView() {
   const [activeSection, setActiveSection] = useState<AdminSection>('usuarios');
 
-  const navItems: { id: AdminSection; label: string; icon: React.ReactNode; count?: number }[] = [
-    { id: 'usuarios', label: 'Gestión de Usuarios', icon: <Users size={16} />, count: MOCK_USERS.length },
-    { id: 'preguntas', label: 'Banco de Preguntas', icon: <BookOpen size={16} />, count: MOCK_QUESTIONS.length },
+  const navItems: { id: AdminSection; label: string; icon: React.ReactNode }[] = [
+    { id: 'usuarios', label: 'Gestión de Usuarios', icon: <Users size={16} /> },
+    { id: 'preguntas', label: 'Banco de Preguntas', icon: <BookOpen size={16} /> },
   ];
 
   return (

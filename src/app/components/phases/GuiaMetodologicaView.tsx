@@ -32,6 +32,7 @@ import {
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import { useSoundManager } from '../../hooks/useSoundManager';
+import NextPhaseButton from './_shared/NextPhaseButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -466,42 +467,39 @@ function ProcessingView({
   const pct = Math.min(100, Math.round((currentStep / steps.length) * 100));
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-xl mx-auto px-8 text-center">
-      {/* Animated icon */}
-      <div className="relative mb-8">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Procesando</p>
+      <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-6 relative" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <Brain size={20} className="text-neutral-700" strokeWidth={1.75} />
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-          className="w-20 h-20 rounded-full border-4 flex items-center justify-center"
-          style={{ borderColor: '#030213', borderTopColor: 'transparent' }}
+          className="absolute inset-0 rounded-full border-2 border-transparent"
+          style={{ borderTopColor: '#0a0a0a' }}
         />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Brain size={28} style={{ color: '#030213' }} />
-        </div>
       </div>
 
-      <h2 className="text-gray-900 mb-2" style={{ fontWeight: 700, fontSize: '1.375rem' }}>
-        {isAdjustment ? 'Agente 7 revisando la guía' : 'Agente 7 generando la guía metodológica'}
+      <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
+        {isAdjustment ? 'Revisando la guía' : 'Generando la guía metodológica'}
       </h2>
-      <p className="text-gray-500 text-sm mb-1">
+      <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed mb-2">
         {isAdjustment
-          ? 'Incorporando los ajustes del consultor y generando una nueva versión...'
-          : 'Esto puede tomar unos minutos. La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6.'}
+          ? 'El Agente 7 está incorporando los ajustes del consultor y generando una nueva versión.'
+          : 'La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6. El proceso continúa en segundo plano.'}
       </p>
-      <p className="text-amber-600 text-xs mb-8 flex items-center gap-1.5 justify-center">
-        <AlertCircle size={11} />
-        No cierre esta pantalla. El proceso continúa en segundo plano.
+      <p className="text-amber-700 text-[11px] mb-8 flex items-center gap-1.5 justify-center">
+        <AlertCircle size={11} strokeWidth={1.75} />
+        No cierre esta pantalla mientras se completa la generación.
       </p>
 
-      {/* Progress bar */}
       <div className="w-full mb-6">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-gray-500 text-xs">Progreso</span>
-          <span className="text-gray-700 text-xs" style={{ fontWeight: 700 }}>{pct}%</span>
+          <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Progreso</span>
+          <span className="text-neutral-900 text-[12px] tabular-nums" style={{ fontWeight: 500 }}>{pct}%</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-1 bg-neutral-200/70 rounded-full overflow-hidden">
           <motion.div
             className="h-full rounded-full"
-            style={{ background: '#030213' }}
+            style={{ background: '#0a0a0a' }}
             animate={{ width: `${pct}%` }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
           />
@@ -520,21 +518,21 @@ function ProcessingView({
               animate={{ opacity: done || active ? 1 : 0.4, x: 0 }}
               transition={{ delay: idx * 0.06 }}
               className="flex items-start gap-3 p-3 rounded-xl"
-              style={{ background: active ? '#f9fafb' : 'transparent', border: active ? '1px solid #e5e7eb' : '1px solid transparent' }}
+              style={{ background: active ? '#fff' : 'transparent', border: active ? '1px solid rgba(229,229,229,0.7)' : '1px solid transparent', boxShadow: active ? '0 1px 2px rgba(0,0,0,0.02)' : undefined }}
             >
               <div className="flex-shrink-0 mt-0.5">
                 {done
-                  ? <CheckCircle2 size={16} className="text-green-500" />
+                  ? <CheckCircle2 size={14} className="text-emerald-500" strokeWidth={1.75} />
                   : active
-                    ? <Loader2 size={16} className="animate-spin text-gray-700" />
-                    : <Circle size={16} className="text-gray-300" />}
+                    ? <Loader2 size={14} className="animate-spin text-neutral-700" strokeWidth={1.75} />
+                    : <Circle size={14} className="text-neutral-300" strokeWidth={1.75} />}
               </div>
               <div>
-                <p className="text-sm" style={{ fontWeight: active ? 600 : done ? 500 : 400, color: active ? '#030213' : done ? '#374151' : '#9ca3af' }}>
+                <p className="text-[13px]" style={{ fontWeight: active ? 500 : done ? 500 : 400, color: active ? '#0a0a0a' : done ? '#404040' : '#a3a3a3' }}>
                   {step.label}
                 </p>
                 {active && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-gray-400 text-xs mt-0.5">
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-neutral-500 text-[12px] mt-0.5">
                     {step.detail}
                   </motion.p>
                 )}
@@ -870,8 +868,8 @@ export default function GuiaMetodologicaView() {
       `Guía Metodológica aprobada · Versión ${currentVersion?.number} · PMO ${pmoType} · ${chapters.current.length} capítulos.`
     );
     playPhaseComplete(); // Phase_Complete: consultor aprobó definitivamente
+    setView('approved');
     toast.success('¡Fase 7 aprobada!', { description: 'La Guía Metodológica ha sido completada. La Fase 8 está desbloqueada.' });
-    navigate(`/dashboard/project/${projectId}`);
   };
 
   const isCompleted = view === 'approved';
@@ -879,43 +877,43 @@ export default function GuiaMetodologicaView() {
   // ── Render: auto-trigger ─────────────────────────────────────────────────
   if (view === 'auto-trigger') {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-[#fafaf9] flex flex-col">
         <Header project={project} projectId={projectId!} onClose={() => navigate(`/dashboard/project/${projectId}`)} />
         <div className="flex-1 flex flex-col items-center justify-center text-center px-8 py-12">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 7 · Guía metodológica</p>
           <motion.div
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-            className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg"
-            style={{ background: '#030213' }}
+            animate={{ scale: [1, 1.04, 1] }}
+            transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
+            style={{ background: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 12px 32px -12px rgba(0,0,0,0.25)' }}
           >
-            <Send size={34} className="text-white" />
+            <Send size={22} className="text-white" strokeWidth={1.75} />
           </motion.div>
-          <h2 className="text-gray-900 mb-3" style={{ fontWeight: 700, fontSize: '1.375rem' }}>
+          <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
             Enviando al Agente 7
           </h2>
-          <p className="text-gray-500 text-sm max-w-md leading-relaxed mb-6">
-            La Fase 6 está aprobada. El sistema está enviando el JSON con el enfoque metodológico al
-            Agente 7 para que genere el documento de Guía Metodológica personalizado para {project.companyName}.
+          <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed mb-7">
+            La Fase 6 está aprobada. El sistema enviará el JSON con el enfoque metodológico al Agente 7 para generar el documento de guía metodológica para <span className="text-neutral-900" style={{ fontWeight: 500 }}>{project.companyName}</span>.
           </p>
-          <div className="flex items-center gap-3 mb-8">
+          <div className="flex items-center gap-2 mb-8 flex-wrap justify-center">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs"
-              style={{ background: '#030213', fontWeight: 600 }}>
-              <CheckCircle2 size={12} /> JSON Fase 6 aprobado
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-[12px]"
+              style={{ background: '#0a0a0a', fontWeight: 500 }}>
+              <CheckCircle2 size={11} strokeWidth={1.75} /> JSON Fase 6 aprobado
             </motion.div>
-            <ChevronRight size={14} className="text-gray-300" />
-            <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5 }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs border-2 border-dashed"
-              style={{ borderColor: '#030213', color: '#030213', fontWeight: 600 }}>
-              <Brain size={12} /> Agente 7
+            <ChevronRight size={13} className="text-neutral-300" strokeWidth={1.75} />
+            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.6 }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] border border-dashed border-neutral-900 text-neutral-900"
+              style={{ fontWeight: 500 }}>
+              <Brain size={11} strokeWidth={1.75} /> Agente 7
             </motion.div>
-            <ChevronRight size={14} className="text-gray-300" />
-            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-gray-400 text-xs border border-gray-200">
-              <FileText size={12} /> Guía Metodológica
+            <ChevronRight size={13} className="text-neutral-300" strokeWidth={1.75} />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-neutral-400 text-[12px] border border-neutral-200/80">
+              <FileText size={11} strokeWidth={1.75} /> Guía metodológica
             </div>
           </div>
-          <div className="flex items-center gap-2 text-gray-400 text-xs">
-            <Loader2 size={13} className="animate-spin" />Preparando generación del documento…
+          <div className="flex items-center gap-2 text-neutral-400 text-[12px]">
+            <Loader2 size={12} className="animate-spin" strokeWidth={1.75} />Preparando generación del documento…
           </div>
         </div>
       </div>
@@ -925,7 +923,7 @@ export default function GuiaMetodologicaView() {
   // ── Render: processing ────────────────────────────────────────────────────
   if (view === 'processing') {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="min-h-screen bg-[#fafaf9] flex flex-col">
         <Header project={project} projectId={projectId!} onClose={() => navigate(`/dashboard/project/${projectId}`)} />
         <div className="flex-1 overflow-y-auto py-12">
           <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={isAdjustment} />
@@ -936,7 +934,7 @@ export default function GuiaMetodologicaView() {
 
   // ── Render: results & approved (split layout) ─────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-[#fafaf9] flex flex-col">
       <Header
         project={project}
         projectId={projectId!}
@@ -951,24 +949,24 @@ export default function GuiaMetodologicaView() {
         {/* ── Left: Document Viewer 70% ── */}
         <div className="col-span-8 flex flex-col border-r border-gray-200 overflow-hidden">
 
-          {/* Viewer toolbar */}
-          <div className="bg-gray-100 border-b border-gray-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
-            <div>
-              <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>
-                Guía Metodológica — {project.companyName}
+          <div className="bg-white border-b border-neutral-200/60 px-5 py-3 flex items-center justify-between flex-shrink-0">
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Documento</p>
+              <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>
+                Guía metodológica — {project.companyName}
               </p>
               {currentVersion && (
-                <div className="mt-0.5">
+                <div className="mt-1">
                   <VersionBadge version={currentVersion} />
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={handleDownload}
-                className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-gray-600 text-xs hover:bg-white transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[12px] hover:bg-neutral-50 transition-colors"
                 style={{ fontWeight: 500 }}>
-                <Download size={12} /> Descargar HTML/PDF
+                <Download size={11} strokeWidth={1.75} /> Descargar
               </button>
               <button
                 onClick={() => {
@@ -977,16 +975,16 @@ export default function GuiaMetodologicaView() {
                   win.document.write(generateDownloadHTML(chapters.current, project.companyName, pmoType, currentVersion));
                   win.document.close();
                 }}
-                className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-gray-600 text-xs hover:bg-white transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[12px] hover:bg-neutral-50 transition-colors"
                 style={{ fontWeight: 500 }}>
-                <ExternalLink size={12} /> Abrir en pestaña
+                <ExternalLink size={11} strokeWidth={1.75} /> Abrir en pestaña
               </button>
             </div>
           </div>
 
           {/* Document canvas */}
           {/* RF-F7-03: Integrar iframe apuntando a la signedUrl de Supabase Storage (PDF real del Agente 7) */}
-          <div className="flex-1 bg-gray-700 overflow-y-auto p-6 relative">
+          <div className="flex-1 bg-neutral-100 overflow-y-auto p-6 relative">
 
             {/* Adjustment overlay */}
             <AnimatePresence>
@@ -1016,14 +1014,11 @@ export default function GuiaMetodologicaView() {
         {/* ── Right: Control panel 30% — fully static, no internal scroll ── */}
         <div className="col-span-4 flex flex-col bg-white overflow-hidden">
 
-          {/* RF-F7-05: Version history — compact, fixed height */}
           <div className="px-5 pt-5 pb-3 flex-shrink-0">
             <div className="flex items-center gap-2 mb-3">
-              <Clock size={14} className="text-gray-400" />
-              <h3 className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Historial de versiones</h3>
-              <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500" style={{ fontWeight: 600 }}>
-                {versions.length}
-              </span>
+              <Clock size={12} className="text-neutral-400" strokeWidth={1.75} />
+              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Historial de versiones</p>
+              <span className="ml-auto text-[11px] text-neutral-400 tabular-nums">{versions.length}</span>
             </div>
             <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5">
               {versions.map((v, idx) => (
@@ -1032,102 +1027,103 @@ export default function GuiaMetodologicaView() {
                   onClick={() => setCurrentVersionIdx(idx)}
                   className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
                     currentVersionIdx === idx
-                      ? 'border-gray-300 bg-gray-50'
-                      : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                      ? 'border-neutral-300 bg-neutral-50'
+                      : 'border-neutral-200/60 hover:border-neutral-300 hover:bg-neutral-50/60'
                   }`}
                 >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5 tabular-nums"
                     style={currentVersionIdx === idx
-                      ? { background: '#030213', color: '#fff', fontWeight: 700 }
-                      : { background: '#f3f4f6', color: '#374151', fontWeight: 700 }}>
+                      ? { background: '#0a0a0a', color: '#fff', fontWeight: 600 }
+                      : { background: '#f5f5f5', color: '#404040', fontWeight: 600 }}>
                     {v.number}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-gray-700 text-xs" style={{ fontWeight: 600 }}>
-                      Versión {v.number} — {v.status === 'revisado' ? 'Revisada' : 'Original'}
+                    <p className="text-neutral-900 text-[12px]" style={{ fontWeight: 500 }}>
+                      Versión {v.number} · {v.status === 'revisado' ? 'Revisada' : 'Original'}
                     </p>
-                    <p className="text-gray-400 text-xs mt-0.5">
+                    <p className="text-neutral-400 text-[11px] mt-0.5 tabular-nums">
                       {new Date(v.generatedAt).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </p>
                     {v.comment && (
-                      <p className="text-gray-400 text-xs mt-1 line-clamp-2 italic">"{v.comment}"</p>
+                      <p className="text-neutral-500 text-[11px] mt-1 line-clamp-2 italic">"{v.comment}"</p>
                     )}
                   </div>
                   {currentVersionIdx === idx && (
-                    <CheckCircle2 size={13} className="text-gray-500 flex-shrink-0 mt-1" />
+                    <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0 mt-1" strokeWidth={1.75} />
                   )}
                 </button>
               ))}
               {versions.length === 0 && (
-                <p className="text-gray-300 text-xs text-center py-3 italic">Sin versiones aún</p>
+                <p className="text-neutral-400 text-[12px] text-center py-3 italic">Sin versiones aún</p>
               )}
             </div>
           </div>
 
-          <hr className="border-gray-100 flex-shrink-0" />
+          <hr className="border-neutral-200/60 flex-shrink-0" />
 
           {/* RF-F7-04: Adjustment panel — fills remaining height */}
           <div className="flex-1 px-5 py-4 flex flex-col overflow-hidden min-h-0">
             {!isCompleted ? (
               <>
                 <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
-                  <MessageSquare size={14} className="text-gray-400" />
-                  <label className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>
-                    Solicitar ajustes al Agente 7
-                  </label>
+                  <MessageSquare size={12} className="text-neutral-400" strokeWidth={1.75} />
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>
+                    Solicitar ajustes
+                  </p>
                 </div>
-                <p className="text-gray-400 text-xs mb-3 leading-relaxed flex-shrink-0">
+                <p className="text-neutral-500 text-[12px] mb-3 leading-relaxed flex-shrink-0">
                   Describa los cambios requeridos. El Agente 7 generará una versión revisada. La versión anterior se conserva en el historial.
                 </p>
                 <textarea
                   value={adjustText}
                   onChange={e => setAdjustText(e.target.value)}
-                  placeholder="Ej: En el capítulo 3, amplía las ceremonias ágiles con ejemplos de la industria financiera. Añade una sección de anti-patrones comunes al inicio del capítulo 2..."
-                  className="flex-1 min-h-0 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-none leading-relaxed"
+                  placeholder="Ej: En el capítulo 3, amplía las ceremonias ágiles con ejemplos de la industria financiera…"
+                  className="flex-1 min-h-0 w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400"
                 />
-                <p className="text-gray-300 text-xs text-right mt-1 mb-3 flex-shrink-0">{adjustText.length} car.</p>
+                <p className="text-neutral-400 text-[11px] text-right mt-1 mb-3 flex-shrink-0 tabular-nums">{adjustText.length} caracteres</p>
                 <motion.button
-                  whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                  whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                   onClick={handleRequestAdjustments}
                   disabled={isAdjusting || !adjustText.trim()}
-                  className="w-full py-3 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all flex-shrink-0"
-                  style={{ background: '#d97706', fontWeight: 600 }}
+                  className="w-full py-2.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[13px] flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-neutral-50 transition-all flex-shrink-0"
+                  style={{ fontWeight: 500 }}
                 >
                   {isAdjusting
-                    ? <><Loader2 size={14} className="animate-spin" />Enviando al Agente 7…</>
-                    : <><RotateCcw size={14} />Solicitar ajustes</>}
+                    ? <><Loader2 size={13} className="animate-spin" strokeWidth={1.75} />Enviando al Agente 7…</>
+                    : <><RotateCcw size={13} strokeWidth={1.75} />Solicitar ajustes</>}
                 </motion.button>
               </>
             ) : (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
-                <CheckCircle2 size={18} className="text-green-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-green-800 text-sm" style={{ fontWeight: 600 }}>Fase 7 completada</p>
-                  <p className="text-green-600 text-xs mt-0.5">
-                    La guía fue aprobada y enviada al Agente 8 para generar los artefactos de soporte.
-                  </p>
-                  {phase.completedAt && (
-                    <p className="text-green-500 text-xs mt-1">Aprobado el {phase.completedAt}</p>
-                  )}
+              <div className="rounded-2xl border border-neutral-200/70 bg-white p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+                    <CheckCircle2 size={13} strokeWidth={1.75} />
+                  </div>
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Fase completada</span>
                 </div>
+                <p className="text-neutral-700 text-[13px] leading-relaxed">
+                  La guía fue aprobada y enviada al Agente 8 para generar los artefactos de soporte.
+                </p>
+                {phase.completedAt && (
+                  <p className="text-neutral-400 text-[11px] mt-3 tabular-nums">Aprobado el {phase.completedAt}</p>
+                )}
               </div>
             )}
           </div>
 
-          {/* RF-F7-06: Approve button — sticky bottom, never scrolls away */}
           {!isCompleted && (
-            <div className="px-4 pb-4 pt-3 border-t border-gray-100 bg-white flex-shrink-0">
-              <p className="text-gray-400 text-xs text-center mb-3 leading-relaxed">
+            <div className="px-4 pb-4 pt-3 border-t border-neutral-200/60 bg-white flex-shrink-0">
+              <p className="text-neutral-500 text-[11px] text-center mb-3 leading-relaxed">
                 Al aprobar, la Fase 7 se completará y la Fase 8 se desbloqueará.
               </p>
               <motion.button
-                whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                 onClick={() => setShowApprove(true)}
-                className="w-full py-4 rounded-xl text-white flex items-center justify-center gap-2"
-                style={{ background: '#16a34a', fontWeight: 700 }}
+                className="w-full py-3 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all"
+                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
               >
-                <CheckCircle2 size={18} />
-                Aprobar Guía Metodológica
+                <CheckCircle2 size={13} strokeWidth={1.75} />
+                Aprobar guía metodológica
               </motion.button>
             </div>
           )}
@@ -1141,6 +1137,8 @@ export default function GuiaMetodologicaView() {
         isLoading={isApproving}
         versionNum={currentVersion?.number ?? 1}
       />
+
+      <NextPhaseButton projectId={projectId!} nextPhase={8} prevPhase={6} show={isCompleted} />
     </div>
   );
 }
@@ -1157,26 +1155,27 @@ function Header({ project, projectId, onClose, isCompleted, onDownload, currentV
   currentVersion?: DocVersion | null;
 }) {
   return (
-    <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm flex-shrink-0">
-      <div className="px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={onClose} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors group">
-            <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-            {project.companyName}
+    <div className="sticky top-0 z-20 bg-[#fafaf9]/85 backdrop-blur-md border-b border-neutral-200/60 flex-shrink-0">
+      <div className="px-6 py-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onClose} className="group inline-flex items-center gap-1.5 text-neutral-500 hover:text-neutral-900 text-[13px] transition-colors">
+            <ArrowLeft size={14} strokeWidth={1.75} className="transition-transform group-hover:-translate-x-0.5" />
+            <span className="truncate">{project.companyName}</span>
           </button>
-          <span className="text-gray-300">/</span>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 700 }}>7</div>
-            <span className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Guía Metodológica</span>
+          <span className="text-neutral-300">/</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-neutral-900 text-white text-[10px] tabular-nums" style={{ fontWeight: 600 }}>7</span>
+            <span className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>Guía Metodológica</span>
+            {isCompleted && (
+              <>
+                <span className="text-neutral-300">·</span>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Completada</span>
+              </>
+            )}
           </div>
-          {isCompleted && (
-            <div className="flex items-center gap-1.5 text-green-600 text-xs" style={{ fontWeight: 500 }}>
-              <CheckCircle2 size={13} />Fase completada
-            </div>
-          )}
         </div>
-        <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
-          <X size={16} />
+        <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-700 transition-colors flex-shrink-0">
+          <X size={14} strokeWidth={1.75} />
         </button>
       </div>
     </div>

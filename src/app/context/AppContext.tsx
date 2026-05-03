@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, {
+  createContext, useContext, useState,
+  useEffect, useCallback, ReactNode,
+} from 'react';
+import { supabase } from '../lib/supabase';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TIPOS
+// ─────────────────────────────────────────────────────────────────────────────
 export type PhaseStatus = 'bloqueado' | 'disponible' | 'procesando' | 'completado' | 'error';
 
 export interface Auditor {
@@ -7,6 +14,7 @@ export interface Auditor {
   name: string;
   initials: string;
   color: string;
+  role?: string;
 }
 
 export interface Phase {
@@ -15,6 +23,7 @@ export interface Phase {
   status: PhaseStatus;
   completedAt?: string;
   agentDiagnosis?: string;
+  agentData?: any;
 }
 
 export interface Project {
@@ -25,227 +34,332 @@ export interface Project {
   auditors: Auditor[];
   phases: Phase[];
   status: 'en_ejecucion' | 'completado';
+  isDeleted?: boolean;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NOMBRES CANÓNICOS DE LAS FASES (deben coincidir con configuracion_agentes)
+// ─────────────────────────────────────────────────────────────────────────────
 const PHASE_NAMES = [
-  'Diagnóstico de Idoneidad',
-  'Registro de Entrevistas',
-  'Gestión Documental',
-  'Análisis Estratégico',
-  'Diagnóstico Organizacional',
-  'Plan de Mejora',
-  'Implementación',
-  'Cierre y Entrega',
+  'Registro documental',
+  'Registro de entrevistas',
+  'Encuestas de idoneidad',
+  'Diagnostico de idoneidad',
+  'Encuestas de Madurez',
+  'Consolidación y pasos para Guía Metodologica',
+  'Diseño Metodologica del proyecto',
+  'Artefactos',
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LÓGICA DE DISPONIBILIDAD DE FASES (regla de negocio central)
+// ─────────────────────────────────────────────────────────────────────────────
 function computePhaseAvailability(phases: Phase[]): Phase[] {
   return phases.map((phase, idx) => {
     if (phase.status === 'completado' || phase.status === 'procesando') return phase;
-    // Phases 1, 2, 3 (index 0,1,2) are available from start
-    if (idx < 3) {
-      return phase.status === 'bloqueado' ? { ...phase, status: 'disponible' } : phase;
-    }
-    // Phase 4 (index 3) unlocks when 0,1,2 are all completado
+    if (idx === 0) return phase.status === 'bloqueado' ? { ...phase, status: 'disponible' } : phase;
+    if (idx === 1) return { ...phase, status: phases[0]?.status === 'completado' ? 'disponible' : 'bloqueado' };
+    if (idx === 2) return { ...phase, status: phases[1]?.status === 'completado' ? 'disponible' : 'bloqueado' };
     if (idx === 3) {
       const allFirstThreeDone = phases.slice(0, 3).every(p => p.status === 'completado');
       return { ...phase, status: allFirstThreeDone ? 'disponible' : 'bloqueado' };
     }
-    // Phases 5-8 (index 4-7): sequential
-    const previousDone = phases[idx - 1]?.status === 'completado';
-    return { ...phase, status: previousDone ? 'disponible' : 'bloqueado' };
+    return { ...phase, status: phases[idx - 1]?.status === 'completado' ? 'disponible' : 'bloqueado' };
   });
 }
 
 function createInitialPhases(): Phase[] {
   return computePhaseAvailability(
-    PHASE_NAMES.map((name, i) => ({
-      number: i + 1,
-      name,
-      status: 'bloqueado' as PhaseStatus,
-    }))
+    PHASE_NAMES.map((name, i) => ({ number: i + 1, name, status: 'bloqueado' as PhaseStatus }))
   );
 }
 
-const MOCK_AUDITORS: Auditor[] = [
-  { id: 'c1', name: 'Ana García', initials: 'AG', color: '#030213' },
-  { id: 'c2', name: 'Carlos Mejía', initials: 'CM', color: '#059669' },
-  { id: 'c3', name: 'Laura Torres', initials: 'LT', color: '#7c3aed' },
-  { id: 'c4', name: 'Pedro Ruiz', initials: 'PR', color: '#dc2626' },
-  { id: 'c5', name: 'María López', initials: 'ML', color: '#d97706' },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// MAPEADORES: DB → Modelo Local
+// ─────────────────────────────────────────────────────────────────────────────
 
-const INITIAL_PROJECTS: Project[] = [
-  {
-    id: 'p1',
-    companyName: 'TechCorp Colombia',
-    projectName: 'Diagnóstico PMO 2024',
-    startDate: '2024-03-01',
-    auditors: [MOCK_AUDITORS[0], MOCK_AUDITORS[1]],
-    status: 'en_ejecucion',
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = { ...phases[0], status: 'completado', completedAt: '2024-03-15', agentDiagnosis: 'Score de idoneidad: 78/100. La organización presenta condiciones favorables para la implementación de una PMO. Se recomienda iniciar con estructura básica de gobierno.' };
-      phases[1] = { ...phases[1], status: 'completado', completedAt: '2024-03-22', agentDiagnosis: 'Análisis consolidado de 5 entrevistas. Temas recurrentes: falta de estandarización de procesos, comunicación deficiente entre áreas y ausencia de métricas claras.' };
-      phases[2] = { ...phases[2], status: 'procesando' };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-  {
-    id: 'p2',
-    companyName: 'Bancolombia S.A.',
-    projectName: 'Transformación Digital PMO',
-    startDate: '2024-02-15',
-    auditors: [MOCK_AUDITORS[2], MOCK_AUDITORS[3], MOCK_AUDITORS[4]],
-    status: 'en_ejecucion',
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = { ...phases[0], status: 'completado', completedAt: '2024-02-28', agentDiagnosis: 'Score de idoneidad: 91/100. Organización altamente madura con infraestructura robusta.' };
-      phases[1] = { ...phases[1], status: 'completado', completedAt: '2024-03-05', agentDiagnosis: 'Análisis de 8 entrevistas ejecutivas. Alineación estratégica clara, necesidad de estándares metodológicos unificados.' };
-      phases[2] = { ...phases[2], status: 'completado', completedAt: '2024-03-10', agentDiagnosis: 'Documentación evaluada: 15 artefactos. Completitud del 87%. Se identificaron brechas en actas de constitución.' };
-      phases[3] = { ...phases[3], status: 'disponible' };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-  {
-    id: 'p3',
-    companyName: 'Grupo Empresarial SURA',
-    projectName: 'Auditoría Estratégica Q1',
-    startDate: '2024-01-10',
-    auditors: [MOCK_AUDITORS[0], MOCK_AUDITORS[4]],
-    status: 'completado',
-    phases: PHASE_NAMES.map((name, i) => ({
-      number: i + 1,
-      name,
-      status: 'completado' as PhaseStatus,
-      completedAt: `2024-0${i + 1}-${10 + i}`,
-    })),
-  },
-  {
-    id: 'p4',
-    companyName: 'Demo — Maestro Detalle',
-    projectName: 'Fase 2 en Estado Activo',
-    startDate: '2024-04-01',
-    auditors: [MOCK_AUDITORS[0]],
-    status: 'en_ejecucion',
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = {
-        ...phases[0],
-        status: 'completado',
-        completedAt: '2024-04-10',
-        agentDiagnosis: 'Score de idoneidad: 83/100. Condiciones favorables para la PMO.',
-      };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-  {
-    id: 'p5',
-    companyName: 'Demo — Fase 1',
-    projectName: 'Diagnóstico de Idoneidad (desarrollo)',
-    startDate: '2026-04-26',
-    auditors: [MOCK_AUDITORS[0]],
-    status: 'en_ejecucion',
-    // Fase 1 en 'disponible', fases 2–8 bloqueadas (punto de partida cero)
-    phases: createInitialPhases(),
-  },
-  {
-    id: 'p6',
-    companyName: 'Demo — Fase 4',
-    projectName: 'Clasificación de Proyectos (desarrollo)',
-    startDate: '2026-04-26',
-    auditors: [MOCK_AUDITORS[0]],
-    status: 'en_ejecucion',
-    // Fases 1, 2 y 3 completadas → Fase 4 se desbloquea automáticamente
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = { ...phases[0], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Score de idoneidad: 82/100.' };
-      phases[1] = { ...phases[1], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Análisis de 6 entrevistas consolidado.' };
-      phases[2] = { ...phases[2], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Documentación evaluada: 12 artefactos.' };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-  {
-    id: 'p7',
-    companyName: 'Demo — Fase 5',
-    projectName: 'Madurez de la PMO (desarrollo)',
-    startDate: '2026-04-26',
-    auditors: [MOCK_AUDITORS[0]],
-    status: 'en_ejecucion',
-    // Fases 1–4 completadas → Fase 5 disponible; Fase 4 con PMO Híbrida para probar ambas encuestas
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = { ...phases[0], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Score de idoneidad: 82/100.' };
-      phases[1] = { ...phases[1], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Análisis de 6 entrevistas consolidado.' };
-      phases[2] = { ...phases[2], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Documentación evaluada: 12 artefactos.' };
-      phases[3] = { ...phases[3], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'PMO Híbrida · Confianza 87% · Diagnóstico original. Implementar una PMO Híbrida en tres fases.' };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-  {
-    id: 'p8',
-    companyName: 'Demo — Fase 6',
-    projectName: 'Enfoque para Guía Metodológica (desarrollo)',
-    startDate: '2026-04-26',
-    auditors: [MOCK_AUDITORS[0]],
-    status: 'en_ejecucion',
-    // Fases 1–5 completadas → Fase 6 disponible; Fase 4 con PMO Híbrida y Fase 5 con Nivel 2
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = { ...phases[0], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Score de idoneidad: 82/100.' };
-      phases[1] = { ...phases[1], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Análisis de 6 entrevistas consolidado.' };
-      phases[2] = { ...phases[2], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Documentación evaluada: 12 artefactos.' };
-      phases[3] = { ...phases[3], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'PMO Híbrida · Confianza 87% · Diagnóstico original. Implementar una PMO Híbrida en tres fases.' };
-      phases[4] = { ...phases[4], status: 'completado', completedAt: '26/04/2026', agentDiagnosis: 'Madurez PMO Híbrida · Nivel 2 (En Desarrollo) · Score 56/100.' };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-  {
-    id: 'p9',
-    companyName: 'Demo — Fase 7',
-    projectName: 'Guía Metodológica (desarrollo)',
-    startDate: '2026-04-27',
-    auditors: [MOCK_AUDITORS[0]],
-    status: 'en_ejecucion',
-    // Fases 1–6 completadas → Fase 7 disponible (auto-trigger al abrir el módulo)
-    phases: (() => {
-      const phases = createInitialPhases();
-      phases[0] = { ...phases[0], status: 'completado', completedAt: '27/04/2026', agentDiagnosis: 'Score de idoneidad: 82/100.' };
-      phases[1] = { ...phases[1], status: 'completado', completedAt: '27/04/2026', agentDiagnosis: 'Análisis de 6 entrevistas consolidado.' };
-      phases[2] = { ...phases[2], status: 'completado', completedAt: '27/04/2026', agentDiagnosis: 'Documentación evaluada: 12 artefactos.' };
-      phases[3] = { ...phases[3], status: 'completado', completedAt: '27/04/2026', agentDiagnosis: 'PMO Híbrida · Confianza 87% · Diagnóstico original. Implementar una PMO Híbrida en tres fases.' };
-      phases[4] = { ...phases[4], status: 'completado', completedAt: '27/04/2026', agentDiagnosis: 'Madurez PMO Híbrida · Nivel 2 (En Desarrollo) · Score 56/100.' };
-      phases[5] = { ...phases[5], status: 'completado', completedAt: '27/04/2026', agentDiagnosis: 'Enfoque aprobado: Guía Metodológica Híbrida — Marco de Transición Adaptativa · 5 puntos débiles · 5 categorías de instrucciones para Agente 7.' };
-      return computePhaseAvailability(phases);
-    })(),
-  },
-];
+/** Construye el array de 8 fases mezclando los registros reales de fases_estado */
+function buildPhasesFromDB(fasesEstado: Record<string, unknown>[]): Phase[] {
+  const base = createInitialPhases();
 
+  for (const fe of fasesEstado) {
+    const idx = (fe.numero_fase as number) - 1;
+    if (idx < 0 || idx > 7) continue;
+    const datos = (fe.datos_consolidados as Record<string, unknown>) ?? {};
+    base[idx] = {
+      ...base[idx],
+      status: (fe.estado_visual as PhaseStatus) ?? 'bloqueado',
+      completedAt: fe.updated_at
+        ? new Date(fe.updated_at as string).toLocaleDateString('es-CO')
+        : undefined,
+      agentDiagnosis:
+        (datos?.diagnosis as Record<string, unknown>)?.summary as string
+        ?? (datos?.summary as string)
+        ?? undefined,
+      agentData: datos,
+    };
+  }
+
+  return computePhaseAvailability(base);
+}
+
+/** Mapea una fila de `proyectos` + empresa + auditores a nuestro tipo `Project` */
+function mapDBRowToProject(row: Record<string, unknown>): Project {
+  const empresa = (row.empresas as Record<string, unknown>) ?? {};
+  const perfil = (row.profiles as Record<string, unknown>) ?? {};
+  const fasesEstado = (row.fases_estado as Record<string, unknown>[]) ?? [];
+
+  const auditor: Auditor = {
+    id: (perfil.id as string) ?? row.auditor_id as string,
+    name: (perfil.full_name as string) ?? 'Sin asignar',
+    initials: ((perfil.full_name as string) ?? 'SA')
+      .split(' ')
+      .map((w: string) => w[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase(),
+    color: '#030213',
+    role: (perfil.role as string) ?? 'auditor'
+  };
+
+  const phases = buildPhasesFromDB(fasesEstado);
+  const allDone = phases.every(p => p.status === 'completado');
+
+  return {
+    id: row.id as string,
+    companyName: (empresa.nombre as string) ?? 'Empresa sin nombre',
+    projectName: row.nombre_proyecto as string,
+    startDate: (row.fecha_inicio as string) ?? (row.created_at as string)?.split('T')[0] ?? '',
+    auditors: [auditor],
+    phases,
+    status: allDone ? 'completado' : 'en_ejecucion',
+    isDeleted: (row.is_deleted as boolean) ?? false,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTEXTO
+// ─────────────────────────────────────────────────────────────────────────────
 interface AppContextType {
   projects: Project[];
   currentUser: Auditor;
-  addProject: (data: Omit<Project, 'id' | 'phases' | 'status'>) => void;
+  isLoading: boolean;
+  addProject: (data: Omit<Project, 'id' | 'phases' | 'status'>) => Promise<void>;
   updatePhaseStatus: (projectId: string, phaseNumber: number, status: PhaseStatus, diagnosis?: string) => void;
   getProject: (id: string) => Project | undefined;
+  refreshProjects: () => Promise<void>;
+  moveToTrash: (id: string) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
+  restoreProject: (id: string) => Promise<void>;
+  reprocessPhase: (projectId: string, phaseNumber: number) => Promise<void>;
+  editProject: (id: string, data: { companyName: string; projectName: string; auditorId?: string }) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVEEDOR
+// ─────────────────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<Auditor>({
+    id: '',
+    name: 'Usuario',
+    initials: 'US',
+    color: '#030213',
+  });
 
-  const currentUser = MOCK_AUDITORS[0];
+  // ── Cargar proyectos desde Supabase ──────────────────────────────────────
+  const fetchProjects = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('proyectos')
+        .select(`
+          id,
+          nombre_proyecto,
+          fase_actual,
+          created_at,
+          fecha_inicio,
+          fecha_cierre,
+          auditor_id,
+          is_deleted,
+          empresas ( id, nombre, tamano ),
+          profiles ( id, full_name, role ),
+          fases_estado ( numero_fase, estado_visual, datos_consolidados, updated_at )
+        `)
+        .order('created_at', { ascending: false });
 
-  const addProject = (data: Omit<Project, 'id' | 'phases' | 'status'>) => {
-    const newProject: Project = {
-      ...data,
-      id: `p${Date.now()}`,
-      phases: createInitialPhases(),
-      status: 'en_ejecucion',
+      if (error) throw error;
+
+      const mapped = (data ?? []).map(row =>
+        mapDBRowToProject(row as Record<string, unknown>)
+      );
+      setProjects(mapped);
+    } catch (err) {
+      console.error('[AppContext] Error cargando proyectos:', err);
+    } finally {
+      if (!isSilent) setIsLoading(false);
+    }
+  }, []);
+
+  // ── Cargar perfil del usuario actual ─────────────────────────────────────
+  const fetchCurrentUser = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .eq('id', user.id)
+      .single();
+
+    if (profile) {
+      const name = profile.full_name ?? user.email ?? 'Usuario';
+      setCurrentUser({
+        id: profile.id,
+        name,
+        initials: name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase(),
+        color: '#030213',
+        role: profile.role ?? 'auditor'
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+    fetchCurrentUser();
+
+    // Suscripción a Realtime de Supabase para detectar cuando agentes terminan en background
+    const channel = supabase
+      .channel('realtime_fases_estado_global')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'fases_estado',
+        },
+        () => {
+          // fetch silente
+          fetchProjects(true);
+        }
+      )
+      .subscribe();
+
+    // Fallback polling silencioso
+    const interval = setInterval(() => {
+      fetchProjects(true);
+    }, 15000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
     };
-    setProjects(prev => [newProject, ...prev]);
-  };
+  }, [fetchProjects, fetchCurrentUser]);
 
-  const updatePhaseStatus = (projectId: string, phaseNumber: number, status: PhaseStatus, diagnosis?: string) => {
+  // ── Crear nuevo proyecto ──────────────────────────────────────────────────
+  const addProject = useCallback(async (data: Omit<Project, 'id' | 'phases' | 'status'>) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    
+    if (!userId) throw new Error('Usuario no autenticado (sesión inválida)');
+
+    let empresaId: string;
+    const { data: existingEmpresa, error: searchError } = await supabase
+      .from('empresas')
+      .select('id')
+      .ilike('nombre', data.companyName)
+      .maybeSingle();
+
+    if (searchError) throw searchError;
+
+    if (existingEmpresa) {
+      empresaId = existingEmpresa.id;
+    } else {
+      const { data: newEmpresa, error: empresaError } = await supabase
+        .from('empresas')
+        .insert({ nombre: data.companyName })
+        .select('id')
+        .single();
+      if (empresaError) throw empresaError;
+      empresaId = newEmpresa.id;
+    }
+
+    const { data: newProject, error: projectError } = await supabase
+      .from('proyectos')
+      .insert({
+        empresa_id: empresaId,
+        auditor_id: data.auditors && data.auditors.length > 0 ? data.auditors[0].id : userId,
+        nombre_proyecto: data.projectName,
+        fase_actual: 1,
+        fecha_inicio: data.startDate || new Date().toISOString().split('T')[0],
+      })
+      .select('id')
+      .single();
+
+    if (projectError) throw projectError;
+
+    const fasesInit = PHASE_NAMES.map((_, i) => ({
+      proyecto_id: newProject.id,
+      numero_fase: i + 1,
+      estado_visual: i === 0 ? 'disponible' : 'bloqueado',
+    }));
+
+    await supabase.from('fases_estado').insert(fasesInit);
+    await fetchProjects();
+  }, [fetchProjects]);
+
+  // ── Editar proyecto ────────────────────────────────────────────────────────
+  const editProject = useCallback(async (id: string, data: { companyName: string; projectName: string; auditorId?: string }) => {
+    let empresaId: string;
+    const { data: existingEmpresa, error: searchError } = await supabase
+      .from('empresas')
+      .select('id')
+      .ilike('nombre', data.companyName)
+      .maybeSingle();
+
+    if (searchError) throw searchError;
+
+    if (existingEmpresa) {
+      empresaId = existingEmpresa.id;
+    } else {
+      const { data: newEmpresa, error: empresaError } = await supabase
+        .from('empresas')
+        .insert({ nombre: data.companyName })
+        .select('id')
+        .single();
+      if (empresaError) throw empresaError;
+      empresaId = newEmpresa.id;
+    }
+
+    const updates: any = {
+      empresa_id: empresaId,
+      nombre_proyecto: data.projectName,
+    };
+    if (data.auditorId) {
+      updates.auditor_id = data.auditorId;
+    }
+
+    const { error: projectError } = await supabase
+      .from('proyectos')
+      .update(updates)
+      .eq('id', id);
+
+    if (projectError) throw projectError;
+
+    await fetchProjects();
+  }, [fetchProjects]);
+
+  // ── Actualizar estado de una fase (local + Supabase) ─────────────────────
+  const updatePhaseStatus = useCallback((
+    projectId: string,
+    phaseNumber: number,
+    status: PhaseStatus,
+    diagnosis?: string
+  ) => {
     setProjects(prev =>
       prev.map(project => {
         if (project.id !== projectId) return project;
@@ -254,25 +368,134 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return {
             ...phase,
             status,
-            completedAt: status === 'completado' ? new Date().toLocaleDateString('es-CO') : phase.completedAt,
+            completedAt: status === 'completado'
+              ? new Date().toLocaleDateString('es-CO')
+              : phase.completedAt,
             agentDiagnosis: diagnosis ?? phase.agentDiagnosis,
           };
         });
         const recomputed = computePhaseAvailability(updatedPhases);
         const allDone = recomputed.every(p => p.status === 'completado');
-        return {
-          ...project,
-          phases: recomputed,
-          status: allDone ? 'completado' : 'en_ejecucion',
-        };
+        return { ...project, phases: recomputed, status: allDone ? 'completado' : 'en_ejecucion' };
       })
     );
-  };
 
-  const getProject = (id: string) => projects.find(p => p.id === id);
+    supabase
+      .from('fases_estado')
+      .update({
+        estado_visual: status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('proyecto_id', projectId)
+      .eq('numero_fase', phaseNumber)
+      .then(({ error }) => {
+        if (error) console.error('[AppContext] Error actualizando fase en DB:', error);
+      });
+  }, []);
+
+  const moveToTrash = useCallback(async (id: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, isDeleted: true } : p));
+    try {
+      const { error } = await supabase.from('proyectos').update({ is_deleted: true }).eq('id', id);
+      if (error && error.message) console.error('[AppContext] Error updating in DB:', error);
+    } catch (err) {
+      console.error('[AppContext] moveToTrash exception:', err);
+    }
+  }, []);
+
+  const deleteProject = useCallback(async (id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+    try {
+      await supabase.from('encuestas_respuestas').delete().eq('proyecto_id', id);
+      await supabase.from('entrevistas').delete().eq('proyecto_id', id);
+      await supabase.from('documentos').delete().eq('proyecto_id', id);
+      await supabase.from('fases_estado').delete().eq('proyecto_id', id);
+
+      const { error } = await supabase.from('proyectos').delete().eq('id', id);
+      if (error && error.message) console.error('[AppContext] Error deleting from DB:', error);
+    } catch (err) {
+      console.error('[AppContext] deleteProject exception:', err);
+    }
+  }, []);
+
+  const restoreProject = useCallback(async (id: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, isDeleted: false } : p));
+    try {
+      const { error } = await supabase.from('proyectos').update({ is_deleted: false }).eq('id', id);
+      if (error && error.message) console.error('[AppContext] Error restoring in DB:', error);
+    } catch (err) {
+      console.error('[AppContext] restoreProject exception:', err);
+    }
+  }, []);
+
+  const reprocessPhase = useCallback(async (projectId: string, phaseNumber: number) => {
+    setProjects(prev =>
+      prev.map(project => {
+        if (project.id !== projectId) return project;
+        const updatedPhases = project.phases.map(phase => {
+          if (phase.number === phaseNumber) {
+            return {
+              ...phase,
+              status: 'disponible' as PhaseStatus,
+              completedAt: undefined,
+              agentDiagnosis: undefined,
+            };
+          }
+          if (phase.number > phaseNumber) {
+            return {
+              ...phase,
+              status: 'bloqueado' as PhaseStatus,
+              completedAt: undefined,
+              agentDiagnosis: undefined,
+            };
+          }
+          return phase;
+        });
+        const recomputed = computePhaseAvailability(updatedPhases);
+        return { ...project, phases: recomputed, status: 'en_ejecucion' as const };
+      })
+    );
+
+    try {
+      await supabase
+        .from('fases_estado')
+        .update({
+          estado_visual: 'disponible',
+          datos_consolidados: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', phaseNumber);
+
+      await supabase
+        .from('fases_estado')
+        .update({
+          estado_visual: 'bloqueado',
+          datos_consolidados: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('proyecto_id', projectId)
+        .gt('numero_fase', phaseNumber);
+    } catch (err) {
+      console.error('[AppContext] Error in reprocessPhase:', err);
+    }
+  }, []);
 
   return (
-    <AppContext.Provider value={{ projects, currentUser, addProject, updatePhaseStatus, getProject }}>
+    <AppContext.Provider value={{
+      projects,
+      currentUser,
+      isLoading,
+      addProject,
+      updatePhaseStatus,
+      getProject: (id) => projects.find(p => p.id === id),
+      refreshProjects: fetchProjects,
+      moveToTrash,
+      deleteProject,
+      restoreProject,
+      reprocessPhase,
+      editProject,
+    }}>
       {children}
     </AppContext.Provider>
   );
@@ -284,4 +507,5 @@ export function useApp() {
   return ctx;
 }
 
-export { MOCK_AUDITORS };
+// Exportado para compatibilidad con componentes que lo usan
+export const MOCK_AUDITORS: Auditor[] = [];

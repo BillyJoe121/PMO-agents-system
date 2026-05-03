@@ -1,78 +1,51 @@
-import { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, Link2, QrCode, Copy, ClipboardEdit, Globe, CheckCircle2,
-  Loader2, AlertTriangle, Users, Send, X, Eye, TrendingUp, UserCheck
+  ArrowLeft, QrCode, Copy, ClipboardEdit, Globe, CheckCircle2,
+  Loader2, AlertTriangle, Users, Send, TrendingUp, UserCheck, Sparkles, Trash2, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import SurveyRespondentOverlay from '../survey/SurveyRespondentOverlay';
+import { useIdoneidad } from '../../hooks/useIdoneidad';
+import PhaseHeader from './_shared/PhaseHeader';
+import NextPhaseButton from './_shared/NextPhaseButton';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
 type EntryMethod = null | 'survey' | 'manual';
 type ModuleState = 'selection' | 'data-entry' | 'processing' | 'completed';
 
-const MOCK_DIAGNOSIS = {
-  score: 78,
-  category: 'Alta Idoneidad',
-  observations: [
-    'La organización presenta una estructura organizacional bien definida con roles y responsabilidades claros.',
-    'Se evidencia compromiso de la alta dirección con la implementación de la PMO.',
-    'Existe cultura organizacional orientada a la mejora continua y gestión de proyectos.',
-    'Se detectaron oportunidades de mejora en la estandarización de procesos transversales.',
-  ],
-  recommendations: [
-    'Iniciar con una PMO de tipo "Apoyo" antes de avanzar a estructuras más robustas.',
-    'Invertir en capacitación en metodologías ágiles e híbridas para los equipos.',
-    'Establecer un comité de gobernanza de proyectos en los próximos 30 días.',
-  ],
-};
-
-const SURVEY_RESPONDENTS = [
-  { name: 'María González', role: 'Gerente de Proyectos', completed: true },
-  { name: 'Carlos Reyes', role: 'Director Financiero', completed: true },
-  { name: 'Ana Martínez', role: 'CTO', completed: false },
-  { name: 'Pedro Suárez', role: 'VP Operaciones', completed: true },
-];
-
-interface ConfirmModalProps {
-  open: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-  isLoading: boolean;
-}
-
-function ConfirmModal({ open, onCancel, onConfirm, isLoading }: ConfirmModalProps) {
+function ConfirmModal({ open, onCancel, onConfirm, isLoading }: {
+  open: boolean; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
+}) {
   return (
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onCancel} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            onClick={onCancel} className="absolute inset-0 bg-neutral-900/30 backdrop-blur-sm" />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6"
+            initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="relative bg-white rounded-2xl w-full max-w-md z-10 p-6 border border-neutral-200/70"
+            style={{ boxShadow: '0 24px 64px -16px rgba(0,0,0,0.18)' }}
           >
-            <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={20} className="text-amber-600" />
-              </div>
+            <div className="flex items-start gap-4 mb-6">
               <div>
-                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Confirmar envío al Agente IA</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">
-                  Al confirmar, los datos de la encuesta se <strong>bloquearán</strong> y serán enviados al Agente 2 para análisis.
-                  Esta acción no puede deshacerse.
+                <h3 className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>¿Confirmar envío al Agente IA?</h3>
+                <p className="text-neutral-500 text-[13px] leading-relaxed">
+                  Al confirmar, los datos de la encuesta se bloquearán y serán enviados al Agente para análisis. Esta acción no puede deshacerse.
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50 transition-colors" style={{ fontWeight: 500 }}>
+            <div className="flex gap-2">
+              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
                 Cancelar
               </button>
               <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#030213', fontWeight: 600 }}>
-                {isLoading ? <><Loader2 size={14} className="animate-spin" /> Enviando...</> : <><Send size={14} /> Confirmar y Enviar</>}
+                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
+                style={{ background: '#0a0a0a', fontWeight: 500 }}>
+                {isLoading ? <><Loader2 size={13} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Confirmar y enviar</>}
               </button>
             </div>
           </motion.div>
@@ -88,8 +61,54 @@ export default function IdoneidadModule() {
   const navigate = useNavigate();
   const { getProject, updatePhaseStatus } = useApp();
 
+  const { activeLink, responses, diagnosis, isLoadingData, externalFile, setExternalFile, existingFileName, existingFileUrl, fetchInitialData, generateLink, processPhase, deleteFile } = useIdoneidad(projectId);
+
   const project = getProject(projectId!);
-  const phase = project?.phases.find(p => p.number === 1);
+  const phase = project?.phases.find(p => p.number === 3);
+
+  const radarData = useMemo(() => {
+    if (!diagnosis || !diagnosis.resultados_por_item) return [];
+    
+    return diagnosis.resultados_por_item.map((res: any) => {
+      // Extract code like C01, E02 from the item name for the axis label
+      const codeMatch = res.item.match(/^([A-Z]\d+)/i);
+      const shortName = codeMatch ? codeMatch[1].toUpperCase() : res.item.substring(0, 10);
+      
+      return {
+        subject: shortName,
+        fullLabel: res.item,
+        Puntaje: typeof res.promedio === 'number' ? Number(res.promedio.toFixed(1)) : 0,
+        LimiteAgil: 4,
+        LimitePredictivo: 8,
+      };
+    });
+  }, [diagnosis]);
+
+  // Custom tooltip for the Radar Chart
+  const CustomRadarTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white border border-neutral-200/80 p-3.5 rounded-xl" style={{ boxShadow: '0 4px 20px -4px rgba(0,0,0,0.1)' }}>
+          <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-2 border-b border-neutral-100 pb-2" style={{ fontWeight: 600 }}>{data.fullLabel}</p>
+          <div className="flex flex-col gap-1.5">
+            {payload.map((entry: any, index: number) => (
+              <div key={index} className="flex items-center justify-between gap-4">
+                <span className="text-[12px] flex items-center gap-1.5 text-neutral-600">
+                  <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
+                  {entry.name}
+                </span>
+                <span className="text-[12px] tabular-nums" style={{ fontWeight: 600, color: entry.color }}>
+                  {entry.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const initialState: ModuleState = phase?.status === 'completado' ? 'completed' : 'selection';
 
@@ -99,13 +118,45 @@ export default function IdoneidadModule() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [showRespondentView, setShowRespondentView] = useState(false);
 
-  // RF-F1-01: Generar UUID de encuesta para el link externo
-  const surveyLink = `https://pmo.icesi.edu.co/survey/${projectId}/f1/enc_${projectId?.slice(-6)}`;
+  // Cargar datos iniciales
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  const isProcessing = phase?.status === 'procesando' || isSending;
+
+  useEffect(() => {
+    if (isProcessing) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isProcessing]);
+
+  useEffect(() => {
+    if (phase?.status === 'disponible' || phase?.status === 'error') {
+      setModuleState('selection');
+    } else if (phase?.status === 'completado') {
+      setModuleState('completed');
+    }
+  }, [phase?.status]);
+
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pmo.icesi.edu.co';
+  const surveyLink = activeLink ? `${baseUrl}/survey/${activeLink}` : 'Generando enlace...';
+
+  const handleGenerateLink = async () => {
+    try {
+      await generateLink();
+      toast.success('Nuevo enlace generado');
+    } catch (e) {
+      toast.error('Error generando enlace');
+    }
+  };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(surveyLink).catch(() => {});
+    navigator.clipboard.writeText(surveyLink).catch(() => { });
     setLinkCopied(true);
     toast.success('Enlace copiado al portapapeles');
     setTimeout(() => setLinkCopied(false), 2500);
@@ -120,359 +171,589 @@ export default function IdoneidadModule() {
   };
 
   const handleConfirmSend = async () => {
-    setIsSending(true);
-    // TODO: axios.post(N8N_WEBHOOK_AGENTE_2, { proyecto_id, datos_encuesta })
-    // TODO: fetch('banco_preguntas').where('tipo_encuesta', 'idoneidad')
-    await new Promise(r => setTimeout(r, 500));
-    setIsSending(false);
     setShowConfirm(false);
-    setModuleState('processing');
-    updatePhaseStatus(projectId!, 1, 'procesando');
+    setIsSending(true);
+    updatePhaseStatus(projectId!, 3, 'procesando');
 
-    // Simulate agent response
-    setTimeout(() => {
+    try {
+      await processPhase();
+      updatePhaseStatus(projectId!, 3, 'completado', 'Diagnóstico generado.');
       setModuleState('completed');
-      // RF-F1-08: Aplicar 'pointer-events-none' o 'disabled' a los inputs tras aprobación
-      updatePhaseStatus(projectId!, 1, 'completado', `Score de idoneidad: ${MOCK_DIAGNOSIS.score}/100. ${MOCK_DIAGNOSIS.observations[0]}`);
-      toast.success('¡Fase 1 completada!', { description: 'El Agente 2 ha finalizado el diagnóstico de idoneidad.' });
-    }, 4000);
+      toast.success('¡Fase 3 completada!', { description: 'El Agente ha finalizado el diagnóstico.' });
+      await fetchInitialData(); // Refrescar los datos para ver el diagnóstico
+    } catch (err: any) {
+      toast.error('Error procesando fase', { description: err.message });
+      setModuleState('data-entry');
+      updatePhaseStatus(projectId!, 3, 'disponible');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    // Si no hay respuestas online pero hay archivo CSV externo cargado en DB
+    if (responses.length === 0 && existingFileUrl) {
+      window.open(existingFileUrl, '_blank');
+      return;
+    }
+    
+    // Si hay respuestas online, exportar la tabla a CSV
+    if (responses.length > 0) {
+      const allKeys = new Set<string>();
+      responses.forEach(r => {
+        if (r.respuestas && typeof r.respuestas === 'object' && !Array.isArray(r.respuestas)) {
+          Object.keys(r.respuestas).forEach(k => allKeys.add(k));
+        }
+      });
+      const questionKeys = Array.from(allKeys).sort();
+      
+      const headers = ['Nombre_Encuestado', 'Cargo_Encuestado', 'Area_Encuestado', ...questionKeys, 'Fecha_Registro'];
+      
+      const rows = responses.map(r => {
+        const row = [
+          `"${(r.nombre_encuestado || '').replace(/"/g, '""')}"`,
+          `"${(r.cargo_encuestado || '').replace(/"/g, '""')}"`,
+          `"${(r.area_encuestado || '').replace(/"/g, '""')}"`
+        ];
+        
+        const respObj: any = (r.respuestas && typeof r.respuestas === 'object' && !Array.isArray(r.respuestas)) ? r.respuestas : {};
+        questionKeys.forEach(k => {
+          row.push(`"${(respObj[k] ?? '').toString().replace(/"/g, '""')}"`);
+        });
+        
+        row.push(`"${new Date(r.created_at).toLocaleString()}"`);
+        return row.join(',');
+      });
+      
+      // UTF-8 BOM para que Excel lea los tildes y eñes correctamente
+      const csvContent = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `respuestas_idoneidad_${projectId}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      toast.error('No hay datos disponibles para descargar.');
+    }
   };
 
   if (!project || !phase) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-5xl mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors group">
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-              {project.companyName}
-            </button>
-            <span className="text-gray-300">/</span>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 700 }}>1</div>
-              <span className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Diagnóstico de Idoneidad</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Respondent entry button — always visible in this module */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setShowRespondentView(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 text-sm transition-all"
-              style={{ borderColor: '#030213', color: '#030213', fontWeight: 600, background: 'transparent' }}
-            >
-              <UserCheck size={15} />
-              Ingresar como encuestado
-            </motion.button>
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#fafaf9]">
+      <PhaseHeader
+        projectId={projectId!}
+        companyName={project.companyName}
+        phaseNumber={3}
+        phaseName="Diagnóstico de Idoneidad"
+        eyebrow={moduleState === 'completed' ? 'Completada' : 'Activa'}
+      />
 
-      <div className="max-w-5xl mx-auto px-8 py-8">
+      {/* Processing overlay */}
+      <AnimatePresence>
+        {isProcessing && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center">
+            <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+              <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
+            </div>
+            <h2 className="text-neutral-900 text-[18px] mb-2 tracking-tight" style={{ fontWeight: 500 }}>
+              Analizando respuestas...
+            </h2>
+            <p className="text-neutral-500 text-[13px] mt-2">El Agente 3 está analizando la idoneidad organizacional…</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="max-w-[1100px] mx-auto px-10 py-10">
         <AnimatePresence mode="wait">
 
-          {/* STATE: Selection */}
-          {moduleState === 'selection' && (
+          {/* SELECTION */}
+          {/* GESTIÓN DE DATOS (ENCUESTA EN LÍNEA + CARGA MANUAL) */}
+          {(moduleState === 'selection' || moduleState === 'data-entry') && (
             <motion.div key="selection" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="mb-8">
-                <h1 className="text-gray-900 mb-2" style={{ fontWeight: 700, fontSize: '1.5rem' }}>
-                  Fase 1: Diagnóstico de Idoneidad
+                <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 3 · Diagnóstico de idoneidad</p>
+                <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                  Distribución de la encuesta
                 </h1>
-                <p className="text-gray-500 text-sm">Seleccione el método de recolección de datos para esta fase.</p>
+                <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                  Comparta el enlace o código QR con los colaboradores y monitoree las respuestas en tiempo real.
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-5">
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -4 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => { setEntryMethod('survey'); setModuleState('data-entry'); }}
-                  className="bg-white border-2 border-gray-200 hover:border-blue-400 rounded-2xl p-8 text-left transition-all group shadow-sm hover:shadow-md"
-                >
-                  <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center mb-5 group-hover:bg-blue-100 transition-colors">
-                    <Globe size={26} className="text-blue-600" />
+              {/* Online Survey Tools */}
+              <div className="grid grid-cols-3 gap-5">
+                <div className="col-span-2 bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                  <h3 className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>Enlace de acceso</h3>
+                  <div className="flex items-center justify-between mb-5">
+                    <p className="text-neutral-500 text-[13px]">Comparta este enlace con los colaboradores de la organización.</p>
+                    <button onClick={handleGenerateLink} className="text-indigo-600 text-[13px] hover:underline" style={{ fontWeight: 600 }}>
+                      {activeLink ? 'Generar nuevo enlace' : 'Generar enlace'}
+                    </button>
                   </div>
-                  <h3 className="text-gray-900 mb-2" style={{ fontWeight: 600, fontSize: '1.0625rem' }}>
-                    Gestionar Encuesta en Línea
-                  </h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">
-                    Genere un enlace único y código QR para enviar la encuesta a los colaboradores de la organización.
-                  </p>
-                  <div className="mt-4 text-xs text-blue-600 flex items-center gap-1" style={{ fontWeight: 500 }}>
-                    Recomendado <span className="ml-1">→</span>
+
+                  <div className="flex items-center gap-2 mb-5">
+                    <div className="flex-1 px-3.5 py-2.5 bg-neutral-50 border border-neutral-200/80 rounded-full text-[12px] text-neutral-600 truncate font-mono">
+                      {surveyLink}
+                    </div>
+                    <button
+                      onClick={handleCopyLink}
+                      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] transition-all flex-shrink-0
+                        ${linkCopied ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-neutral-900 text-white hover:-translate-y-px'}
+                      `}
+                      style={{ fontWeight: 500 }}
+                    >
+                      {linkCopied ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+                      {linkCopied ? 'Copiado' : 'Copiar'}
+                    </button>
                   </div>
-                </motion.button>
 
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -4 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => { setEntryMethod('manual'); setModuleState('data-entry'); }}
-                  className="bg-white border-2 border-gray-200 hover:border-blue-400 rounded-2xl p-8 text-left transition-all group shadow-sm hover:shadow-md"
-                >
-                  <div className="w-14 h-14 rounded-xl bg-purple-50 flex items-center justify-center mb-5 group-hover:bg-purple-100 transition-colors">
-                    <ClipboardEdit size={26} className="text-purple-600" />
-                  </div>
-                  <h3 className="text-gray-900 mb-2" style={{ fontWeight: 600, fontSize: '1.0625rem' }}>
-                    Ingreso Manual de Datos
-                  </h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">
-                    Cargue masivamente o pegue los resultados de encuestas realizadas fuera de la plataforma.
-                  </p>
-                </motion.button>
-              </div>
-            </motion.div>
-          )}
-
-          {/* STATE: Data Entry */}
-          {moduleState === 'data-entry' && (
-            <motion.div key="data-entry" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <button onClick={() => setModuleState('selection')} className="text-sm text-gray-400 hover:text-gray-600 mb-2 flex items-center gap-1">
-                    <ArrowLeft size={13} /> Cambiar método
-                  </button>
-                  <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>
-                    {entryMethod === 'survey' ? 'Encuesta en Línea' : 'Ingreso Manual de Datos'}
-                  </h1>
-                </div>
-              </div>
-
-              {entryMethod === 'survey' && (
-                <div className="grid grid-cols-3 gap-6">
-                  {/* Survey access panel */}
-                  <div className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <h3 className="text-gray-800 mb-1" style={{ fontWeight: 600 }}>Enlace de Acceso</h3>
-                    <p className="text-gray-500 text-sm mb-4">Comparta este enlace con los colaboradores de la organización.</p>
-
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 truncate">
-                        {surveyLink}
-                      </div>
-                      <button
-                        onClick={handleCopyLink}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm transition-all flex-shrink-0
-                          ${linkCopied ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
-                        `}
-                        style={{ fontWeight: 500 }}
-                      >
-                        {linkCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-                        {linkCopied ? 'Copiado' : 'Copiar'}
+                  <div className="flex items-center gap-5 p-5 bg-neutral-50 rounded-xl border border-neutral-200/70">
+                    <div className="w-24 h-24 bg-white border border-neutral-200/80 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <QrCode size={42} className="text-neutral-400" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>Código QR</p>
+                      <p className="text-neutral-500 text-[12px] leading-relaxed">
+                        Escanee este código para acceder directamente a la encuesta desde dispositivos móviles.
+                      </p>
+                      <button className="mt-2 text-[12px] text-neutral-700 hover:text-neutral-900 hover:underline" style={{ fontWeight: 500 }}>
+                        Descargar QR →
                       </button>
                     </div>
-
-                    {/* QR Code placeholder */}
-                    <div className="flex items-center gap-5 p-4 bg-gray-50 rounded-xl">
-                      <div className="w-24 h-24 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <QrCode size={48} className="text-gray-400" />
-                      </div>
-                      <div>
-                        <p className="text-gray-700 text-sm mb-1" style={{ fontWeight: 500 }}>Código QR</p>
-                        <p className="text-gray-500 text-xs leading-relaxed">
-                          Escanee este código para acceder directamente a la encuesta desde dispositivos móviles.
-                        </p>
-                        <button className="mt-2 text-xs text-blue-600 hover:underline" style={{ fontWeight: 500 }}>
-                          Descargar QR →
-                        </button>
-                      </div>
-                    </div>
                   </div>
+                </div>
 
-                  {/* Response monitor */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Users size={16} className="text-gray-500" />
-                      <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Monitor de Respuestas</h3>
-                    </div>
-                    <div className="text-center mb-4 py-3 bg-blue-50 rounded-xl">
-                      <p className="text-3xl text-blue-700" style={{ fontWeight: 700 }}>
-                        {SURVEY_RESPONDENTS.filter(r => r.completed).length}
-                      </p>
-                      <p className="text-blue-500 text-xs">de {SURVEY_RESPONDENTS.length} respondieron</p>
-                    </div>
-                    <div className="space-y-2">
-                      {SURVEY_RESPONDENTS.map((r, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${r.completed ? 'bg-green-500' : 'bg-gray-300'}`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-700 truncate" style={{ fontWeight: 500 }}>{r.name}</p>
-                            <p className="text-xs text-gray-400 truncate">{r.role}</p>
-                          </div>
-                          {r.completed && <CheckCircle2 size={12} className="text-green-500 flex-shrink-0" />}
+                <div className="bg-white rounded-2xl border border-neutral-200/70 p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Users size={13} className="text-neutral-500" strokeWidth={1.75} />
+                    <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Monitor de respuestas</h3>
+                  </div>
+                  <div className="text-center mb-5 py-5 bg-neutral-50 rounded-xl border border-neutral-200/70">
+                    <p className="text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '2.25rem', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                      {responses.length}
+                    </p>
+                    <p className="text-neutral-500 text-[11px] mt-1.5">respuestas registradas</p>
+                  </div>
+                  <div className="space-y-2.5 max-h-48 overflow-y-auto">
+                    {responses.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2.5">
+                        <div className={`w-1.5 h-1.5 rounded-full bg-emerald-500`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] text-neutral-900 truncate" style={{ fontWeight: 500 }}>{r.nombre_encuestado}</p>
+                          <p className="text-[11px] text-neutral-400 truncate">{r.cargo_encuestado}</p>
                         </div>
-                      ))}
-                    </div>
+                        <CheckCircle2 size={11} className="text-emerald-500 flex-shrink-0" />
+                      </div>
+                    ))}
+                    {responses.length === 0 && (
+                      <p className="text-neutral-400 text-[12px] text-center mt-4">Esperando respuestas...</p>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
-              {entryMethod === 'manual' && (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                  <h3 className="text-gray-800 mb-1" style={{ fontWeight: 600 }}>Datos de la Encuesta</h3>
-                  <p className="text-gray-500 text-sm mb-4">
-                    Pegue o ingrese las respuestas recolectadas. Puede usar texto libre, JSON o formato CSV.
-                  </p>
-                  <textarea
-                    value={manualData}
-                    onChange={e => setManualData(e.target.value)}
-                    placeholder="Pegue aquí los datos de la encuesta de idoneidad...&#10;&#10;Ejemplo:&#10;Pregunta 1: ¿Tiene la organización una PMO formal?&#10;Respuesta: Sí, existe una PMO establecida desde 2021...&#10;&#10;Pregunta 2: ¿Cuántos proyectos se gestionan simultáneamente?&#10;Respuesta: Entre 15 y 20 proyectos por trimestre..."
-                    rows={14}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-y leading-relaxed"
-                    style={{ fontFamily: 'monospace' }}
-                  />
-                  <p className="text-gray-400 text-xs mt-2 text-right">
-                    {manualData.length} caracteres
-                  </p>
+              {/* Manual File Upload Option Below */}
+              <div className="mt-8 bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>
+                    Cargar resultados de manera manual
+                  </h3>
+                  <span className="text-[11px] uppercase tracking-wide bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded" style={{ fontWeight: 500 }}>
+                    Alternativo
+                  </span>
                 </div>
-              )}
+                <p className="text-neutral-500 text-[13px] mb-4">
+                  Si tiene resultados de encuestas realizadas fuera de la plataforma, puede cargarlos en formato PDF o CSV.
+                </p>
+                <div className="flex flex-col gap-2">
+                {existingFileName && !externalFile && (
+                    <div className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg border border-emerald-100/50 w-fit">
+                      <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                      <span className="text-[12px] text-emerald-600 font-medium truncate max-w-[220px]">
+                        {existingFileName.split('_').slice(2).join('_')}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await deleteFile();
+                            toast.success('Archivo eliminado correctamente.');
+                          } catch {
+                            toast.error('Error al eliminar el archivo.');
+                          }
+                        }}
+                        className="ml-1 p-1 rounded-md text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors flex-shrink-0"
+                        title="Eliminar archivo"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept=".pdf,.csv"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setExternalFile(e.target.files[0]);
+                        toast.success(`Archivo "${e.target.files[0].name}" listo para enviar.`);
+                      }
+                    }}
+                    className="flex-1 text-sm text-neutral-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[13px] file:font-semibold file:bg-neutral-100 file:text-neutral-700 hover:file:bg-neutral-200 cursor-pointer transition-all"
+                  />
+                </div>
+              </div>
 
-              {/* Mark complete button */}
-              <div className="mt-6 flex justify-end">
+              {/* Submit Button */}
+              <div className="mt-8 flex justify-end">
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                   onClick={handleMarkComplete}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-                  style={{ background: '#030213', fontWeight: 600 }}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-white text-[13px] transition-all disabled:opacity-50"
+                  disabled={isSending}
+                  style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
                 >
-                  <Send size={15} />
-                  Marcar como completa y Enviar al Agente
+                  {isSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} strokeWidth={1.75} />}
+                  {isSending ? 'Procesando y enviando...' : 'Marcar como completa y enviar al agente'}
                 </motion.button>
               </div>
             </motion.div>
           )}
 
-          {/* STATE: Processing */}
+          {/* PROCESSING */}
           {moduleState === 'processing' && (
             <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-              <div className="relative mb-8">
-                <div className="w-24 h-24 rounded-full border-4 border-blue-100 flex items-center justify-center">
-                  <Loader2 size={40} className="text-blue-600 animate-spin" />
-                </div>
-                <motion.div
-                  animate={{ scale: [1, 1.3, 1] }}
-                  transition={{ repeat: Infinity, duration: 2 }}
-                  className="absolute inset-0 rounded-full border-4 border-blue-200 opacity-30"
-                />
+              <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
               </div>
-              <h2 className="text-gray-900 mb-3" style={{ fontWeight: 700, fontSize: '1.375rem' }}>
-                Analizando Idoneidad
+              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+              <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
+                Analizando idoneidad
               </h2>
-              <p className="text-gray-500 text-sm max-w-sm leading-relaxed">
-                El <strong>Agente 2</strong> está procesando los datos de idoneidad y generando el diagnóstico organizacional...
+              <p className="text-neutral-500 text-[13px] mt-3 max-w-sm leading-relaxed">
+                El Agente está procesando los datos y generando el diagnóstico organizacional…
               </p>
-              <div className="mt-6 flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-xl">
-                <Loader2 size={13} className="animate-spin" />
-                <span className="text-xs" style={{ fontWeight: 500 }}>Esto puede tomar unos momentos</span>
-              </div>
             </motion.div>
           )}
 
-          {/* STATE: Completed */}
+          {/* COMPLETED */}
           {moduleState === 'completed' && (
             <motion.div key="completed" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <CheckCircle2 size={18} className="text-green-500" />
-                    <span className="text-green-600 text-sm" style={{ fontWeight: 600 }}>Fase completada</span>
+              <div className="mb-10">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 3 · Diagnóstico de idoneidad</p>
+                <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                  Resultados consolidados
+                </h1>
+                <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                  El Agente procesó las respuestas y generó la puntuación de idoneidad organizacional con observaciones clave.
+                </p>
+
+                <div className="grid grid-cols-3 gap-px bg-neutral-200/60 rounded-2xl overflow-hidden mt-7 border border-neutral-200/60">
+                  <div className="bg-white px-5 py-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Respondieron</p>
+                    <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                      {responses.length > 0 ? responses.length : (diagnosis?.numero_encuestados || 0)} <span className="text-[12px] text-neutral-400 ml-1">personas</span>
+                    </p>
                   </div>
-                  <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>
-                    Diagnóstico de Idoneidad
-                  </h1>
+                  <div className="bg-white px-5 py-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Fecha de análisis</p>
+                    <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                      {phase?.completedAt ? phase.completedAt : 'Reciente'}
+                    </p>
+                  </div>
+                  <div className="bg-white px-5 py-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Puntuación</p>
+                    <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                      {Number((diagnosis?.suitability_score || diagnosis?.puntuacion_idoneidad || 0).toFixed(1))}<span className="text-[12px] text-neutral-400 ml-0.5">/100</span>
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                {/* Left: Data summary */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                  <h3 className="text-gray-800 mb-4" style={{ fontWeight: 600 }}>Datos Recopilados</h3>
-                  <div className="space-y-3">
-                    {SURVEY_RESPONDENTS.filter(r => r.completed).map((r, i) => (
-                      <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 600 }}>
-                          {r.name.split(' ').map(n => n[0]).join('')}
+              <div className="grid grid-cols-5 gap-5 mt-7">
+                {/* Data summary */}
+                <div className="col-span-2 order-2 bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Datos recopilados</h3>
+                      <span className="text-[11px] text-neutral-400 tabular-nums bg-neutral-100 px-1.5 py-0.5 rounded">{responses.length > 0 ? responses.length : (diagnosis?.numero_encuestados || 0)}</span>
+                    </div>
+                    <button
+                      onClick={handleDownloadCSV}
+                      disabled={responses.length === 0 && !existingFileUrl}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-200/80 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed print:hidden"
+                      title="Descargar respuestas en CSV"
+                    >
+                      <Download size={12} strokeWidth={2} />
+                      CSV
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {responses.length === 0 ? (
+                      (diagnosis?.numero_encuestados || 0) > 0 ? (
+                        <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200/50">
+                          <p className="text-neutral-600 text-[12px] font-medium">Datos cargados mediante archivo externo (CSV/PDF)</p>
+                          <p className="text-neutral-400 text-[11px] mt-1">El archivo contenía {diagnosis.numero_encuestados} registros válidos.</p>
                         </div>
-                        <div>
-                          <p className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>{r.name}</p>
-                          <p className="text-gray-400 text-xs">{r.role}</p>
+                      ) : (
+                        <p className="text-neutral-400 text-xs italic">No hay respuestas</p>
+                      )
+                    ) : responses.map((r, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 bg-neutral-50 rounded-xl">
+                        <div className="w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-white text-[11px]" style={{ fontWeight: 600 }}>
+                          {r.nombre_encuestado.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()}
                         </div>
-                        <CheckCircle2 size={14} className="text-green-500 ml-auto" />
+                        <div className="min-w-0">
+                          <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>{r.nombre_encuestado}</p>
+                          <p className="text-neutral-400 text-[11px] truncate">{r.cargo_encuestado}</p>
+                        </div>
+                        <CheckCircle2 size={13} className="text-emerald-500 ml-auto flex-shrink-0" strokeWidth={1.75} />
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 p-3 bg-gray-50 rounded-xl">
-                    <p className="text-gray-500 text-xs" style={{ fontWeight: 500 }}>Tasa de respuesta</p>
-                    <p className="text-gray-800 text-lg mt-0.5" style={{ fontWeight: 700 }}>
-                      {Math.round((SURVEY_RESPONDENTS.filter(r => r.completed).length / SURVEY_RESPONDENTS.length) * 100)}%
+                  <div className="mt-5 p-4 bg-neutral-50 rounded-xl border border-neutral-200/70">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Respuestas totales</p>
+                    <p className="text-neutral-900 tabular-nums mt-1" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
+                      {responses.length > 0 ? responses.length : (diagnosis?.numero_encuestados || 0)}
                     </p>
                   </div>
                 </div>
 
-                {/* Right: Agent diagnosis */}
-                <div className="rounded-2xl border-2 shadow-sm p-6" style={{ borderColor: '#030213', background: 'linear-gradient(135deg, #f5f5f7 0%, #ffffff 100%)' }}>
-                  <div className="flex items-center gap-2 mb-5">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: '#030213' }}>
-                      <TrendingUp size={14} />
+                {/* Agent diagnosis */}
+                <div className="col-span-3 order-1 rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+                      <Sparkles size={13} strokeWidth={1.75} />
                     </div>
-                    <span className="text-sm" style={{ fontWeight: 700, color: '#030213' }}>Diagnóstico — Agente 2</span>
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Diagnóstico — Agente 3</span>
                   </div>
 
-                  {/* Score */}
-                  <div className="flex items-center gap-5 mb-5 p-4 bg-white rounded-xl shadow-sm">
-                    <div className="relative w-20 h-20">
+                  <div className="flex items-center gap-5 mb-6 p-5 bg-neutral-50 rounded-xl border border-neutral-200/70">
+                    <div className="relative w-20 h-20 flex-shrink-0">
                       <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" strokeWidth="3" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#030213" strokeWidth="3"
-                          strokeDasharray={`${MOCK_DIAGNOSIS.score} 100`} strokeLinecap="round" />
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e5e5" strokeWidth="2.5" />
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#0a0a0a" strokeWidth="2.5"
+                          strokeDasharray={`${(diagnosis?.suitability_score || diagnosis?.puntuacion_idoneidad || 0)} 100`} strokeLinecap="round" />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-lg" style={{ fontWeight: 800, color: '#030213' }}>{MOCK_DIAGNOSIS.score}</span>
-                        <span className="text-xs text-gray-400">/100</span>
+                        <span className="text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.125rem', letterSpacing: '-0.02em' }}>{Number(((diagnosis?.suitability_score || diagnosis?.puntuacion_idoneidad || 0) / 10).toFixed(1))}</span>
+                        <span className="text-[10px] text-neutral-400 tabular-nums">/10</span>
                       </div>
                     </div>
-                    <div>
-                      <p className="text-gray-500 text-xs mb-0.5">Puntuación de Idoneidad</p>
-                      <p className="text-gray-900" style={{ fontWeight: 700, fontSize: '1rem' }}>{MOCK_DIAGNOSIS.category}</p>
-                      <span className="inline-block mt-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full" style={{ fontWeight: 500 }}>
-                        Apta para PMO
+                    <div className="min-w-0">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Puntuación de idoneidad</p>
+                      <p className="text-neutral-900 mt-1 tracking-tight" style={{ fontWeight: 500, fontSize: '1.0625rem', letterSpacing: '-0.01em' }}>{diagnosis?.suitability_level || diagnosis?.nivel_idoneidad || 'N/A'}</p>
+                      <span className="inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] rounded-full border border-emerald-100" style={{ fontWeight: 500 }}>
+                        <span className="w-1 h-1 rounded-full bg-emerald-500" /> Analizado por IA
                       </span>
                     </div>
                   </div>
 
-                  {/* Observations */}
-                  <div className="mb-4">
-                    <p className="text-gray-700 text-xs uppercase tracking-wider mb-2" style={{ fontWeight: 700 }}>Observaciones</p>
+                  <div className="mb-5">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Observaciones</p>
                     <ul className="space-y-2">
-                      {MOCK_DIAGNOSIS.observations.map((obs, i) => (
-                        <li key={i} className="flex items-start gap-2 text-gray-600 text-sm">
-                          <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: '#030213' }} />
+                      {(diagnosis?.observations || diagnosis?.observaciones || []).map((obs: string, i: number) => (
+                        <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
+                          <span className="w-1 h-1 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
                           {obs}
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  {/* Recommendations */}
-                  <div>
-                    <p className="text-gray-700 text-xs uppercase tracking-wider mb-2" style={{ fontWeight: 700 }}>Recomendaciones</p>
-                    <ul className="space-y-2">
-                      {MOCK_DIAGNOSIS.recommendations.map((rec, i) => (
-                        <li key={i} className="flex items-start gap-2 text-gray-600 text-sm">
-                          <span className="text-xs mt-0.5 flex-shrink-0" style={{ color: '#030213', fontWeight: 700 }}>{i + 1}.</span>
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  {(diagnosis?.riesgos || diagnosis?.riesgos_metodologicos) && (diagnosis?.riesgos || diagnosis?.riesgos_metodologicos).length > 0 && (
+                    <div className="mb-5">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Riesgos Metodológicos</p>
+                      <ul className="space-y-3">
+                        {(diagnosis?.riesgos || diagnosis?.riesgos_metodologicos).map((riesgo: any, i: number) => (
+                          <li key={i} className="p-3 bg-amber-50/50 border border-amber-100/50 rounded-xl">
+                            <p className="text-[12px] font-semibold text-amber-900 mb-1">{riesgo.nombre || riesgo.riesgo} <span className="text-[10px] uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-md ml-1">{riesgo.nivel || riesgo.impacto}</span></p>
+                            <p className="text-neutral-700 text-[12px] leading-relaxed">{riesgo.descripcion}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {radarData.length > 0 && (
+                    <div className="mb-8">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Gráfica de radar para la Evaluación de Idoneidad</p>
+                      <div className="p-5 bg-white rounded-xl border border-neutral-200/70" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                        <div className="h-[400px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                              <PolarGrid stroke="#e5e5e5" />
+                              <PolarAngleAxis dataKey="subject" tick={{ fill: '#52525b', fontSize: 11, fontWeight: 600 }} />
+                              <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#a3a3a3', fontSize: 10 }} axisLine={false} tickCount={6} />
+                              <Radar name="Límite Ágil" dataKey="LimiteAgil" stroke="#9333ea" strokeWidth={1.5} fill="none" />
+                              <Radar name="Límite Predictivo" dataKey="LimitePredictivo" stroke="#ea580c" strokeWidth={1.5} fill="none" />
+                              <Radar name="Puntaje" dataKey="Puntaje" stroke="#0ea5e9" strokeWidth={2} fill="#0ea5e9" fillOpacity={0.1} />
+                              <Tooltip content={<CustomRadarTooltip />} />
+                            </RadarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-neutral-100">
+                          {['cultura', 'equipo', 'proyecto'].map((dim) => {
+                            const data = (diagnosis?.indicadores || diagnosis?.indicadores_dimension)[dim];
+                            if (!data) return null;
+                            return (
+                              <div key={dim} className="bg-neutral-50 p-3 rounded-xl border border-neutral-200/50 flex items-center justify-between">
+                                <div>
+                                  <p className="text-[10px] uppercase tracking-wider text-neutral-500 font-semibold mb-0.5">{dim}</p>
+                                  <p className="text-[10px] text-neutral-400">Coherencia: {data.coherencia_interna}</p>
+                                </div>
+                                <p className="text-neutral-900 font-bold text-lg tabular-nums">
+                                  {typeof data.promedio === 'number' ? Number(data.promedio.toFixed(1)) : data.promedio}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-6 pt-5 border-t border-neutral-100">
+                          <h4 className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold mb-3">Detalle por factor</h4>
+                          <div className="overflow-hidden rounded-lg border border-neutral-200/60 bg-white">
+                            <table className="w-full text-left text-[12px]">
+                              <thead className="bg-neutral-50 border-b border-neutral-200/60">
+                                <tr>
+                                  <th className="px-4 py-2.5 font-medium text-neutral-600">Categoría / Pregunta</th>
+                                  <th className="px-4 py-2.5 font-medium text-neutral-600 w-24 text-right">Puntaje</th>
+                                  <th className="px-4 py-2.5 font-medium text-neutral-600 w-32 text-center">Zona</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-neutral-100">
+                                {(() => {
+                                  const groups: Record<string, any[]> = { Cultura: [], Equipo: [], Proyecto: [], Otros: [] };
+                                  (diagnosis.resultados_por_item || []).forEach((res: any) => {
+                                    let dim = res.dimension || '';
+                                    if (!dim) {
+                                      if (res.item.match(/^C\d/i)) dim = 'Cultura';
+                                      else if (res.item.match(/^E\d/i)) dim = 'Equipo';
+                                      else if (res.item.match(/^P\d/i)) dim = 'Proyecto';
+                                      else dim = 'Otros';
+                                    }
+                                    const key = Object.keys(groups).find(k => k.toLowerCase() === dim.toLowerCase()) || 'Otros';
+                                    groups[key].push(res);
+                                  });
+
+                                  return [
+                                    { name: 'Cultura', items: groups.Cultura },
+                                    { name: 'Equipo', items: groups.Equipo },
+                                    { name: 'Proyecto', items: groups.Proyecto },
+                                    { name: 'Otros', items: groups.Otros },
+                                  ].filter(g => g.items.length > 0).map((group, gIdx) => (
+                                    <React.Fragment key={gIdx}>
+                                      {/* Group Header */}
+                                      <tr className="bg-neutral-50/50">
+                                        <td className="px-4 py-2 font-semibold text-neutral-800" colSpan={3}>
+                                          {group.name}
+                                        </td>
+                                      </tr>
+                                      {/* Group Items */}
+                                      {group.items.map((res: any, idx: number) => {
+                                        let zoneColor = 'bg-neutral-100 text-neutral-600 border-neutral-200';
+                                        let zoneText = res.zona || 'Neutral';
+                                        if (zoneText.toLowerCase().includes('agil') || zoneText.toLowerCase().includes('ágil')) {
+                                          zoneColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                          zoneText = 'Ágil';
+                                        } else if (zoneText.toLowerCase().includes('transi') || zoneText.toLowerCase().includes('híbrido') || zoneText.toLowerCase().includes('hibrido')) {
+                                          zoneColor = 'bg-amber-50 text-amber-700 border-amber-200';
+                                          zoneText = 'Híbrido';
+                                        } else if (zoneText.toLowerCase().includes('predictivo')) {
+                                          zoneColor = 'bg-white text-neutral-700 border-neutral-300';
+                                          zoneText = 'Predictivo';
+                                        }
+
+                                        return (
+                                          <tr key={`${gIdx}-${idx}`} className="hover:bg-neutral-50 transition-colors">
+                                            <td className="px-4 py-1.5 pl-8 text-neutral-600 truncate max-w-[200px]" title={res.item}>{res.item}</td>
+                                            <td className="px-4 py-1.5 tabular-nums text-right font-medium text-neutral-900">
+                                              {typeof res.promedio === 'number' ? Number(res.promedio.toFixed(1)) : res.promedio}
+                                            </td>
+                                            <td className="px-4 py-1.5 text-center">
+                                              <span className={`inline-block w-[80%] py-0.5 text-[10px] uppercase font-semibold tracking-wider rounded border ${zoneColor}`}>
+                                                {zoneText}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </React.Fragment>
+                                  ));
+                                })()}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {diagnosis?.tensiones && diagnosis.tensiones.length > 0 && (
+                    <div className="mb-5">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Tensiones Estructurales</p>
+                      <ul className="space-y-3">
+                        {diagnosis.tensiones.map((tens: any, i: number) => (
+                          <li key={i} className="p-3 bg-neutral-50 border border-neutral-200/50 rounded-xl">
+                            <div className="flex justify-between items-center mb-1">
+                              <p className="text-[12px] font-semibold text-neutral-800">{tens.par_dimensiones}</p>
+                              <span className="text-[10px] uppercase bg-neutral-200 text-neutral-700 px-1.5 py-0.5 rounded-md font-medium">{tens.clasificacion}</span>
+                            </div>
+                            <p className="text-neutral-600 text-[12px] leading-relaxed">{tens.interpretacion}</p>
+                            <p className="text-[10px] text-neutral-400 mt-1 font-mono">Diferencia: {typeof tens.diferencia_promedios === 'number' ? Number(tens.diferencia_promedios.toFixed(1)) : tens.diferencia_promedios} pts</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {diagnosis?.factores_criticos && (
+                    <div className="mb-5 grid grid-cols-2 gap-4">
+                      {diagnosis.factores_criticos.alta_afinidad_agil?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold mb-2 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Afinidad Ágil (≤3)</p>
+                          <ul className="space-y-2">
+                            {diagnosis.factores_criticos.alta_afinidad_agil.map((fac: any, i: number) => (
+                              <li key={i} className="text-[11px] text-neutral-700 bg-emerald-50/50 border border-emerald-100/50 p-2 rounded-lg leading-snug">
+                                <strong>{fac.item}:</strong> {fac.interpretacion}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {diagnosis.factores_criticos.alta_afinidad_predictiva?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-indigo-600 font-semibold mb-2 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Afinidad Predictiva (≥7)</p>
+                          <ul className="space-y-2">
+                            {diagnosis.factores_criticos.alta_afinidad_predictiva.map((fac: any, i: number) => (
+                              <li key={i} className="text-[11px] text-neutral-700 bg-indigo-50/50 border border-indigo-100/50 p-2 rounded-lg leading-snug">
+                                <strong>{fac.item}:</strong> {fac.interpretacion}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {diagnosis?.inconsistencias && diagnosis.inconsistencias.length > 0 && (
+                    <div className="mb-5">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Inconsistencias Internas</p>
+                      <ul className="space-y-3">
+                        {diagnosis.inconsistencias.map((inc: any, i: number) => (
+                          <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[12px] leading-relaxed">
+                            <span className="text-[10px] mt-0.5 flex-shrink-0 text-rose-600 bg-rose-50 px-1.5 rounded-md font-medium border border-rose-100">{inc.clasificacion}</span>
+                            <span>{inc.descripcion}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -487,15 +768,7 @@ export default function IdoneidadModule() {
         isLoading={isSending}
       />
 
-      {/* Respondent overlay — full viewport, no app access */}
-      <AnimatePresence>
-        {showRespondentView && (
-          <SurveyRespondentOverlay
-            companyName={project.companyName}
-            onClose={() => setShowRespondentView(false)}
-          />
-        )}
-      </AnimatePresence>
+      <NextPhaseButton projectId={projectId!} nextPhase={4} prevPhase={2} show={moduleState === 'completed'} />
     </div>
   );
 }

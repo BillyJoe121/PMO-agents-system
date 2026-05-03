@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, X, Send, Loader2, AlertTriangle, CheckCircle2, Brain, FileEdit } from 'lucide-react';
+import { Send, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileEdit } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
+import PhaseHeader from './_shared/PhaseHeader';
 
 function ConfirmModal({ open, phaseName, onCancel, onConfirm, isLoading }: {
   open: boolean; phaseName: string; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
@@ -13,28 +14,34 @@ function ConfirmModal({ open, phaseName, onCancel, onConfirm, isLoading }: {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onCancel} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6">
-            <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={20} className="text-amber-600" />
+            onClick={onCancel} className="absolute inset-0 bg-neutral-900/30 backdrop-blur-sm" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="relative bg-white rounded-2xl w-full max-w-md z-10 p-6 border border-neutral-200/70"
+            style={{ boxShadow: '0 24px 64px -16px rgba(0,0,0,0.18)' }}
+          >
+            <div className="flex items-start gap-4 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={16} className="text-amber-600" strokeWidth={1.75} />
               </div>
               <div>
-                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Aprobar {phaseName}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">
+                <h3 className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>
+                  Aprobar {phaseName}
+                </h3>
+                <p className="text-neutral-500 text-[13px] leading-relaxed">
                   Al confirmar, esta fase será marcada como completada y se enviará al agente de análisis correspondiente. Esta acción no puede deshacerse.
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50 transition-colors" style={{ fontWeight: 500 }}>
+            <div className="flex gap-2">
+              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
                 Cancelar
               </button>
               <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#030213', fontWeight: 600 }}>
-                {isLoading ? <><Loader2 size={14} className="animate-spin" /> Procesando...</> : <><Send size={14} /> Confirmar y Aprobar</>}
+                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
+                style={{ background: '#0a0a0a', fontWeight: 500 }}>
+                {isLoading ? <><Loader2 size={13} className="animate-spin" /> Procesando…</> : <><Send size={13} /> Confirmar y aprobar</>}
               </button>
             </div>
           </motion.div>
@@ -81,103 +88,97 @@ export default function GenericPhaseModule() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-4xl mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors group">
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-              {project.companyName}
-            </button>
-            <span className="text-gray-300">/</span>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 700 }}>{pNum}</div>
-              <span className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>{phase.name}</span>
-            </div>
-          </div>
-          <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-            className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#fafaf9]">
+      <PhaseHeader
+        projectId={projectId!}
+        companyName={project.companyName}
+        phaseNumber={pNum}
+        phaseName={phase.name}
+        eyebrow={isCompleted ? 'Completada' : 'Activa'}
+      />
 
       {/* Processing overlay */}
       <AnimatePresence>
         {isProcessing && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
-            <div className="w-20 h-20 rounded-full border-4 border-blue-100 flex items-center justify-center mx-auto mb-5">
-              <Loader2 size={36} className="text-blue-600 animate-spin" />
+            className="fixed inset-0 z-40 bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center">
+            <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+              <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
             </div>
-            <h2 className="text-gray-900 mb-2" style={{ fontWeight: 700, fontSize: '1.25rem' }}>Procesando fase</h2>
-            <p className="text-gray-500 text-sm">El agente de IA está analizando los datos de {phase.name}...</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+            <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
+              Analizando {phase.name}
+            </h2>
+            <p className="text-neutral-500 text-[13px] mt-2">El agente de IA está trabajando en sus datos…</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="max-w-4xl mx-auto px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-[1100px] mx-auto px-10 py-10">
+        <div className="flex items-end justify-between mb-8 gap-4">
           <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>
+              Fase {pNum}
+            </p>
+            <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2rem', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+              {phase.name}
+            </h1>
             {isCompleted && (
-              <div className="flex items-center gap-2 mb-1">
-                <CheckCircle2 size={16} className="text-green-500" />
-                <span className="text-green-600 text-sm" style={{ fontWeight: 600 }}>Fase completada</span>
+              <div className="inline-flex items-center gap-1.5 mt-3 text-emerald-700 text-[12px]" style={{ fontWeight: 500 }}>
+                <CheckCircle2 size={13} /> Fase completada
               </div>
             )}
-            <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>
-              Fase {pNum}: {phase.name}
-            </h1>
           </div>
           {!isCompleted && !isProcessing && (
             <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              whileHover={{ y: -1 }} whileTap={{ y: 0 }}
               onClick={() => setShowConfirm(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm shadow-sm hover:shadow-md"
-              style={{ background: '#030213', fontWeight: 600 }}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-white text-[13px] transition-all flex-shrink-0"
+              style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
             >
-              <Send size={14} />
-              Aprobar Fase Definitivamente
+              <Send size={13} strokeWidth={1.75} />
+              Aprobar fase
             </motion.button>
           )}
         </div>
 
         {isCompleted ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="rounded-2xl border-2 shadow-sm p-6" style={{ borderColor: '#030213', background: 'linear-gradient(135deg, #f5f5f7 0%, #ffffff 100%)' }}>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: '#030213' }}>
-                <Brain size={14} />
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-neutral-200/70 bg-white p-7"
+            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+                <Sparkles size={13} strokeWidth={1.75} />
               </div>
-              <span className="text-sm" style={{ fontWeight: 700, color: '#030213' }}>Diagnóstico del Agente IA</span>
+              <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>
+                Diagnóstico del agente IA
+              </span>
             </div>
-            <p className="text-gray-600 text-sm leading-relaxed">{phase.agentDiagnosis}</p>
+            <p className="text-neutral-700 text-[14px] leading-relaxed">{phase.agentDiagnosis}</p>
             {phase.completedAt && (
-              <p className="text-gray-400 text-xs mt-4 flex items-center gap-1">
-                <CheckCircle2 size={11} className="text-green-500" />
+              <p className="text-neutral-400 text-[11px] mt-5 flex items-center gap-1.5">
+                <CheckCircle2 size={11} className="text-emerald-500" />
                 Completada el {phase.completedAt}
               </p>
             )}
           </motion.div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <FileEdit size={16} className="text-gray-500" />
-              <h3 className="text-gray-800" style={{ fontWeight: 600 }}>Notas y Observaciones</h3>
+          <div className="bg-white rounded-2xl border border-neutral-200/70 p-7" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+            <div className="flex items-center gap-2.5 mb-2">
+              <FileEdit size={14} className="text-neutral-500" strokeWidth={1.75} />
+              <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Notas y observaciones</h3>
             </div>
-            <p className="text-gray-500 text-sm mb-4">
+            <p className="text-neutral-500 text-[13px] mb-5">
               Documente los hallazgos, observaciones y datos relevantes para esta fase antes de procesar con el agente de IA.
             </p>
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder={`Ingrese las observaciones para ${phase.name}...`}
+              placeholder={`Ingrese las observaciones para ${phase.name}…`}
               rows={12}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-y leading-relaxed bg-white"
+              className="w-full px-4 py-3 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 transition-all resize-y leading-relaxed bg-white placeholder:text-neutral-400"
             />
-            <p className="text-gray-400 text-xs text-right mt-2">{notes.length} caracteres</p>
+            <p className="text-neutral-400 text-[11px] text-right mt-2 tabular-nums">{notes.length} caracteres</p>
           </div>
         )}
       </div>

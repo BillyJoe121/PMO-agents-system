@@ -15,7 +15,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, X, Loader2, CheckCircle2, Brain, MessageSquare, Save,
+  Loader2, CheckCircle2, Brain, MessageSquare, Save,
   RefreshCw, ThumbsUp, Send, Clock, Sparkles, ChevronRight,
   Zap, BarChart2, GitMerge, Target, AlertTriangle, BookOpen,
   Lightbulb, ListChecks, ShieldAlert, Code2, Copy, Check,
@@ -23,6 +23,8 @@ import {
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import { useSoundManager } from '../../hooks/useSoundManager';
+import PhaseHeader from './_shared/PhaseHeader';
+import NextPhaseButton from './_shared/NextPhaseButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -308,9 +310,9 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
                 <ThumbsUp size={20} className="text-green-600" />
               </div>
               <div>
-                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Aprobar enfoque metodológico</h3>
+                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Aprobar instrucciones para el Agente 7</h3>
                 <p className="text-gray-500 text-sm leading-relaxed">
-                  La Fase 6 quedará <strong>completada</strong>. El enfoque aprobado se enviará al Agente 7 para construir la Guía Metodológica. Esta acción no puede deshacerse.
+                  La Fase 6 quedará <strong>completada</strong>. Las instrucciones aprobadas se enviarán al Agente 7 para construir la Guía Metodológica. Esta acción no puede deshacerse.
                 </p>
               </div>
             </div>
@@ -318,8 +320,8 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
               <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50" style={{ fontWeight: 500 }}>Cancelar</button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#030213', fontWeight: 600 }}>
-                {isLoading ? <><Loader2 size={14} className="animate-spin" />Aprobando…</> : <><ThumbsUp size={14} />Aprobar enfoque</>}
+                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+                {isLoading ? <><Loader2 size={14} className="animate-spin" />Aprobando…</> : <><ThumbsUp size={14} />Aprobar instrucciones</>}
               </button>
             </div>
           </motion.div>
@@ -412,7 +414,7 @@ function EnfoqueSection({ result, pmoType }: { result: EnfoqueResult; pmoType: P
       </motion.div>
 
       {/* Principles */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div className="bg-white rounded-2xl border border-neutral-200/70 p-5">
         <p className="text-xs uppercase tracking-wide text-gray-400 mb-4" style={{ fontWeight: 700 }}>
           Principios rectores
         </p>
@@ -512,9 +514,9 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
       </div>
 
       {/* Brief-style container */}
-      <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: '#030213' }}>
+      <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: '#0a0a0a' }}>
         {/* Header bar */}
-        <div className="px-5 py-3 flex items-center gap-2" style={{ background: '#030213' }}>
+        <div className="px-5 py-3 flex items-center gap-2" style={{ background: '#0a0a0a' }}>
           <Code2 size={14} className="text-gray-400" />
           <span className="text-gray-200 text-xs" style={{ fontWeight: 600 }}>BRIEF TÉCNICO — AGENTE 7</span>
           <span className="ml-auto text-gray-500 text-xs">Generado automáticamente por Agente 6</span>
@@ -530,7 +532,7 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
                 <button onClick={() => setExpanded(isOpen ? null : i)}
                   className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: isOpen ? '#030213' : '#f3f4f6' }}>
+                    style={{ background: isOpen ? '#0a0a0a' : '#f3f4f6' }}>
                     <CatIcon size={13} style={{ color: isOpen ? '#fff' : '#6b7280' }} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -549,7 +551,7 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
                         {instr.directrices.map((d, j) => (
                           <li key={j} className="flex items-start gap-2.5 pt-2">
                             <span className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 text-white text-xs"
-                              style={{ background: '#030213', fontSize: '0.6rem', fontWeight: 700 }}>{j + 1}</span>
+                              style={{ background: '#0a0a0a', fontSize: '0.6rem', fontWeight: 700 }}>{j + 1}</span>
                             <p className="text-gray-600 text-sm leading-relaxed">{d}</p>
                           </li>
                         ))}
@@ -577,40 +579,40 @@ function CommentsSection({
   onReprocess: () => void; onApprove: () => void;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div className="bg-white rounded-2xl border border-neutral-200/70 p-5">
       <div className="flex items-center gap-2 mb-1">
         <MessageSquare size={15} className="text-gray-500" />
-        <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Comentarios del consultor</h3>
+        <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Ajustes a las instrucciones</h3>
       </div>
       <p className="text-gray-400 text-xs mb-3">
-        Agregue contexto, matices o ajustes al enfoque propuesto. Puede guardar el comentario o re-procesar con el Agente 6.
+        Indique cambios, matices o contexto adicional que deba incorporarse en las instrucciones enviadas al Agente 7. Puede guardar el ajuste o re-procesar para actualizar las instrucciones.
       </p>
       {savedComment && (
         <div className="mb-3 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600">
-          <p className="text-gray-400 text-xs mb-1" style={{ fontWeight: 600 }}>Último comentario guardado</p>
+          <p className="text-gray-400 text-xs mb-1" style={{ fontWeight: 600 }}>Último ajuste guardado</p>
           <p className="leading-relaxed">{savedComment}</p>
         </div>
       )}
       <textarea value={comment} onChange={e => onCommentChange(e.target.value)}
-        placeholder="Ej: Considerar que el área legal opera bajo normativa SOX, lo que implica que sus proyectos deben seguir estrictamente el marco predictivo independiente del perfil general del proyecto..."
+        placeholder="Ej: Las instrucciones deben incluir una sección específica de gobernanza para proyectos regulados bajo SOX. El árbol de decisión metodológica debe contemplar también proyectos de transformación digital..."
         rows={4}
         className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-y leading-relaxed bg-white mb-3" />
       <div className="flex items-center gap-3">
         <button onClick={onSave} disabled={isSaving || !comment.trim()}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           style={{ fontWeight: 500 }}>
-          {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Guardar comentario
+          {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Guardar ajuste
         </button>
         <button onClick={onReprocess} disabled={!comment.trim()}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:opacity-80"
           style={{ borderColor: pmoColor, color: pmoColor, background: `${pmoColor}10`, fontWeight: 500 }}>
-          <RefreshCw size={13} /> Re-procesar con comentario
+          <RefreshCw size={13} /> Re-procesar instrucciones
         </button>
         <div className="flex-1" />
         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={onApprove}
           className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-          style={{ background: '#030213', fontWeight: 600 }}>
-          <ThumbsUp size={14} /> Aprobar enfoque
+          style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+          <ThumbsUp size={14} /> Aprobar instrucciones
         </motion.button>
       </div>
     </div>
@@ -737,51 +739,37 @@ export default function EnfoqueModule() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-5xl mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors group">
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />{project.companyName}
-            </button>
-            <span className="text-gray-300">/</span>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 700 }}>6</div>
-              <span className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Enfoque para Guía Metodológica</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {view === 'approved' && result && (
-              <button onClick={() => setShowJson(true)}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-xs transition-all"
-                style={{ fontWeight: 500 }}>
-                <Code2 size={11} /> Ver JSON
-              </button>
-            )}
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#fafaf9]">
+      <PhaseHeader
+        projectId={projectId!}
+        companyName={project.companyName}
+        phaseNumber={6}
+        phaseName="Enfoque para Guía Metodológica"
+        eyebrow={view === 'approved' ? 'Aprobada' : 'Activa'}
+        rightSlot={view === 'approved' && result ? (
+          <button onClick={() => setShowJson(true)}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 text-neutral-600 hover:bg-neutral-50 text-[12px] transition-all"
+            style={{ fontWeight: 500 }}>
+            <Code2 size={11} /> Ver JSON
+          </button>
+        ) : undefined}
+      />
 
-      <div className="max-w-5xl mx-auto px-8 py-8">
+      <div className="max-w-[1100px] mx-auto px-10 py-10">
         <AnimatePresence mode="wait">
 
           {/* Auto-trigger */}
           {view === 'auto-trigger' && (
             <motion.div key="auto-trigger" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-              <motion.div animate={{ scale: [1, 1.08, 1] }} transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-                className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg" style={{ background: '#030213' }}>
-                <Send size={34} className="text-white" />
+              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 6 · Enfoque metodológico</p>
+              <motion.div animate={{ scale: [1, 1.04, 1] }} transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
+                className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6" style={{ background: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 12px 32px -12px rgba(0,0,0,0.25)' }}>
+                <Send size={22} className="text-white" strokeWidth={1.75} />
               </motion.div>
-              <h2 className="text-gray-900 mb-3" style={{ fontWeight: 700, fontSize: '1.375rem' }}>Enviando al Agente 6</h2>
-              <p className="text-gray-500 text-sm max-w-sm leading-relaxed mb-6">
-                Las Fases 4 y 5 están completadas. El sistema está consolidando los resultados de tipo de PMO y madurez para definir el enfoque de la Guía Metodológica.
+              <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>Enviando al Agente 6</h2>
+              <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed mb-6">
+                Las Fases 4 y 5 están completadas. El sistema está consolidando los resultados de tipo de PMO y madurez para definir el enfoque de la guía metodológica.
               </p>
               <div className="flex items-center gap-2 mb-8">
                 {[
@@ -789,21 +777,21 @@ export default function EnfoqueModule() {
                   { num: 5, label: `Madurez Niv. ${maturityLevel}`, Icon: BarChart2 },
                 ].map(({ num, label, Icon: SrcIcon }, i) => (
                   <div key={num} className="flex items-center gap-2">
-                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.25 }}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs" style={{ background: '#030213', fontWeight: 600 }}>
-                      <CheckCircle2 size={12} /><SrcIcon size={11} />{label}
+                    <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.25 }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-[12px]" style={{ background: '#0a0a0a', fontWeight: 500 }}>
+                      <CheckCircle2 size={11} strokeWidth={1.75} /><SrcIcon size={11} strokeWidth={1.75} />{label}
                     </motion.div>
-                    <ChevronRight size={14} className="text-gray-300" />
+                    <ChevronRight size={13} className="text-neutral-300" strokeWidth={1.75} />
                   </div>
                 ))}
-                <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5 }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs border-2 border-dashed"
-                  style={{ borderColor: pmoColor, color: pmoColor, fontWeight: 600 }}>
-                  <Brain size={12} /> Agente 6
+                <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.6 }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] border border-dashed"
+                  style={{ borderColor: pmoColor, color: pmoColor, fontWeight: 500 }}>
+                  <Brain size={11} strokeWidth={1.75} /> Agente 6
                 </motion.div>
               </div>
-              <div className="flex items-center gap-2 text-gray-400 text-xs">
-                <Loader2 size={13} className="animate-spin" />Iniciando procesamiento…
+              <div className="flex items-center gap-2 text-neutral-400 text-[12px]">
+                <Loader2 size={12} className="animate-spin" strokeWidth={1.75} />Iniciando procesamiento…
               </div>
             </motion.div>
           )}
@@ -812,33 +800,31 @@ export default function EnfoqueModule() {
           {view === 'processing' && (
             <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-              <div className="relative mb-8">
-                <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center" style={{ borderColor: `${pmoColor}30` }}>
-                  <Loader2 size={40} className="animate-spin" style={{ color: pmoColor }} />
-                </div>
-                <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 2 }}
-                  className="absolute inset-0 rounded-full border-4 opacity-20" style={{ borderColor: pmoColor }} />
+              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Procesando</p>
+              <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
               </div>
-              <h2 className="text-gray-900 mb-3" style={{ fontWeight: 700, fontSize: '1.375rem' }}>
-                Agente 6 definiendo enfoque metodológico
+              <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
+                Agente 6 definiendo enfoque
               </h2>
-              <p className="text-gray-500 text-sm max-w-sm leading-relaxed mb-4">
-                Analizando el consolidado de PMO {pmoType} (Nivel {maturityLevel}) para determinar el tipo de guía, identificar puntos débiles y generar instrucciones para el Agente 7…
+              <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed">
+                Analizando el consolidado de <span className="text-neutral-900" style={{ fontWeight: 500 }}>PMO {pmoType}</span> · <span className="text-neutral-900" style={{ fontWeight: 500 }}>Nivel {maturityLevel}</span> para determinar el tipo de guía, identificar puntos débiles y generar instrucciones para el Agente 7.
               </p>
-              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-xl">
-                <Loader2 size={13} className="animate-spin" />
-                <span className="text-xs" style={{ fontWeight: 500 }}>Esto puede tomar unos momentos</span>
-              </div>
             </motion.div>
           )}
 
           {/* Results */}
           {view === 'results' && result && (
             <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="flex items-start justify-between mb-7">
+              <div className="mb-10 flex items-end justify-between gap-4">
                 <div>
-                  <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>Enfoque para Guía Metodológica</h1>
-                  <p className="text-gray-500 text-sm mt-0.5">PMO {pmoType} · Madurez Nivel {maturityLevel} · Agente 6</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 6 · PMO {pmoType} · Nivel {maturityLevel}</p>
+                  <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                    Enfoque metodológico
+                  </h1>
+                  <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                    El Agente 6 consolidó tipo de PMO y madurez para definir el enfoque, identificar puntos débiles y emitir instrucciones para el Agente 7.
+                  </p>
                 </div>
                 <VersionBadge version={result.version} timestamp={result.timestamp} />
               </div>
@@ -849,23 +835,31 @@ export default function EnfoqueModule() {
           {/* Approved */}
           {view === 'approved' && result && (
             <motion.div key="approved" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 size={18} className="text-green-500" />
-                <span className="text-green-600 text-sm" style={{ fontWeight: 600 }}>Fase 6 completada y aprobada</span>
-              </div>
-              <div className="flex items-start justify-between mb-7">
+              <div className="mb-10 flex items-end justify-between gap-4">
                 <div>
-                  <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>Enfoque para Guía Metodológica</h1>
-                  {phase.completedAt && (
-                    <p className="text-gray-400 text-xs mt-0.5 flex items-center gap-1">
-                      <CheckCircle2 size={10} className="text-green-500" /> Aprobado el {phase.completedAt}
-                    </p>
-                  )}
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 6 · PMO {pmoType} · Nivel {maturityLevel}</p>
+                  <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                    Enfoque aprobado
+                  </h1>
+                  <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                    El enfoque metodológico ha sido validado y será la base que el Agente 7 usará para construir la guía.
+                  </p>
+                  <div className="flex items-center gap-3 mt-4 text-[12px]">
+                    <span className="inline-flex items-center gap-1.5 text-emerald-700" style={{ fontWeight: 500 }}>
+                      <CheckCircle2 size={13} /> Fase completada y aprobada
+                    </span>
+                    {phase.completedAt && (
+                      <>
+                        <span className="text-neutral-300">·</span>
+                        <span className="text-neutral-400">Aprobado el {phase.completedAt}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <button onClick={() => setShowJson(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 text-xs transition-all"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 text-neutral-600 hover:bg-neutral-50 text-[12px] transition-all"
                   style={{ fontWeight: 500 }}>
-                  <Code2 size={11} /> Ver JSON aprobado
+                  <Code2 size={11} strokeWidth={1.75} /> Ver JSON aprobado
                 </button>
               </div>
               {renderContent(result, true)}
@@ -877,6 +871,8 @@ export default function EnfoqueModule() {
 
       <ApproveModal open={showApproveModal} onCancel={() => setShowApproveModal(false)} onConfirm={handleApprove} isLoading={isApproving} />
       <JsonModal open={showJson} result={result} onClose={() => setShowJson(false)} />
+
+      <NextPhaseButton projectId={projectId!} nextPhase={7} prevPhase={5} show={view === 'approved'} />
     </div>
   );
 }

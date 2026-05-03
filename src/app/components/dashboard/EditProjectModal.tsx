@@ -1,44 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Plus, AlertCircle, Loader2 } from 'lucide-react';
-import type { Auditor } from '../../context/AppContext';
+import { X, Save, AlertCircle, Loader2 } from 'lucide-react';
+import type { Project } from '../../context/AppContext';
 import { useAdminUsers } from '../../hooks/useAdmin';
 
-interface NewProjectModalProps {
+interface EditProjectModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { companyName: string; projectName: string; auditors: Auditor[]; startDate: string }) => void;
+  onSubmit: (data: { companyName: string; projectName: string; auditorId: string }) => void;
+  project: Project | null;
 }
 
-// Paleta de colores para los avatares de auditores
 const AVATAR_COLORS = ['#030213', '#059669', '#7c3aed', '#dc2626', '#d97706', '#0284c7', '#be185d'];
 
-export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectModalProps) {
+export default function EditProjectModal({ open, onClose, onSubmit, project }: EditProjectModalProps) {
   const [companyName, setCompanyName] = useState('');
   const [projectName, setProjectName] = useState('');
-  const [selectedAuditors, setSelectedAuditors] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState('');
+  const [selectedAuditor, setSelectedAuditor] = useState<string>('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  // Auditores reales desde Supabase
   const { users: allUsers, isLoading: loadingAuditors } = useAdminUsers();
   const auditorList = allUsers.filter(u => u.role === 'auditor');
+
+  useEffect(() => {
+    if (project && open) {
+      setCompanyName(project.companyName || '');
+      setProjectName(project.projectName || '');
+      setSelectedAuditor(project.auditors?.[0]?.id || '');
+      setErrors({});
+    }
+  }, [project, open]);
 
   const validate = () => {
     const e: Record<string, string> = {};
     if (!companyName.trim()) e.companyName = 'El nombre de la empresa es requerido.';
     if (!projectName.trim()) e.projectName = 'El nombre del proyecto es requerido.';
-    if (selectedAuditors.length === 0) e.auditors = 'Seleccione al menos un auditor.';
-    if (!startDate) e.startDate = 'La fecha de inicio es requerida.';
+    if (!selectedAuditor) e.auditors = 'Seleccione un auditor.';
     return e;
-  };
-
-  const toggleAuditor = (id: string) => {
-    setSelectedAuditors(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    );
-    if (errors.auditors) setErrors(prev => ({ ...prev, auditors: '' }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,38 +47,39 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
     if (Object.keys(e2).length > 0) { setErrors(e2); return; }
 
     setIsLoading(true);
-
-    // Mapear usuarios seleccionados al tipo Auditor del AppContext
-    const auditors: Auditor[] = auditorList
-      .filter(u => selectedAuditors.includes(u.id))
-      .map((u, idx) => ({
-        id: u.id,
-        name: u.name,
-        initials: u.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase(),
-        color: AVATAR_COLORS[idx % AVATAR_COLORS.length],
-      }));
-
-    onSubmit({ companyName, projectName, auditors, startDate });
+    onSubmit({ companyName, projectName, auditorId: selectedAuditor });
     setIsLoading(false);
     handleClose();
   };
 
   const handleClose = () => {
-    setCompanyName(''); setProjectName(''); setSelectedAuditors([]); setStartDate(''); setErrors({});
+    setErrors({});
     onClose();
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {open && project && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+          }}
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={handleClose}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleClose();
+            }}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer"
           />
 
           {/* Modal */}
@@ -87,17 +88,23 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg z-10"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg z-10 select-none"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
               <div>
                 <h2 className="text-gray-900" style={{ fontSize: '1.125rem', fontWeight: 600 }}>
-                  Nuevo Proyecto
+                  Editar Proyecto
                 </h2>
-                <p className="text-gray-500 text-sm">Complete los datos para crear un nuevo proyecto de auditoría</p>
+                <p className="text-gray-500 text-sm">Modifique los datos del proyecto de auditoría</p>
               </div>
-              <button onClick={handleClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleClose(); }} 
+                className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -138,9 +145,9 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
                 )}
               </div>
 
-              {/* Auditores — desde Supabase */}
+              {/* Auditor */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>Auditores asignados *</label>
+                <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>Auditor asignado *</label>
                 <div className={`border rounded-lg p-3 min-h-[52px]
                   ${errors.auditors ? 'border-red-400' : 'border-gray-200'}
                 `}>
@@ -149,18 +156,18 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
                       <Loader2 size={12} className="animate-spin" /> Cargando auditores...
                     </div>
                   ) : auditorList.length === 0 ? (
-                    <p className="text-gray-400 text-xs">No hay auditores registrados. Crea uno en el Panel de Admin.</p>
+                    <p className="text-gray-400 text-xs">No hay auditores registrados.</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {auditorList.map((user, idx) => {
-                        const selected = selectedAuditors.includes(user.id);
+                        const selected = selectedAuditor === user.id;
                         const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
                         const initials = user.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
                         return (
                           <button
                             key={user.id}
                             type="button"
-                            onClick={() => toggleAuditor(user.id)}
+                            onClick={(e) => { e.stopPropagation(); setSelectedAuditor(user.id); setErrors(prev => ({ ...prev, auditors: '' })); }}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs transition-all border
                               ${selected ? 'text-white border-transparent' : 'text-gray-600 border-gray-200 bg-gray-50 hover:border-gray-300'}
                             `}
@@ -173,7 +180,6 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
                               {initials}
                             </div>
                             {user.name}
-                            {selected && <Plus size={10} className="rotate-45" />}
                           </button>
                         );
                       })}
@@ -185,27 +191,11 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
                 )}
               </div>
 
-              {/* Start Date */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>Fecha estimada de inicio *</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => { setStartDate(e.target.value); setErrors(prev => ({ ...prev, startDate: '' })); }}
-                  className={`w-full px-3 py-2.5 border rounded-lg text-sm outline-none transition-all bg-white
-                    ${errors.startDate ? 'border-red-400 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:border-gray-400 focus:ring-2 focus:ring-gray-100'}
-                  `}
-                />
-                {errors.startDate && (
-                  <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle size={12} /> {errors.startDate}</p>
-                )}
-              </div>
-
               {/* Actions */}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={handleClose}
+                  onClick={(e) => { e.stopPropagation(); handleClose(); }}
                   className="flex-1 py-2.5 border border-gray-200 rounded-lg text-gray-600 text-sm hover:bg-gray-50 transition-colors"
                   style={{ fontWeight: 500 }}
                 >
@@ -218,9 +208,9 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
                   style={{ background: '#030213', fontWeight: 600 }}
                 >
                   {isLoading ? (
-                    <><Loader2 size={14} className="animate-spin" /> Creando...</>
+                    <><Loader2 size={14} className="animate-spin" /> Guardando...</>
                   ) : (
-                    <><Plus size={14} /> Crear Proyecto</>
+                    <><Save size={14} /> Guardar cambios</>
                   )}
                 </button>
               </div>
@@ -228,6 +218,7 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -18,13 +18,15 @@ import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, X, Loader2, CheckCircle2, Brain, ChevronLeft, ChevronRight,
+  Loader2, CheckCircle2, Brain, ChevronLeft, ChevronRight,
   Zap, BarChart2, GitMerge, FileUp, Paperclip, ClipboardEdit, Globe,
   MessageSquare, Save, RefreshCw, ThumbsUp, Send, AlertTriangle,
-  Clock, Sparkles, Info, Target, TrendingUp, AlertCircle,
+  Clock, Sparkles, Info, Target, TrendingUp, AlertCircle, X, Layers, ClipboardList
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
+import PhaseHeader from './_shared/PhaseHeader';
+import NextPhaseButton from './_shared/NextPhaseButton';
 import { useSoundManager } from '../../hooks/useSoundManager';
 
 // ---------------------------------------------------------------------------
@@ -65,11 +67,11 @@ interface FullResults {
 // Constants
 // ---------------------------------------------------------------------------
 const MATURITY_LEVELS = [
-  { level: 1, name: 'Inicial',        color: '#ef4444', bg: '#fef2f2', desc: 'Procesos ad-hoc y reactivos. Sin estandarización formal ni visibilidad.' },
-  { level: 2, name: 'En Desarrollo',  color: '#f97316', bg: '#fff7ed', desc: 'Algunos procesos definidos, pero aplicación inconsistente entre equipos.' },
-  { level: 3, name: 'Definido',       color: '#eab308', bg: '#fefce8', desc: 'Procesos documentados y seguidos de manera consistente en la organización.' },
-  { level: 4, name: 'Gestionado',     color: '#22c55e', bg: '#f0fdf4', desc: 'Procesos medidos y controlados mediante métricas y tableros de indicadores.' },
-  { level: 5, name: 'Optimizado',     color: '#3b82f6', bg: '#eff6ff', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
+  { level: 1, name: 'Inicial',        color: '#737373', bg: '#f5f5f5', desc: 'Procesos ad-hoc y reactivos. Sin estandarización formal ni visibilidad.' },
+  { level: 2, name: 'En Desarrollo',  color: '#525252', bg: '#f5f5f5', desc: 'Algunos procesos definidos, pero aplicación inconsistente entre equipos.' },
+  { level: 3, name: 'Definido',       color: '#404040', bg: '#f5f5f5', desc: 'Procesos documentados y seguidos de manera consistente en la organización.' },
+  { level: 4, name: 'Gestionado',     color: '#262626', bg: '#f5f5f5', desc: 'Procesos medidos y controlados mediante métricas y tableros de indicadores.' },
+  { level: 5, name: 'Optimizado',     color: '#0a0a0a', bg: '#f5f5f5', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
 ];
 
 const QUESTIONS_PREDICTIVA = [
@@ -153,18 +155,23 @@ function buildMockResults(pmoType: PmoType, comment?: string): FullResults {
 // PMO type config
 // ---------------------------------------------------------------------------
 const PMO_CONFIG = {
-  Ágil:       { color: '#059669', Icon: Zap,       label: 'Ágil' },
-  Híbrida:    { color: '#4f46e5', Icon: GitMerge,  label: 'Híbrida' },
-  Predictiva: { color: '#7c3aed', Icon: BarChart2, label: 'Predictiva' },
+  Ágil:       { color: '#0a0a0a', Icon: Layers,       label: 'Ágil' },
+  Híbrida:    { color: '#0a0a0a', Icon: Layers,  label: 'Híbrida' },
+  Predictiva: { color: '#0a0a0a', Icon: Layers, label: 'Predictiva' },
 };
 
 // ---------------------------------------------------------------------------
 // Helper: parse PMO type from Phase 4 agentDiagnosis string
 // ---------------------------------------------------------------------------
-function parsePmoType(diagnosis?: string): PmoType {
-  if (!diagnosis) return 'Híbrida';
-  if (diagnosis.includes('Ágil')) return 'Ágil';
-  if (diagnosis.includes('Predictiva')) return 'Predictiva';
+function parsePmoType(agentData?: any): PmoType {
+  if (!agentData) return 'Híbrida';
+  
+  const diag = agentData.diagnosis || agentData;
+  const rawType = String(diag.pmo_type || diag.pmoType || diag.summary || 'Híbrido').toLowerCase();
+  
+  if (rawType.includes('agil') || rawType.includes('ágil')) return 'Ágil';
+  if (rawType.includes('predictiv')) return 'Predictiva';
+  
   return 'Híbrida';
 }
 
@@ -230,50 +237,44 @@ function InlineSurvey({
           <ChevronLeft size={15} /> Volver al resumen
         </button>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400" style={{ fontWeight: 500 }}>
+          <span className="text-xs text-neutral-400" style={{ fontWeight: 500 }}>
             Pregunta {step + 1} de {questions.length}
           </span>
-          <span className="px-2 py-0.5 rounded-full text-xs" style={{
-            background: surveyKey === 'agil' ? '#ecfdf5' : '#f5f3ff',
-            color: surveyKey === 'agil' ? '#059669' : '#7c3aed',
-            fontWeight: 600,
-          }}>
+          <span className="px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-600" style={{ fontWeight: 600 }}>
             Encuesta {surveyKey === 'agil' ? 'Ágil' : 'Predictiva'}
           </span>
         </div>
       </div>
 
-      {/* Progress */}
-      <div className="h-1.5 bg-gray-200 rounded-full mb-8 overflow-hidden">
-        <motion.div className="h-full rounded-full" style={{ background: surveyKey === 'agil' ? '#059669' : '#7c3aed' }}
+      <div className="h-1.5 bg-neutral-200 rounded-full mb-8 overflow-hidden">
+        <motion.div className="h-full rounded-full bg-neutral-900"
           initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.35 }} />
       </div>
 
       {/* Question */}
       <AnimatePresence mode="wait">
         <motion.div key={q.id} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.2 }}>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-wide mb-4"
-            style={{ background: surveyKey === 'agil' ? '#ecfdf5' : '#f5f3ff', color: surveyKey === 'agil' ? '#059669' : '#7c3aed', fontWeight: 600 }}>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-wide mb-4 bg-neutral-100 text-neutral-600" style={{ fontWeight: 600 }}>
             {q.dimension}
           </span>
-          <h2 className="text-gray-900 mb-7 leading-snug" style={{ fontSize: '1.25rem', fontWeight: 600 }}>{q.text}</h2>
+          <h2 className="text-neutral-900 mb-7 leading-snug" style={{ fontSize: '1.25rem', fontWeight: 600 }}>{q.text}</h2>
 
           <div className="space-y-2.5">
             {LIKERT.map(opt => {
               const isSel = selected === opt.value;
-              const accent = surveyKey === 'agil' ? '#059669' : '#7c3aed';
+              const accent = '#0a0a0a';
               return (
                 <motion.button key={opt.value} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
                   onClick={() => setAnswers(prev => ({ ...prev, [q.id]: opt.value }))}
-                  className="w-full text-left px-5 py-3.5 rounded-2xl border-2 transition-all flex items-center gap-4"
-                  style={{ borderColor: isSel ? accent : '#e5e7eb', background: isSel ? `${accent}12` : '#fff' }}>
+                  className="w-full text-left px-5 py-3.5 rounded-2xl border transition-all flex items-center gap-4"
+                  style={{ borderColor: isSel ? accent : '#e5e7eb', background: isSel ? '#fafaf9' : '#fff' }}>
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0"
                     style={{ background: isSel ? accent : '#f3f4f6', color: isSel ? '#fff' : '#6b7280', fontWeight: 700 }}>
                     {opt.value}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-gray-800 text-sm" style={{ fontWeight: isSel ? 600 : 500 }}>{opt.label}</p>
-                    <p className="text-gray-400 text-xs mt-0.5">{opt.desc}</p>
+                    <p className="text-neutral-800 text-sm" style={{ fontWeight: isSel ? 600 : 500 }}>{opt.label}</p>
+                    <p className="text-neutral-400 text-xs mt-0.5">{opt.desc}</p>
                   </div>
                   {isSel && <CheckCircle2 size={16} style={{ color: accent }} className="flex-shrink-0" />}
                 </motion.button>
@@ -286,14 +287,14 @@ function InlineSurvey({
       {/* Navigation */}
       <div className="flex items-center justify-between mt-7 pt-6 border-t border-gray-100">
         <button onClick={() => setStep(s => s - 1)} disabled={step === 0}
-          className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          className="flex items-center gap-2 px-4 py-2.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[13px] hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           style={{ fontWeight: 500 }}>
           <ChevronLeft size={15} /> Anterior
         </button>
         <div className="flex gap-1">
           {questions.map((_, i) => (
             <div key={i} className="rounded-full transition-all"
-              style={{ width: i === step ? 18 : 7, height: 7, background: i <= step ? (surveyKey === 'agil' ? '#059669' : '#7c3aed') : '#e5e7eb', opacity: i === step ? 1 : 0.5 }} />
+              style={{ width: i === step ? 18 : 7, height: 7, background: i <= step ? '#0a0a0a' : '#e5e7eb', opacity: i === step ? 1 : 0.5 }} />
           ))}
         </div>
         <motion.button
@@ -301,7 +302,7 @@ function InlineSurvey({
           onClick={() => isLast ? onComplete(answers) : setStep(s => s + 1)}
           disabled={!selected}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          style={{ background: surveyKey === 'agil' ? '#059669' : '#7c3aed', fontWeight: 600 }}>
+          style={{ background: '#0a0a0a', fontWeight: 600 }}>
           {isLast ? <><CheckCircle2 size={14} /> Completar</> : <>Siguiente <ChevronRight size={15} /></>}
         </motion.button>
       </div>
@@ -342,8 +343,8 @@ function ManualEntryPanel({
     }
   };
 
-  const accent = surveyKey === 'agil' ? '#059669' : '#7c3aed';
-  const accentBg = surveyKey === 'agil' ? '#ecfdf5' : '#f5f3ff';
+  const accent = '#0a0a0a';
+  const accentBg = '#f5f5f5';
 
   return (
     <motion.div key="manual" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
@@ -366,7 +367,7 @@ function ManualEntryPanel({
         <div className="flex items-center justify-between mb-2">
           <label className="text-gray-600 text-sm" style={{ fontWeight: 500 }}>Datos / Transcripción de respuestas</label>
           <button onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all text-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-neutral-300 text-neutral-500 hover:border-neutral-500 hover:text-neutral-700 hover:bg-neutral-50 transition-all text-xs"
             style={{ fontWeight: 500 }}>
             <FileUp size={11} /> Cargar archivo
           </button>
@@ -389,7 +390,7 @@ function ManualEntryPanel({
 
         {/* Dropzone textarea */}
         <div
-          className={`relative rounded-xl border-2 transition-all mb-2 ${isDragging ? 'border-gray-400 bg-gray-50' : 'border-gray-200'}`}
+          className={`relative rounded-xl border-2 transition-all mb-2 ${isDragging ? 'border-neutral-400 bg-neutral-50' : 'border-neutral-200/80'}`}
           onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); }}
@@ -433,14 +434,13 @@ function SurveyCard({
   onManual: () => void;
 }) {
   const isAgil = surveyKey === 'agil';
-  const accent = isAgil ? '#059669' : '#7c3aed';
-  const bg = isAgil ? '#ecfdf5' : '#f5f3ff';
-  const border = isAgil ? '#6ee7b7' : '#c4b5fd';
-  const Icon = isAgil ? Zap : BarChart2;
+  const accent = '#0a0a0a';
+  const bg = '#f5f5f5';
+  const Icon = ClipboardList;
   const label = isAgil ? 'Ágil' : 'Predictiva';
 
   return (
-    <div className={`bg-white rounded-2xl border-2 shadow-sm p-5 transition-all ${status ? 'border-green-300' : 'border-gray-200'}`}>
+    <div className={`bg-white rounded-2xl border shadow-sm p-5 transition-all ${status ? 'border-emerald-200 bg-emerald-50/20' : 'border-neutral-200/80'}`}>
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
           <Icon size={20} style={{ color: accent }} />
@@ -450,9 +450,9 @@ function SurveyCard({
           <p className="text-gray-400 text-xs">{QUESTIONS_PREDICTIVA.length} preguntas · Escala Likert 1–5</p>
         </div>
         {status
-          ? <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 border border-green-300">
-              <CheckCircle2 size={12} className="text-green-600" />
-              <span className="text-green-700 text-xs" style={{ fontWeight: 600 }}>Completada</span>
+          ? <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
+              <CheckCircle2 size={12} className="text-emerald-600" />
+              <span className="text-emerald-700 text-xs" style={{ fontWeight: 600 }}>Completada</span>
             </div>
           : <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 border border-gray-200">
               <AlertCircle size={12} className="text-gray-400" />
@@ -464,19 +464,19 @@ function SurveyCard({
       {!status ? (
         <div className="grid grid-cols-2 gap-2">
           <button onClick={onOnline}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 text-sm transition-all hover:shadow-sm"
-            style={{ borderColor: accent, color: accent, background: bg, fontWeight: 600 }}>
+            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-neutral-200/80 text-sm transition-all hover:bg-neutral-50"
+            style={{ color: '#0a0a0a', fontWeight: 500 }}>
             <Globe size={14} /> Completar en línea
           </button>
           <button onClick={onManual}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 transition-all"
+            className="flex items-center justify-center gap-2 py-2.5 rounded-full border border-neutral-200/80 text-neutral-600 text-[13px] hover:bg-neutral-50 transition-all"
             style={{ fontWeight: 500 }}>
             <ClipboardEdit size={14} /> Cargar datos
           </button>
         </div>
       ) : (
         <button onClick={onOnline}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-gray-200 text-gray-400 text-xs hover:bg-gray-50 transition-all"
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-full border border-neutral-200/80 text-neutral-400 text-[12px] hover:bg-neutral-50 transition-all"
           style={{ fontWeight: 500 }}>
           <RefreshCw size={11} /> Volver a responder
         </button>
@@ -519,10 +519,10 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: { open: boolean;
               </div>
             </div>
             <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50" style={{ fontWeight: 500 }}>Cancelar</button>
+              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[13px] hover:bg-neutral-50" style={{ fontWeight: 500 }}>Cancelar</button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#030213', fontWeight: 600 }}>
+                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                 {isLoading ? <><Loader2 size={14} className="animate-spin" /> Aprobando…</> : <><ThumbsUp size={14} /> Aprobar</>}
               </button>
             </div>
@@ -539,11 +539,11 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: { open: boolean;
 function MaturityResultCard({ surveyKey, result, pmoType }: { surveyKey: SurveyKey; result: MaturityResult; pmoType: PmoType }) {
   const ml = MATURITY_LEVELS[result.level - 1];
   const isAgil = surveyKey === 'agil';
-  const accent = isAgil ? '#059669' : '#7c3aed';
-  const Icon = isAgil ? Zap : BarChart2;
+  const accent = '#0a0a0a';
+  const Icon = ClipboardList;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-neutral-200/70 shadow-sm overflow-hidden">
       {/* Level header */}
       <div className="p-5 border-b border-gray-100">
         <div className="flex items-center gap-3 mb-4">
@@ -618,7 +618,7 @@ export default function MadurezModule() {
   const phase4 = project?.phases.find(p => p.number === 4);
 
   // Determine PMO type from Phase 4 result
-  const pmoType: PmoType = parsePmoType(phase4?.agentDiagnosis);
+  const pmoType: PmoType = parsePmoType(phase4?.agentData);
   const needsAgil = pmoType === 'Ágil' || pmoType === 'Híbrida';
   const needsPredictiva = pmoType === 'Predictiva' || pmoType === 'Híbrida';
 
@@ -737,49 +737,59 @@ export default function MadurezModule() {
 
   // ── Render ──
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-5xl mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors group">
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> {project.companyName}
-            </button>
-            <span className="text-gray-300">/</span>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs" style={{ background: '#030213', fontWeight: 700 }}>5</div>
-              <span className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Madurez de la PMO</span>
-            </div>
+    <div className="min-h-screen bg-[#fafaf9]">
+      <PhaseHeader
+        projectId={projectId!}
+        companyName={project.companyName}
+        phaseNumber={5}
+        phaseName="Madurez de la PMO"
+        eyebrow={`PMO ${pmoType}`}
+        rightSlot={(
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px]"
+            style={{ borderColor: pmoCfg.color, color: pmoCfg.color, background: `${pmoCfg.color}10`, fontWeight: 500 }}>
+            <PmoIcon size={11} /> PMO {pmoType}
           </div>
-          <div className="flex items-center gap-3">
-            {/* PMO type chip */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs"
-              style={{ borderColor: pmoCfg.color, color: pmoCfg.color, background: `${pmoCfg.color}10`, fontWeight: 600 }}>
-              <PmoIcon size={11} /> PMO {pmoType}
-            </div>
-            <button onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
+        )}
+      />
 
-      <div className="max-w-5xl mx-auto px-8 py-8">
+      <div className="max-w-[1100px] mx-auto px-10 py-10">
         <AnimatePresence mode="wait">
 
           {/* ── Overview ── */}
           {view === 'overview' && (
             <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="mb-7">
-                <h1 className="text-gray-900 mb-1" style={{ fontWeight: 700, fontSize: '1.5rem' }}>
-                  Fase 5: Madurez de la PMO
+              <div className="mb-10">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 5 · Madurez de la PMO</p>
+                <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                  Evaluación de madurez {pmoType}
                 </h1>
-                <p className="text-gray-500 text-sm">
-                  Según la Fase 4, su organización tendrá una <strong>PMO {pmoType}</strong>.
-                  Complete {totalCount === 2 ? 'ambas encuestas' : 'la encuesta'} de madurez para continuar.
+                <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                  Según la clasificación de la Fase 4, su organización tendrá una <span className="text-neutral-900" style={{ fontWeight: 500 }}>PMO {pmoType}</span>. Complete {totalCount === 2 ? 'ambas encuestas' : 'la encuesta'} para que el Agente 5 procese el diagnóstico de madurez.
                 </p>
+
+                <div className="grid grid-cols-3 gap-px bg-neutral-200/60 rounded-2xl overflow-hidden mt-7 border border-neutral-200/60">
+                  <div className="bg-white px-5 py-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Tipo de PMO</p>
+                    <p className="mt-1.5 text-neutral-900" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                      {pmoType}
+                    </p>
+                  </div>
+                  <div className="bg-white px-5 py-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Encuestas</p>
+                    <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
+                      {doneCount}<span className="text-[12px] text-neutral-400 ml-1">/ {totalCount}</span>
+                    </p>
+                  </div>
+                  <div className="bg-white px-5 py-4">
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Estado</p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${allDone ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>
+                        {allDone ? 'Listo para enviar' : 'En curso'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Survey cards — 2 col for Híbrida, 1 col otherwise */}
@@ -798,13 +808,13 @@ export default function MadurezModule() {
 
               {/* Progress indicator (RF-F5-03) */}
               {pmoType === 'Híbrida' && (
-                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border mb-6 ${allDone ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                <div className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border mb-6 ${allDone ? 'bg-emerald-50/60 border-emerald-200/80' : 'bg-amber-50/60 border-amber-200/80'}`}>
                   {allDone
-                    ? <CheckCircle2 size={16} className="text-green-600 flex-shrink-0" />
-                    : <AlertCircle size={16} className="text-amber-500 flex-shrink-0" />}
-                  <p className="text-sm" style={{ fontWeight: 500, color: allDone ? '#166534' : '#92400e' }}>
+                    ? <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" strokeWidth={1.75} />
+                    : <AlertCircle size={14} className="text-amber-600 flex-shrink-0" strokeWidth={1.75} />}
+                  <p className="text-[13px]" style={{ fontWeight: 500, color: allDone ? '#047857' : '#92400e' }}>
                     {allDone
-                      ? 'Ambas encuestas completadas. Puede enviar al Agente 5.'
+                      ? 'Ambas encuestas completadas. Listo para enviar al Agente 5.'
                       : `${doneCount} de ${totalCount} encuestas completadas — ${totalCount - doneCount} pendiente${totalCount - doneCount > 1 ? 's' : ''}`}
                   </p>
                 </div>
@@ -816,8 +826,8 @@ export default function MadurezModule() {
                   whileHover={allDone ? { scale: 1.02 } : {}} whileTap={allDone ? { scale: 0.97 } : {}}
                   onClick={allDone ? handleSend : undefined}
                   disabled={!allDone}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ background: '#030213', fontWeight: 600 }}>
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-white text-[13px] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:-translate-y-px"
+                  style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                   <Send size={15} /> Marcar como completa y Enviar al Agente 5
                 </motion.button>
               </div>
@@ -853,11 +863,11 @@ export default function MadurezModule() {
             <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
               <div className="relative mb-8">
-                <div className="w-24 h-24 rounded-full border-4 border-indigo-100 flex items-center justify-center">
-                  <Loader2 size={40} className="text-indigo-500 animate-spin" />
+                <div className="w-24 h-24 rounded-full border-4 border-neutral-100 flex items-center justify-center">
+                  <Loader2 size={40} className="text-neutral-900 animate-spin" />
                 </div>
                 <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 2 }}
-                  className="absolute inset-0 rounded-full border-4 border-indigo-200 opacity-30" />
+                  className="absolute inset-0 rounded-full border-4 border-neutral-200 opacity-30" />
               </div>
               <h2 className="text-gray-900 mb-3" style={{ fontWeight: 700, fontSize: '1.375rem' }}>
                 {isReprocessing ? 'Re-procesando diagnóstico…' : 'Agente 5 analizando madurez'}
@@ -877,17 +887,21 @@ export default function MadurezModule() {
           {/* ── Results ── */}
           {view === 'results' && results && (
             <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              {/* Title + version */}
-              <div className="flex items-start justify-between mb-6">
+              <div className="mb-10 flex items-end justify-between gap-4">
                 <div>
-                  <h1 className="text-gray-900" style={{ fontWeight: 700, fontSize: '1.5rem' }}>Diagnóstico de Madurez</h1>
-                  <p className="text-gray-500 text-sm mt-0.5">PMO {pmoType} · Agente 5</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 5 · PMO {pmoType}</p>
+                  <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                    Diagnóstico de madurez
+                  </h1>
+                  <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                    El Agente 5 evaluó las dimensiones de madurez y consolidó el nivel global con recomendaciones por área.
+                  </p>
                 </div>
                 <VersionBadge version={results.version} timestamp={results.timestamp} />
               </div>
 
               {/* Overall score hero */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
                 <div className="flex items-center gap-6">
                   <div className="flex-shrink-0 text-center px-4">
                     <p className="text-xs text-gray-400 mb-1">Nivel general</p>
@@ -930,7 +944,7 @@ export default function MadurezModule() {
               </div>
 
               {/* RF-F5-06: Comments */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6">
                 <div className="flex items-center gap-2 mb-1">
                   <MessageSquare size={15} className="text-gray-500" />
                   <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Comentarios del consultor</h3>
@@ -939,7 +953,7 @@ export default function MadurezModule() {
                   Agregue observaciones o contexto adicional. Puede guardar el comentario o re-procesar el diagnóstico incorporándolo.
                 </p>
                 {savedComment && (
-                  <div className="mb-3 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600">
+                  <div className="mb-3 px-3 py-2.5 rounded-xl bg-neutral-50 border border-neutral-200/70 text-[13px] text-neutral-600">
                     <p className="text-gray-400 text-xs mb-1" style={{ fontWeight: 600 }}>Último comentario guardado</p>
                     <p className="leading-relaxed">{savedComment}</p>
                   </div>
@@ -963,7 +977,7 @@ export default function MadurezModule() {
                   <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                     onClick={() => setShowApproveModal(true)}
                     className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-                    style={{ background: '#030213', fontWeight: 600 }}>
+                    style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                     <ThumbsUp size={14} /> Aprobar diagnóstico de madurez
                   </motion.button>
                 </div>
@@ -974,14 +988,21 @@ export default function MadurezModule() {
           {/* ── Approved ── */}
           {view === 'approved' && results && (
             <motion.div key="approved" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 size={18} className="text-green-500" />
-                <span className="text-green-600 text-sm" style={{ fontWeight: 600 }}>Fase 5 completada y aprobada</span>
+              <div className="mb-10">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 5 · PMO {pmoType}</p>
+                <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
+                  Diagnóstico aprobado
+                </h1>
+                <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
+                  El nivel de madurez ha sido validado y registrado como referencia para la guía metodológica.
+                </p>
+                <span className="inline-flex items-center gap-1.5 mt-4 text-emerald-700 text-[12px]" style={{ fontWeight: 500 }}>
+                  <CheckCircle2 size={13} /> Fase completada y aprobada
+                </span>
               </div>
-              <h1 className="text-gray-900 mb-6" style={{ fontWeight: 700, fontSize: '1.5rem' }}>Diagnóstico de Madurez</h1>
 
               {/* Overall score */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
+              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
                 <div className="flex items-center gap-6">
                   <div className="flex-shrink-0 text-center px-4">
                     <p className="text-xs text-gray-400 mb-1">Nivel aprobado</p>
@@ -1022,6 +1043,8 @@ export default function MadurezModule() {
         onConfirm={handleApprove}
         isLoading={isApproving}
       />
+
+      <NextPhaseButton projectId={projectId!} nextPhase={6} prevPhase={4} show={view === 'approved'} />
     </div>
   );
 }

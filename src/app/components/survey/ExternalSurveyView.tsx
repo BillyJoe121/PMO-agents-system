@@ -6,61 +6,25 @@
  * TODO: Manejar estado local 'currentStep' para la navegación entre preguntas
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, CheckCircle2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { useEncuestaExterna } from '../../hooks/useEncuestaExterna';
 
-interface Question {
-  id: string;
-  text: string;
-  dimension: string;
-}
-
-const MOCK_QUESTIONS: Question[] = [
-  {
-    id: 'q1',
-    text: '¿En qué medida existe un proceso formal y documentado para la iniciación de proyectos en su organización?',
-    dimension: 'Procesos',
-  },
-  {
-    id: 'q2',
-    text: '¿Los líderes de su organización apoyan activamente las iniciativas de gestión de proyectos?',
-    dimension: 'Gobernanza',
-  },
-  {
-    id: 'q3',
-    text: '¿Dispone su empresa de herramientas tecnológicas especializadas para la gestión de proyectos?',
-    dimension: 'Tecnología',
-  },
-  {
-    id: 'q4',
-    text: '¿Los equipos de trabajo cuentan con capacitación formal en metodologías de gestión de proyectos?',
-    dimension: 'Personas',
-  },
-  {
-    id: 'q5',
-    text: '¿Se mide el desempeño de los proyectos con indicadores (KPIs) definidos y revisados regularmente?',
-    dimension: 'Métricas',
-  },
-  {
-    id: 'q6',
-    text: '¿Existe comunicación clara y oportuna entre los equipos de proyecto y los stakeholders clave?',
-    dimension: 'Comunicación',
-  },
-  {
-    id: 'q7',
-    text: '¿Su organización aplica lecciones aprendidas de proyectos anteriores en nuevos proyectos?',
-    dimension: 'Cultura',
-  },
-];
-
-const LIKERT_OPTIONS = [
-  { value: 1, label: 'Nunca', description: 'No existe ninguna práctica al respecto' },
-  { value: 2, label: 'Raramente', description: 'Ocurre de forma esporádica y no sistemática' },
-  { value: 3, label: 'A veces', description: 'Se aplica en algunos proyectos o áreas' },
-  { value: 4, label: 'Frecuentemente', description: 'Es una práctica habitual en la mayoría de casos' },
-  { value: 5, label: 'Siempre', description: 'Está institucionalizado y se aplica consistentemente' },
-];
+const INTERPRETATION_MAP: Record<number, string> = {
+  0: 'Altamente ágil',
+  1: 'Altamente ágil',
+  2: 'Predominantemente ágil',
+  3: 'Predominantemente ágil',
+  4: 'Híbrido',
+  5: 'Híbrido',
+  6: 'Híbrido',
+  7: 'Híbrido',
+  8: 'Predominantemente predictivo',
+  9: 'Predominantemente predictivo',
+  10: 'Altamente predictivo',
+};
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const pct = ((current) / total) * 100;
@@ -84,25 +48,91 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 }
 
 export default function ExternalSurveyView() {
-  // TODO: const { surveyId } = useParams(); para obtener banco de preguntas
-  const [currentStep, setCurrentStep] = useState(0); // TODO: estado para navegación
+  const { surveyId } = useParams();
+  const { preguntas, isLoading, error, submitRespuestas } = useEncuestaExterna(surveyId || '');
+  
+  const [hasStarted, setHasStarted] = useState(false);
+  const [userInfo, setUserInfo] = useState({ nombre: '', cargo: '', area: '' });
+  
+  const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
 
-  const totalQuestions = MOCK_QUESTIONS.length;
-  const question = MOCK_QUESTIONS[currentStep];
-  const selectedAnswer = question ? answers[question.id] : null;
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const totalQuestions = preguntas.length;
+  const question = preguntas[currentStep];
+  const selectedAnswer = answers[question?.id];
   const isLastQuestion = currentStep === totalQuestions - 1;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Solo actuar si ya empezó la encuesta, hay una respuesta seleccionada y no está cargando/terminada
+      if (e.key === 'Enter' && hasStarted && !isFinished && !isSubmitting && selectedAnswer !== undefined) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        // Usamos document.getElementById para forzar el click en next o lo llamamos directo
+        if (isLastQuestion) {
+           setIsSubmitting(true);
+           submitRespuestas(userInfo.nombre, userInfo.cargo, userInfo.area, answers)
+             .then(() => setIsFinished(true))
+             .catch(() => alert('Hubo un error.'))
+             .finally(() => setIsSubmitting(false));
+        } else {
+           setCurrentStep(prev => prev + 1);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedAnswer, currentStep, hasStarted, isFinished, isSubmitting, isLastQuestion, userInfo, answers, submitRespuestas]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin text-neutral-400 mb-4" size={24} />
+        <p className="text-neutral-500 font-medium">Cargando encuesta...</p>
+      </div>
+    );
+  }
+
+  if (error || preguntas.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
+        <div className="w-16 h-16 rounded-full bg-rose-100 flex items-center justify-center mb-6">
+          <AlertTriangle size={30} className="text-rose-500" />
+        </div>
+        <h1 className="text-gray-900 mb-4" style={{ fontWeight: 600, fontSize: '1.5rem' }}>Enlace inválido</h1>
+        <p className="text-gray-500 text-center max-w-sm">{error || 'No se encontraron preguntas en el banco de encuestas.'}</p>
+      </div>
+    );
+  }
 
   const handleSelect = (value: number) => {
     if (!question) return;
     setAnswers(prev => ({ ...prev, [question.id]: value }));
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    
+    // Auto-avanzar después de un breve delay para que vean el texto descriptivo
+    if (!isLastQuestion) {
+      timeoutRef.current = setTimeout(() => {
+        setCurrentStep(prev => prev + 1);
+      }, 700);
+    }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (isLastQuestion) {
-      // TODO: Mutación insert en 'respuestas_encuesta'
-      setIsFinished(true);
+      setIsSubmitting(true);
+      try {
+        await submitRespuestas(userInfo.nombre, userInfo.cargo, userInfo.area, answers);
+        setIsFinished(true);
+      } catch (err) {
+        alert('Hubo un error enviando la encuesta. Inténtalo de nuevo.');
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       setCurrentStep(prev => prev + 1);
     }
@@ -126,11 +156,10 @@ export default function ExternalSurveyView() {
             <CheckCircle2 size={40} className="text-green-500" />
           </div>
           <h1 className="text-gray-900 mb-4" style={{ fontWeight: 700, fontSize: '1.75rem' }}>
-            ¡Gracias por su participación!
+            ¡Gracias por su participación, {userInfo.nombre.split(' ')[0]}!
           </h1>
           <p className="text-gray-500 leading-relaxed mb-8">
-            Sus respuestas han sido registradas correctamente. Gracias por contribuir al diagnóstico de la PMO.
-            Sus aportes son fundamentales para el análisis de madurez organizacional.
+            Sus respuestas han sido registradas y nos ayudarán a determinar el modelo óptimo de gestión de proyectos para la organización.
           </p>
           <button
             onClick={() => window.close()}
@@ -141,6 +170,88 @@ export default function ExternalSurveyView() {
             Cerrar esta pestaña
           </button>
         </motion.div>
+      </div>
+    );
+  }
+
+  /* ── Intro Screen ── */
+  if (!hasStarted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <header className="bg-white border-b border-gray-200 px-4 py-4">
+          <div className="max-w-3xl mx-auto flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white flex-shrink-0" style={{ background: '#030213' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.75rem' }}>PMO</span>
+            </div>
+            <div>
+              <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Idoneidad Organizacional</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 flex flex-col items-center px-4 py-6">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
+              <h1 className="text-xl font-bold text-gray-900 mb-2">Encuesta de Madurez y Enfoque</h1>
+              <p className="text-gray-600 text-sm leading-relaxed mb-4">
+                Este instrumento evalúa las características críticas de la organización para determinar el enfoque de gestión más eficiente (Predictivo, Ágil o Híbrido) basado en el Apéndice X3 de la Guía Práctica de Ágil del PMI®.
+              </p>
+              <div className="bg-indigo-50/50 text-indigo-800 text-xs p-3 rounded-xl border border-indigo-100/50 space-y-1">
+                <p><strong>Instrucciones:</strong></p>
+                <ul className="list-disc pl-4 space-y-0.5 opacity-90">
+                  <li>Responda según la situación actual, no según cómo debería ser.</li>
+                  <li>La escala va del 0 (Altamente Ágil) al 10 (Altamente Predictivo).</li>
+                  <li>No existen respuestas correctas o incorrectas.</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="p-6 bg-gray-50/50">
+              <h2 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Tus Datos</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre Completo</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm bg-white"
+                    value={userInfo.nombre}
+                    onChange={(e) => setUserInfo({...userInfo, nombre: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Cargo / Rol</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm bg-white"
+                      value={userInfo.cargo}
+                      onChange={(e) => setUserInfo({...userInfo, cargo: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Área o Departamento</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm bg-white"
+                      value={userInfo.area}
+                      onChange={(e) => setUserInfo({...userInfo, area: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setHasStarted(true)}
+                disabled={!userInfo.nombre.trim() || !userInfo.cargo.trim()}
+                className="w-full mt-5 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                style={{ background: '#030213', fontWeight: 600 }}
+              >
+                Comenzar Evaluación
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -166,7 +277,7 @@ export default function ExternalSurveyView() {
       </header>
 
       {/* Question Area */}
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
+      <main className="flex-1 flex items-center justify-center px-4 py-4">
         <div className="w-full max-w-2xl">
           <AnimatePresence mode="wait">
             <motion.div
@@ -177,67 +288,122 @@ export default function ExternalSurveyView() {
               transition={{ duration: 0.25 }}
             >
               {/* Dimension badge */}
-              <div className="mb-4">
+              <div className="mb-2">
                 <span
                   className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-wide"
                   style={{ background: '#e9ebef', color: '#030213', fontWeight: 600 }}
                 >
-                  {question.dimension}
+                  {question.categoria}
                 </span>
               </div>
-
               {/* Question text */}
-              <h2
-                className="text-gray-900 mb-8 leading-snug"
-                style={{ fontSize: '1.375rem', fontWeight: 600 }}
-              >
-                {question.text}
-              </h2>
+              {(() => {
+                const parts = { question: question.texto_pregunta, evaluation: '', scale: '' };
+                const evalIndex = question.texto_pregunta.indexOf('Evaluación:');
+                const scaleIndex = question.texto_pregunta.indexOf('Escala:');
 
-              {/* Likert Options */}
-              <div className="space-y-3">
-                {LIKERT_OPTIONS.map(opt => {
-                  const isSelected = selectedAnswer === opt.value;
-                  return (
-                    <motion.button
-                      key={opt.value}
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.99 }}
-                      onClick={() => handleSelect(opt.value)}
-                      className="w-full text-left px-5 py-4 rounded-2xl border-2 transition-all flex items-center gap-4"
-                      style={{
-                        borderColor: isSelected ? '#030213' : '#e5e7eb',
-                        background: isSelected ? '#e9ebef' : '#fff',
-                        minHeight: '44px',
-                      }}
+                if (evalIndex !== -1) {
+                  parts.question = question.texto_pregunta.slice(0, evalIndex).trim();
+                  if (scaleIndex !== -1) {
+                    parts.evaluation = question.texto_pregunta.slice(evalIndex + 'Evaluación:'.length, scaleIndex).trim();
+                    parts.scale = question.texto_pregunta.slice(scaleIndex + 'Escala:'.length).trim();
+                  } else {
+                    parts.evaluation = question.texto_pregunta.slice(evalIndex + 'Evaluación:'.length).trim();
+                  }
+                } else if (scaleIndex !== -1) {
+                  parts.question = question.texto_pregunta.slice(0, scaleIndex).trim();
+                  parts.scale = question.texto_pregunta.slice(scaleIndex + 'Escala:'.length).trim();
+                }
+
+                return (
+                  <>
+                    <h2
+                      className="text-gray-900 mb-2 leading-snug"
+                      style={{ fontSize: '1.3rem', fontWeight: 600 }}
                     >
-                      <div
-                        className="w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 transition-all"
+                      {parts.question}
+                    </h2>
+
+                    {parts.evaluation && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 mb-2 text-sm text-slate-600">
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          ¿Qué se está evaluando y cómo responder?
+                        </span>
+                        {parts.evaluation}
+                      </div>
+                    )}
+
+                    {parts.scale && (
+                      <div className="bg-indigo-50/40 border border-indigo-100/60 rounded-xl p-3 mb-3">
+                        <span className="block text-xs font-bold text-indigo-500 uppercase tracking-wider mb-2">
+                          Escala y Criterios de Calificación
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {parts.scale.split(';').map((s, idx) => (
+                            <span key={idx} className="bg-white border border-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-medium shadow-sm">
+                              {s.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+              <p className="text-gray-500 text-sm mb-3">Mueve el selector para calificar del 1 (Ágil) al 10 (Predictivo).</p>
+
+              {/* Likert Scale UI (1-10) */}
+              <div className="mt-2 relative pt-3 pb-6">
+                {/* Visual labels */}
+                <div className="flex justify-between text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                  <span>← Más Ágil</span>
+                  <span>Más Predictivo →</span>
+                </div>
+
+                {/* The 1-10 Buttons Row */}
+                <div className="flex justify-between items-center w-full relative">
+                  {/* Track line behind buttons */}
+                  <div className="absolute left-0 right-0 h-1 bg-gray-200 rounded-full z-0 top-1/2 -translate-y-1/2 mx-4" />
+                  
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => {
+                    const isSelected = selectedAnswer === val;
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => handleSelect(val)}
+                        className="relative z-10 w-10 h-10 md:w-12 md:h-12 rounded-full border-2 transition-all flex items-center justify-center font-bold text-sm md:text-base hover:scale-110 focus:outline-none"
                         style={{
-                          background: isSelected ? '#030213' : '#f3f4f6',
+                          borderColor: isSelected ? '#030213' : '#e5e7eb',
+                          background: isSelected ? '#030213' : '#fff',
                           color: isSelected ? '#fff' : '#6b7280',
-                          fontWeight: 700,
+                          transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+                          boxShadow: isSelected ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
                         }}
                       >
-                        {opt.value}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className="text-gray-800"
-                          style={{ fontWeight: isSelected ? 600 : 500 }}
-                        >
-                          {opt.label}
-                        </p>
-                        <p className="text-gray-400 text-sm leading-snug mt-0.5">
-                          {opt.description}
-                        </p>
-                      </div>
-                      {isSelected && (
-                        <CheckCircle2 size={18} className="text-zinc-700 flex-shrink-0" />
-                      )}
-                    </motion.button>
-                  );
-                })}
+                        {val}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Interpretation helper */}
+                <div className="text-center mt-4 min-h-[32px]">
+                  <AnimatePresence mode="wait">
+                    {selectedAnswer !== undefined ? (
+                      <motion.p
+                        key={selectedAnswer}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        className="text-indigo-600 font-semibold"
+                      >
+                        {selectedAnswer}: {INTERPRETATION_MAP[selectedAnswer]}
+                      </motion.p>
+                    ) : (
+                      <p className="text-gray-400 text-sm">Selecciona un valor para continuar</p>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </motion.div>
           </AnimatePresence>
@@ -257,11 +423,11 @@ export default function ExternalSurveyView() {
             Anterior
           </button>
 
-          <div className="flex gap-1.5">
-            {MOCK_QUESTIONS.map((_, i) => (
+          <div className="flex gap-1.5 flex-1 max-w-[200px] mx-auto overflow-hidden">
+            {preguntas.map((_, i) => (
               <div
                 key={i}
-                className="w-2 h-2 rounded-full transition-all"
+                className="flex-1 h-1.5 rounded-full transition-all"
                 style={{
                   background: i < currentStep
                     ? '#030213'
@@ -278,12 +444,12 @@ export default function ExternalSurveyView() {
             whileHover={selectedAnswer ? { scale: 1.02 } : {}}
             whileTap={selectedAnswer ? { scale: 0.98 } : {}}
             onClick={handleNext}
-            disabled={!selectedAnswer}
+            disabled={selectedAnswer === undefined || isSubmitting}
             className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             style={{ background: '#030213', fontWeight: 600, minHeight: '44px' }}
           >
-            {isLastQuestion ? 'Finalizar' : 'Siguiente'}
-            {!isLastQuestion && <ChevronRight size={16} />}
+            {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : (isLastQuestion ? 'Finalizar' : 'Siguiente')}
+            {!isLastQuestion && !isSubmitting && <ChevronRight size={16} />}
           </motion.button>
         </div>
       </footer>

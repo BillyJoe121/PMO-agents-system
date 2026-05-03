@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { Eye, EyeOff, Mail, Lock, ArrowLeft, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  Eye, EyeOff, ArrowLeft, Loader2, AlertCircle,
+  CheckCircle2, ArrowRight, Mail, Lock,
+} from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 type AuthView = 'login' | 'recovery' | 'recovery-success';
 
@@ -9,46 +13,37 @@ export default function AuthModule() {
   const navigate = useNavigate();
   const [view, setView] = useState<AuthView>('login');
 
-  // Login state
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  /* ── Login state ── */
+  const [email, setEmail]               = useState('');
+  const [password, setPassword]         = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  const [emailError, setEmailError] = useState('');
+  const [rememberMe, setRememberMe]     = useState(false);
+  const [isLoading, setIsLoading]       = useState(false);
+  const [loginError, setLoginError]     = useState('');
+  const [emailError, setEmailError]     = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // Recovery state
-  const [recoveryEmail, setRecoveryEmail] = useState('');
+  /* ── Recovery state ── */
+  const [recoveryEmail, setRecoveryEmail]           = useState('');
   const [recoveryEmailError, setRecoveryEmailError] = useState('');
-  const [isRecoveryLoading, setIsRecoveryLoading] = useState(false);
+  const [isRecoveryLoading, setIsRecoveryLoading]   = useState(false);
 
-  const validateEmail = (val: string) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(val);
-  };
+  /* ── Validators ── */
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
   const handleEmailBlur = () => {
-    if (!email) {
-      setEmailError('El correo electrónico es requerido.');
-    } else if (!validateEmail(email)) {
-      setEmailError('Por favor ingrese un correo electrónico válido.');
-    } else {
-      setEmailError('');
-    }
+    if (!email) setEmailError('El correo es requerido.');
+    else if (!isValidEmail(email)) setEmailError('Correo electrónico inválido.');
+    else setEmailError('');
   };
 
   const handlePasswordBlur = () => {
-    if (!password) {
-      setPasswordError('La contraseña es requerida.');
-    } else if (password.length < 6) {
-      setPasswordError('La contraseña debe tener al menos 6 caracteres.');
-    } else {
-      setPasswordError('');
-    }
+    if (!password) setPasswordError('La contraseña es requerida.');
+    else if (password.length < 6) setPasswordError('Mínimo 6 caracteres.');
+    else setPasswordError('');
   };
 
+  /* ── Handlers ── */
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     handleEmailBlur();
@@ -58,28 +53,20 @@ export default function AuthModule() {
     setIsLoading(true);
     setLoginError('');
 
-    // TODO: Integrar supabase.auth.signInWithPassword()
-    // TODO: Manejar redirección condicional por rol (auditor vs usuario_externo)
-    // RF-AUTH-04: El middleware de la App debe validar la expiración del JWT a las 8 horas.
-    await new Promise(r => setTimeout(r, 1500));
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    // Demo: allow any valid-looking credentials or show error
-    if (email === 'admin@icesi.edu.co' && password === 'demo1234') {
-      navigate('/dashboard');
+    if (error) {
+      setLoginError('Credenciales incorrectas. Verifique su correo y contraseña.');
     } else {
-      setLoginError('El correo electrónico o la contraseña son incorrectos. Por favor, intente de nuevo.');
+      navigate('/dashboard');
     }
     setIsLoading(false);
   };
 
   const handleRecoveryEmailBlur = () => {
-    if (!recoveryEmail) {
-      setRecoveryEmailError('El correo electrónico es requerido.');
-    } else if (!validateEmail(recoveryEmail)) {
-      setRecoveryEmailError('Por favor ingrese un correo electrónico válido.');
-    } else {
-      setRecoveryEmailError('');
-    }
+    if (!recoveryEmail) setRecoveryEmailError('El correo es requerido.');
+    else if (!isValidEmail(recoveryEmail)) setRecoveryEmailError('Correo electrónico inválido.');
+    else setRecoveryEmailError('');
   };
 
   const handleRecovery = async (e: React.FormEvent) => {
@@ -88,103 +75,133 @@ export default function AuthModule() {
     if (!recoveryEmail || recoveryEmailError) return;
 
     setIsRecoveryLoading(true);
-    // TODO: Integrar supabase.auth.resetPasswordForEmail() para recuperación
-    await new Promise(r => setTimeout(r, 1200));
+    const { error } = await supabase.auth.resetPasswordForEmail(recoveryEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
     setIsRecoveryLoading(false);
-    setView('recovery-success');
+
+    if (error) {
+      setRecoveryEmailError('No se pudo enviar el enlace. Verifica el correo.');
+    } else {
+      setView('recovery-success');
+    }
   };
 
-  // Demo login hint
-  const fillDemo = () => {
-    setEmail('admin@icesi.edu.co');
-    setPassword('demo1234');
-    setEmailError('');
-    setPasswordError('');
-    setLoginError('');
-  };
-
+  /* ─────────────────────────────────────────── */
   return (
-    <div className="min-h-screen flex" style={{ fontFamily: 'Inter, sans-serif' }}>
-      {/* LEFT — Branding */}
+    <div className="min-h-screen flex bg-[#fafaf9]" style={{ fontFamily: 'Inter, sans-serif' }}>
+
+      {/* ═══════════════════════════════════════
+          LEFT — Editorial brand panel
+      ═══════════════════════════════════════ */}
       <div
-        className="hidden lg:flex w-1/2 flex-col items-center justify-center p-12 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #010108 0%, #030213 55%, #0a0a20 100%)' }}
+        className="hidden lg:flex w-[48%] flex-col justify-between p-12 relative overflow-hidden flex-shrink-0"
+        style={{ background: '#0a0a0a' }}
       >
-        {/* Decorative circles */}
-        <div className="absolute top-[-80px] right-[-80px] w-80 h-80 rounded-full opacity-10" style={{ background: '#ffffff' }} />
-        <div className="absolute bottom-[-60px] left-[-60px] w-64 h-64 rounded-full opacity-10" style={{ background: '#ffffff' }} />
-        <div className="absolute top-1/2 left-[-40px] w-32 h-32 rounded-full opacity-5" style={{ background: '#ffffff' }} />
+        {/* Subtle grid texture */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'repeating-linear-gradient(0deg, #fff 0, #fff 1px, transparent 1px, transparent 48px), repeating-linear-gradient(90deg, #fff 0, #fff 1px, transparent 1px, transparent 48px)',
+          }}
+        />
 
+        {/* Top bar */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="relative z-10 flex flex-col items-center text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6 }}
+          className="relative z-10 flex items-center justify-between"
         >
-          {/* Logo placeholder */}
-          <div className="w-24 h-24 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 flex items-center justify-center mb-8 shadow-2xl">
-            <span className="text-white text-3xl font-bold tracking-tight">IC</span>
-          </div>
-
-          <h1 className="text-4xl text-white mb-4" style={{ fontWeight: 700, lineHeight: 1.2 }}>
-            PMO Intelligence<br />Platform
-          </h1>
-          <p className="text-white/60 text-lg max-w-sm leading-relaxed" style={{ fontWeight: 400 }}>
-            Sistema avanzado de auditoría y diagnóstico organizacional mediante agentes de IA
-          </p>
-
-          <div className="mt-12 flex flex-col gap-4 w-full max-w-xs">
-            {[
-              { label: 'Diagnóstico con IA', desc: '8 fases de análisis profundo' },
-              { label: 'Colaboración en tiempo real', desc: 'Equipos sincronizados' },
-              { label: 'Reportes ejecutivos', desc: 'Insights accionables' },
-            ].map((item, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + i * 0.15 }}
-                className="flex items-start gap-3 text-left"
-              >
-                <div className="w-2 h-2 rounded-full bg-white/40 mt-2 flex-shrink-0" />
-                <div>
-                  <p className="text-white text-sm" style={{ fontWeight: 600 }}>{item.label}</p>
-                  <p className="text-white/50 text-xs">{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
+          {/* Logomark */}
+          <div className="flex items-center gap-3">
+            <span className="text-white/40 text-[12px] uppercase tracking-[0.14em]" style={{ fontWeight: 500 }}>
+              Universidad Icesi
+            </span>
           </div>
         </motion.div>
 
-        {/* Footer */}
-        <p className="absolute bottom-6 text-white/30 text-xs">
-          © 2024 Universidad ICESI · Todos los derechos reservados
-        </p>
-      </div>
-
-      {/* RIGHT — Form */}
-      <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 p-8">
+        {/* Center: main brand statement */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.15 }}
+          className="relative z-10"
+        >
+          <p
+            className="text-white/30 uppercase tracking-[0.2em] mb-5 text-[11px]"
+            style={{ fontWeight: 500 }}
+          >
+            Plataforma de diagnóstico
+          </p>
+
+          <h1
+            className="text-white mb-6"
+            style={{
+              fontSize: 'clamp(2rem, 3.2vw, 2.75rem)',
+              fontWeight: 500,
+              lineHeight: 1.05,
+              letterSpacing: '-0.03em',
+            }}
+          >
+            PMO<br />Intelligence<br />Platform
+          </h1>
+
+          {/* Capilar divider */}
+          <div className="w-12 h-px bg-white/15 mb-6" />
+
+          <p className="text-white/40 text-[14px] leading-relaxed max-w-xs" style={{ fontWeight: 400 }}>
+            Auditoría organizacional guiada por agentes de inteligencia artificial. Ocho fases de diagnóstico profundo.
+          </p>
+        </motion.div>
+
+        {/* Bottom copyright */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="relative z-10 text-white/15 text-[11px]"
+          style={{ fontWeight: 400 }}
+        >
+          © 2025 Universidad ICESI · Todos los derechos reservados
+        </motion.p>
+      </div>
+
+      {/* ═══════════════════════════════════════
+          RIGHT — Form panel
+      ═══════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-[#fafaf9]">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="w-full max-w-md"
+          className="w-full max-w-[380px]"
         >
           <AnimatePresence mode="wait">
-            {/* LOGIN VIEW */}
+
+            {/* ─── LOGIN ─── */}
             {view === 'login' && (
               <motion.div
                 key="login"
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 12 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.25 }}
               >
-                <div className="mb-8">
-                  <h2 className="text-gray-900 mb-2" style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                {/* Header */}
+                <div className="mb-9">
+                  <p className="uppercase tracking-[0.18em] text-neutral-400 text-[11px] mb-3" style={{ fontWeight: 500 }}>
+                    Acceso seguro
+                  </p>
+                  <h2
+                    className="text-[#0a0a0a]"
+                    style={{ fontSize: '2.25rem', fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.025em' }}
+                  >
                     Bienvenido
                   </h2>
-                  <p className="text-gray-500 text-sm">Ingrese sus credenciales para acceder a la plataforma</p>
+                  <p className="text-neutral-500 text-[13px] mt-2.5 leading-relaxed">
+                    Ingrese sus credenciales para acceder a la plataforma
+                  </p>
                 </div>
 
                 {/* Error banner */}
@@ -194,223 +211,322 @@ export default function AuthModule() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3"
+                      className="mb-6 overflow-hidden"
                     >
-                      <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={16} />
-                      <p className="text-red-700 text-sm">{loginError}</p>
+                      <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-2.5">
+                        <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" strokeWidth={1.75} />
+                        <p className="text-red-600 text-[13px] leading-relaxed">{loginError}</p>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
                 <form onSubmit={handleLogin} className="flex flex-col gap-5">
+
                   {/* Email */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>
+                    <label className="text-[11px] uppercase tracking-[0.12em] text-neutral-400" style={{ fontWeight: 500 }}>
                       Correo electrónico
                     </label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <Mail
+                        size={13}
+                        strokeWidth={1.75}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none"
+                      />
                       <input
                         type="text"
                         value={email}
                         onChange={e => { setEmail(e.target.value); setLoginError(''); }}
                         onBlur={handleEmailBlur}
                         placeholder="nombre@icesi.edu.co"
-                        className={`w-full pl-10 pr-4 py-3 bg-white border rounded-lg text-sm outline-none transition-all
-                          ${emailError ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:border-gray-400 focus:ring-2 focus:ring-gray-100'}
+                        className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-[13px] outline-none transition-all placeholder:text-neutral-300
+                          ${emailError
+                            ? 'border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-50'
+                            : 'border-neutral-200/80 focus:border-neutral-400 focus:ring-4 focus:ring-neutral-100'
+                          }
                         `}
+                        style={{ color: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                       />
                     </div>
-                    {emailError && (
-                      <p className="text-red-500 text-xs flex items-center gap-1">
-                        <AlertCircle size={12} /> {emailError}
-                      </p>
-                    )}
+                    <AnimatePresence>
+                      {emailError && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="text-red-500 text-[11px] flex items-center gap-1"
+                        >
+                          <AlertCircle size={11} strokeWidth={1.75} />
+                          {emailError}
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Password */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>
-                      Contraseña
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] uppercase tracking-[0.12em] text-neutral-400" style={{ fontWeight: 500 }}>
+                        Contraseña
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setView('recovery')}
+                        className="text-[11px] text-neutral-400 hover:text-neutral-700 transition-colors"
+                        style={{ fontWeight: 500 }}
+                      >
+                        ¿La olvidó?
+                      </button>
+                    </div>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <Lock
+                        size={13}
+                        strokeWidth={1.75}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none"
+                      />
                       <input
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={e => { setPassword(e.target.value); setLoginError(''); }}
                         onBlur={handlePasswordBlur}
                         placeholder="••••••••"
-                        className={`w-full pl-10 pr-12 py-3 bg-white border rounded-lg text-sm outline-none transition-all
-                          ${passwordError ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:border-gray-400 focus:ring-2 focus:ring-gray-100'}
+                        className={`w-full pl-10 pr-11 py-3 bg-white border rounded-xl text-[13px] outline-none transition-all placeholder:text-neutral-300
+                          ${passwordError
+                            ? 'border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-50'
+                            : 'border-neutral-200/80 focus:border-neutral-400 focus:ring-4 focus:ring-neutral-100'
+                          }
                         `}
+                        style={{ color: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors"
                       >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showPassword
+                          ? <EyeOff size={13} strokeWidth={1.75} />
+                          : <Eye size={13} strokeWidth={1.75} />
+                        }
                       </button>
                     </div>
-                    {passwordError && (
-                      <p className="text-red-500 text-xs flex items-center gap-1">
-                        <AlertCircle size={12} /> {passwordError}
-                      </p>
-                    )}
+                    <AnimatePresence>
+                      {passwordError && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="text-red-500 text-[11px] flex items-center gap-1"
+                        >
+                          <AlertCircle size={11} strokeWidth={1.75} />
+                          {passwordError}
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Remember me */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="remember"
-                      checked={rememberMe}
-                      onChange={e => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 accent-zinc-900"
-                    />
-                    {/* RF-AUTH-04: El middleware de la App debe validar la expiración del JWT a las 8 horas. */}
-                    <label htmlFor="remember" className="text-gray-600 text-sm cursor-pointer" style={{ fontWeight: 400 }}>
-                      Mantener sesión iniciada (8 horas)
-                    </label>
-                  </div>
+                  <label className="flex items-center gap-2.5 cursor-pointer group w-fit">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`w-4 h-4 rounded border transition-all ${
+                          rememberMe
+                            ? 'bg-neutral-900 border-neutral-900'
+                            : 'bg-white border-neutral-200/80 group-hover:border-neutral-400'
+                        }`}
+                      >
+                        {rememberMe && (
+                          <svg className="w-full h-full p-0.5 text-white" viewBox="0 0 16 16" fill="none">
+                            <path d="M3 8l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[12px] text-neutral-500 group-hover:text-neutral-700 transition-colors" style={{ fontWeight: 400 }}>
+                      Mantener sesión iniciada
+                    </span>
+                  </label>
 
                   {/* Submit */}
-                  <button
+                  <motion.button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 rounded-lg text-white text-sm transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-                    style={{ background: isLoading ? '#6b7280' : '#030213', fontWeight: 600 }}
+                    whileHover={!isLoading ? { y: -1 } : {}}
+                    whileTap={!isLoading ? { y: 0 } : {}}
+                    className="w-full py-3.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-1"
+                    style={{
+                      background: '#0a0a0a',
+                      fontWeight: 500,
+                      boxShadow: isLoading
+                        ? 'none'
+                        : '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.22)',
+                    }}
                   >
                     {isLoading ? (
                       <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Verificando credenciales...
+                        <Loader2 size={13} strokeWidth={1.75} className="animate-spin" />
+                        Verificando…
                       </>
                     ) : (
-                      'Ingresar al Sistema'
+                      <>
+                        Ingresar a la plataforma
+                        <ArrowRight size={13} strokeWidth={1.75} />
+                      </>
                     )}
-                  </button>
+                  </motion.button>
 
-                  {/* Demo hint */}
-                  <p className="text-center text-gray-400 text-xs">
-                    Demo: {' '}
-                    <button type="button" onClick={fillDemo} className="text-zinc-700 underline hover:text-zinc-900">
-                      admin@icesi.edu.co / demo1234
-                    </button>
-                  </p>
-
-                  {/* Forgot password */}
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setView('recovery')}
-                      className="text-sm hover:underline transition-colors"
-                      style={{ color: '#030213', fontWeight: 500 }}
-                    >
-                      ¿Olvidó su contraseña?
-                    </button>
-                  </div>
                 </form>
               </motion.div>
             )}
 
-            {/* RECOVERY VIEW */}
+            {/* ─── RECOVERY ─── */}
             {view === 'recovery' && (
               <motion.div
                 key="recovery"
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 12 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.25 }}
               >
                 <button
                   onClick={() => setView('login')}
-                  className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm mb-6 transition-colors"
+                  className="group inline-flex items-center gap-1.5 text-neutral-400 hover:text-neutral-700 text-[12px] mb-8 transition-colors"
+                  style={{ fontWeight: 500 }}
                 >
-                  <ArrowLeft size={16} /> Volver al inicio de sesión
+                  <ArrowLeft size={12} strokeWidth={1.75} className="transition-transform group-hover:-translate-x-0.5" />
+                  Volver
                 </button>
 
-                <div className="mb-8">
-                  <h2 className="text-gray-900 mb-2" style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-                    Recuperar contraseña
+                <div className="mb-9">
+                  <p className="uppercase tracking-[0.18em] text-neutral-400 text-[11px] mb-3" style={{ fontWeight: 500 }}>
+                    Recuperación
+                  </p>
+                  <h2
+                    className="text-[#0a0a0a]"
+                    style={{ fontSize: '2.25rem', fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.025em' }}
+                  >
+                    Restablecer<br />contraseña
                   </h2>
-                  <p className="text-gray-500 text-sm">
-                    Ingrese su correo institucional y le enviaremos un enlace para restablecer su contraseña.
+                  <p className="text-neutral-500 text-[13px] mt-2.5 leading-relaxed">
+                    Le enviaremos un enlace a su correo institucional para restablecer el acceso.
                   </p>
                 </div>
 
                 <form onSubmit={handleRecovery} className="flex flex-col gap-5">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>
-                      Correo electrónico institucional
+                    <label className="text-[11px] uppercase tracking-[0.12em] text-neutral-400" style={{ fontWeight: 500 }}>
+                      Correo electrónico
                     </label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <Mail size={13} strokeWidth={1.75} className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
                       <input
                         type="text"
                         value={recoveryEmail}
                         onChange={e => { setRecoveryEmail(e.target.value); setRecoveryEmailError(''); }}
                         onBlur={handleRecoveryEmailBlur}
                         placeholder="nombre@icesi.edu.co"
-                        className={`w-full pl-10 pr-4 py-3 bg-white border rounded-lg text-sm outline-none transition-all
-                          ${recoveryEmailError ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:border-gray-400 focus:ring-2 focus:ring-gray-100'}
+                        className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-[13px] outline-none transition-all placeholder:text-neutral-300
+                          ${recoveryEmailError
+                            ? 'border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-50'
+                            : 'border-neutral-200/80 focus:border-neutral-400 focus:ring-4 focus:ring-neutral-100'
+                          }
                         `}
+                        style={{ color: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                       />
                     </div>
-                    {recoveryEmailError && (
-                      <p className="text-red-500 text-xs flex items-center gap-1">
-                        <AlertCircle size={12} /> {recoveryEmailError}
-                      </p>
-                    )}
+                    <AnimatePresence>
+                      {recoveryEmailError && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="text-red-500 text-[11px] flex items-center gap-1"
+                        >
+                          <AlertCircle size={11} strokeWidth={1.75} />
+                          {recoveryEmailError}
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
                   </div>
 
-                  <button
+                  <motion.button
                     type="submit"
                     disabled={isRecoveryLoading}
-                    className="w-full py-3 rounded-lg text-white text-sm transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
-                    style={{ background: '#030213', fontWeight: 600 }}
+                    whileHover={!isRecoveryLoading ? { y: -1 } : {}}
+                    whileTap={!isRecoveryLoading ? { y: 0 } : {}}
+                    className="w-full py-3.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{
+                      background: '#0a0a0a',
+                      fontWeight: 500,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.22)',
+                    }}
                   >
                     {isRecoveryLoading ? (
                       <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Enviando enlace...
+                        <Loader2 size={13} strokeWidth={1.75} className="animate-spin" />
+                        Enviando enlace…
                       </>
                     ) : (
-                      'Enviar enlace de recuperación'
+                      <>
+                        Enviar enlace de recuperación
+                        <ArrowRight size={13} strokeWidth={1.75} />
+                      </>
                     )}
-                  </button>
+                  </motion.button>
                 </form>
               </motion.div>
             )}
 
-            {/* RECOVERY SUCCESS */}
+            {/* ─── RECOVERY SUCCESS ─── */}
             {view === 'recovery-success' && (
               <motion.div
                 key="success"
-                initial={{ opacity: 0, scale: 0.95 }}
+                initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="text-center"
+                transition={{ duration: 0.3 }}
               >
-                <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-                  <CheckCircle2 className="text-green-600" size={32} />
+                <div className="mb-9">
+                  <div
+                    className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-6"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                  >
+                    <CheckCircle2 size={18} strokeWidth={1.75} className="text-emerald-600" />
+                  </div>
+                  <p className="uppercase tracking-[0.18em] text-neutral-400 text-[11px] mb-3" style={{ fontWeight: 500 }}>
+                    Enlace enviado
+                  </p>
+                  <h2
+                    className="text-[#0a0a0a]"
+                    style={{ fontSize: '2.25rem', fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.025em' }}
+                  >
+                    Revise su<br />bandeja
+                  </h2>
+                  <p className="text-neutral-500 text-[13px] mt-3 leading-relaxed">
+                    Hemos enviado un enlace de recuperación a{' '}
+                    <span className="text-neutral-700" style={{ fontWeight: 500 }}>{recoveryEmail}</span>.{' '}
+                    Siga las instrucciones del correo.
+                  </p>
                 </div>
-                <h2 className="text-gray-900 mb-3" style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-                  ¡Enlace enviado!
-                </h2>
-                <p className="text-gray-500 text-sm mb-8 leading-relaxed">
-                  Hemos enviado un enlace de recuperación a <strong>{recoveryEmail}</strong>.<br />
-                  Revise su bandeja de entrada y siga las instrucciones.
-                </p>
-                <button
-                  onClick={() => setView('login')}
-                  className="text-sm hover:underline"
-                  style={{ color: '#030213', fontWeight: 500 }}
-                >
-                  ← Volver al inicio de sesión
-                </button>
+
+                <div className="pt-6 border-t border-neutral-200/60">
+                  <button
+                    onClick={() => setView('login')}
+                    className="group inline-flex items-center gap-1.5 text-neutral-500 hover:text-neutral-900 text-[13px] transition-colors"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <ArrowLeft size={13} strokeWidth={1.75} className="transition-transform group-hover:-translate-x-0.5" />
+                    Volver al inicio de sesión
+                  </button>
+                </div>
               </motion.div>
             )}
+
           </AnimatePresence>
         </motion.div>
       </div>

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, X, Download, Archive, Eye, RotateCcw,
+  ArrowLeft, X, Download, Archive, RotateCcw,
   Loader2, AlertTriangle, CheckCircle2, Send,
   FileSpreadsheet, FileText, File,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
+import NextPhaseButton from './_shared/NextPhaseButton';
 
 interface Artifact {
   id: string;
@@ -99,9 +100,6 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
         <p className="text-gray-400 text-xs mt-1">{artifact.size}</p>
       </div>
       <div className="flex gap-2 pt-1 border-t border-gray-100">
-        <button className="flex-1 py-2 border border-gray-200 rounded-lg text-gray-600 text-xs flex items-center justify-center gap-1.5 hover:bg-gray-50 transition-colors" style={{ fontWeight: 500 }}>
-          <Eye size={12} />Visualizar
-        </button>
         <button
           className="flex-1 py-2 rounded-lg text-white text-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
           style={{ background: '#030213', fontWeight: 500 }}
@@ -369,6 +367,8 @@ export default function ArtefactosView() {
         onConfirm={handleFinalApprove}
         isLoading={isSending}
       />
+
+      <NextPhaseButton projectId={projectId!} prevPhase={7} show={isCompleted} />
     </div>
   );
 }
