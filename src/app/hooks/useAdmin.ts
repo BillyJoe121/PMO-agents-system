@@ -156,14 +156,22 @@ export function useAdminQuestions() {
 
       console.log('[useAdminQuestions] Datos obtenidos del banco:', data);
 
+      // Normalize tipo_encuesta from DB snake_case/lowercase to display string
+      const normalizeSurveyType = (raw: string | null | undefined): string => {
+        const v = (raw ?? '').toLowerCase().trim();
+        if (v === 'madurez_predictiva' || v === 'predictiva') return 'Madurez Predictiva';
+        if (v === 'madurez_agil' || v === 'madurez_ágil' || v === 'agil' || v === 'ágil') return 'Madurez Ágil';
+        // Default: Idoneidad
+        return 'Idoneidad';
+      };
+
       const mapped: BankQuestion[] = (data ?? []).map((q: any) => {
-        const st = q.tipo_encuesta || 'Idoneidad';
         return {
           id: q.id,
           text: q.texto_pregunta || q.pregunta_texto || '',
           dimension: q.categoria || q.dimension || '',
-          surveyType: st,
-          type: (q.tipo === 'likert_10' ? 'abierta' : 'si_no') as QuestionType, // Ajuste tentativo
+          surveyType: normalizeSurveyType(q.tipo_encuesta),
+          type: (q.tipo === 'likert_10' ? 'abierta' : 'si_no') as QuestionType,
           options: []
         };
       });
@@ -202,20 +210,25 @@ export function useAdminQuestions() {
   const insertQuestion = useCallback(async (
     text: string, dimension: string, surveyType: string
   ) => {
+    // Denormalize display label back to DB snake_case value
+    const denormalizeSurveyType = (display: string): string => {
+      const v = display.toLowerCase().trim();
+      if (v.includes('predictiva')) return 'madurez_predictiva';
+      if (v.includes('ágil') || v.includes('agil')) return 'madurez_agil';
+      return 'idoneidad';
+    };
+
+    const dbSurveyType = denormalizeSurveyType(surveyType);
+
     const { data, error: err1 } = await supabase
       .from('banco_preguntas')
-      .insert({ texto_pregunta: text, categoria: dimension, codigo: surveyType })
+      .insert({ texto_pregunta: text, categoria: dimension, tipo_encuesta: dbSurveyType })
       .select('id')
       .single();
 
     let newId = data?.id;
     if (err1) {
-      const { data: d2 } = await supabase
-        .from('banco_preguntas')
-        .insert({ pregunta_texto: text, dimension, tipo_encuesta: surveyType })
-        .select('id')
-        .single();
-      newId = d2?.id;
+      console.error('[insertQuestion] Error al insertar pregunta:', err1);
     }
 
     const newQ: BankQuestion = { id: newId || '', text, dimension, surveyType, type: 'si_no' };

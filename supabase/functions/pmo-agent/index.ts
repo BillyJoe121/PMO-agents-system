@@ -25,8 +25,31 @@ async function getPayloadForPhase(
   phaseNumber: number,
   iteration: number,
   comments: unknown | null,
-  externalFileUrl?: string
+  externalFileUrl?: string,
+  extraFileUrls?: string[]
 ) {
+  const ensureFreshUrl = async (url: string) => {
+    if (!url) return url;
+    try {
+      let relPath = url;
+      // Si es una URL completa de Supabase, extraemos el path relativo
+      if (url.includes('documentos-pmo/')) {
+        const pathMatch = url.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+        if (pathMatch) relPath = decodeURIComponent(pathMatch[1]);
+      }
+      
+      // Si la URL es absoluta pero NO es de nuestro bucket de Supabase, la dejamos tal cual
+      if (url.startsWith('http') && !url.includes('documentos-pmo/')) return url;
+
+      const { data, error } = await supabase.storage.from('documentos-pmo').createSignedUrl(relPath, 3600);
+      if (error || !data?.signedUrl) return url;
+      return data.signedUrl;
+    } catch (e) {
+      console.error("[ensureFreshUrl] Error re-signing URL:", e);
+      return url;
+    }
+  };
+
   const now = new Date().toISOString();
   const baseMetadata = {
     project_id: projectId,
@@ -46,21 +69,43 @@ async function getPayloadForPhase(
     if (error) throw new Error(`Error leyendo documentos: ${error.message}`);
 
     const fileUrls: {url: string, type: string}[] = [];
-    const documents = (docs ?? []).map((d: Record<string, unknown>, idx: number) => {
-      const ext = String(d.storage_path ?? "").split(".").pop()?.toLowerCase() ?? "pdf";
-      if (d.storage_path) {
-        fileUrls.push({ url: d.storage_path as string, type: ext === 'csv' ? 'text/csv' : 'application/pdf' });
+    const documents = await Promise.all((docs ?? []).map(async (d: Record<string, unknown>, idx: number) => {
+      const rawStoragePath = String(d.storage_path ?? '');
+      const ext = rawStoragePath.split('?')[0].split('.').pop()?.toLowerCase() ?? 'pdf';
+
+      if (rawStoragePath) {
+        const urlToUse = await ensureFreshUrl(rawStoragePath);
+        fileUrls.push({ url: urlToUse, type: ext === 'csv' ? 'text/csv' : 'application/pdf' });
       }
+
+      const categoryMapping: Record<string, string> = {
+        'D01': 'Organigrama',
+        'D02': 'Artefactos de Gestión de proyectos',
+        'D03': 'Plataformas y Sistemas',
+        'D04': 'Listado de Proyectos',
+        'D05': 'Proyecto mejor documentado',
+        'D06': 'Resultados Estratégicos',
+        'D07': 'Mapa de Procesos',
+        'D08': 'Arquitectura Organizacional/TI',
+        'D09': 'Metodología de Proyectos',
+        'D10': 'Portafolio de Productos/Servicios',
+        'D11': 'Otros'
+      };
+
+      const categoryCode = String(d.categoria ?? 'D11');
+      const isPredefined = categoryCode.startsWith('D') && categoryCode !== 'D11';
+
       return {
         document_id: `doc-${String(idx + 1).padStart(3, "0")}`,
         document_name: d.nombre_personalizado ?? d.storage_path,
-        document_type: d.categoria === "predefined" ? "predefined" : "custom",
-        file_url: d.storage_path,
+        document_type: isPredefined ? "predefined" : "custom",
+        category: categoryCode,
+        category_label: categoryMapping[categoryCode] ?? 'Otro',
         file_format: ext,
         file_size_kb: (d.metadatos as Record<string, number>)?.size_kb ?? 0,
         uploaded_at: d.created_at,
       };
-    });
+    }));
 
     return {
       metadata: { ...baseMetadata, agent_id: "agente-3" },
@@ -81,11 +126,15 @@ async function getPayloadForPhase(
 
     const fileUrls: {url: string, type: string}[] = [];
 
-    const interviews = (entData ?? []).map((e: Record<string, any>, idx: number) => {
+    const interviews = await Promise.all((entData ?? []).map(async (e: Record<string, any>, idx: number) => {
+      let finalUrl = e.storage_path;
       if (e.storage_path) {
-        const ext = e.storage_path.split('.').pop()?.toLowerCase() === 'csv' ? 'text/csv' : 'application/pdf';
-        fileUrls.push({ url: e.storage_path, type: ext });
+        const urlToUse = await ensureFreshUrl(e.storage_path);
+        const relPath = e.storage_path.split('?')[0];
+        const ext = relPath.split('.').pop()?.toLowerCase() === 'csv' ? 'text/csv' : 'application/pdf';
+        fileUrls.push({ url: urlToUse, type: ext });
       }
+
       return {
         interview_id: `int-${String(idx + 1).padStart(3, "0")}`,
         interviewee_name: e.nombre,
@@ -95,11 +144,11 @@ async function getPayloadForPhase(
           {
             question_id: "q-general",
             question_text: "Notas de la entrevista libre",
-            answer_text: e.storage_path ? `(Ver archivo PDF adjunto: ${e.file_name}) ` + e.notas : e.notas,
+            answer_text: e.storage_path ? `(Ver archivo adjunto: ${e.file_name}) ` + e.notas : e.notas,
           }
         ]
       };
-    });
+    }));
 
     return {
       metadata: { ...baseMetadata, agent_id: "agente-1" },
@@ -139,8 +188,9 @@ async function getPayloadForPhase(
 
     const fileUrls: {url: string, type: string}[] = [];
     if (externalFileUrl) {
+      const freshExternalUrl = await ensureFreshUrl(externalFileUrl);
       const ext = String(externalFileUrl).split("?")[0].split(".").pop()?.toLowerCase() === 'csv' ? 'text/csv' : 'application/pdf';
-      fileUrls.push({ url: externalFileUrl, type: ext });
+      fileUrls.push({ url: freshExternalUrl, type: ext });
     }
 
     return {
@@ -169,15 +219,31 @@ async function getPayloadForPhase(
 
     const faseMap: Record<number, unknown> = {};
     for (const f of prevFases ?? []) {
-      faseMap[f.numero_fase] = f.datos_consolidados;
+      const dc = f.datos_consolidados as any;
+      // Extraer solo la parte de diagnóstico si viene envuelta
+      faseMap[f.numero_fase] = dc?.diagnosis ? dc.diagnosis : dc;
     }
 
     // 2. Leer datos crudos originales para contexto completo
-    // Documentos (Fase 1)
+    // Documentos (Fase 1) - Necesitamos generar signed URLs para que el Agente 4 pueda leerlos
     const { data: docs } = await supabase
       .from("documentos")
       .select("id, storage_path, categoria, nombre_personalizado, metadatos, created_at")
       .eq("proyecto_id", projectId);
+
+    const fileUrls: { url: string; type: string }[] = [];
+    if (docs && docs.length > 0) {
+      for (const d of docs) {
+        if (d.storage_path) {
+          const freshUrl = await ensureFreshUrl(d.storage_path);
+          const ext = String(d.storage_path).split('?')[0].split('.').pop()?.toLowerCase();
+          fileUrls.push({ 
+            url: freshUrl, 
+            type: ext === 'csv' ? 'text/csv' : 'application/pdf' 
+          });
+        }
+      }
+    }
 
     // Entrevistas (Fase 2)
     const { data: entrevistas } = await supabase
@@ -222,10 +288,150 @@ async function getPayloadForPhase(
         raw_context: rawContext,
       },
       comments,
+      __fileUrls: fileUrls
     };
   }
 
-  // Fases 5–8: Estructura base para expandir
+  // Fases 5 — Madurez de la PMO: Lee respuestas de encuestas por tipo
+  if (phaseNumber === 5) {
+    // 1. Leer diagnóstico de Fase 4 como contexto
+    const { data: fase4 } = await supabase
+      .from("fases_estado")
+      .select("datos_consolidados")
+      .eq("proyecto_id", projectId)
+      .eq("numero_fase", 4)
+      .single();
+
+    // 2. Leer respuestas de madurez predictiva
+    const { data: respPredictiva } = await supabase
+      .from("encuestas_respuestas")
+      .select("id, nombre_encuestado, cargo_encuestado, area_encuestado, respuestas")
+      .eq("proyecto_id", projectId)
+      .eq("tipo_encuesta", "predictiva");
+
+    // 3. Leer respuestas de madurez agil
+    const { data: respAgil } = await supabase
+      .from("encuestas_respuestas")
+      .select("id, nombre_encuestado, cargo_encuestado, area_encuestado, respuestas")
+      .eq("proyecto_id", projectId)
+      .eq("tipo_encuesta", "agil");
+
+    // Convierte filas de DB al formato que espera el agente:
+    // answers[].responses = { "G1-01": 3, "G1-02": 4, ... }
+    const formatAnswers = (rows: any[]) =>
+      (rows ?? []).map((r: any, idx: number) => ({
+        respondent_id: `r-${String(idx + 1).padStart(3, "0")}`,
+        name: r.nombre_encuestado,
+        role: r.cargo_encuestado,
+        responses: Object.fromEntries(
+          (Array.isArray(r.respuestas) ? r.respuestas : [])
+            .map((ans: any, ansIdx: number) => {
+              const code = String(ans.codigo || ans.id || ans.pregunta_id || ans.pregunta_codigo || ans.pregunta || `Pregunta_${ansIdx + 1}`);
+              const rawVal = ans.valor !== undefined ? ans.valor : ans.respuesta !== undefined ? ans.respuesta : 0;
+              const val = typeof rawVal === 'number' ? rawVal : Number(rawVal) || 0;
+              return [code, val];
+            })
+            .filter(([code]) => code !== "undefined" && code !== "null" && code !== "")
+        ),
+        open_question: "",
+      }));
+
+    const pmoTypeResolved = (comments as any)?.pmoType ?? "Hibrido";
+
+    const fileUrls: {url: string, type: string}[] = [];
+    for (const url of [externalFileUrl, ...(extraFileUrls ?? [])].filter(Boolean)) {
+      const freshUrl = await ensureFreshUrl(url as string);
+      const ext = String(url).split("?")[0].split(".").pop()?.toLowerCase();
+      fileUrls.push({ url: freshUrl, type: ext === "csv" ? "text/csv" : "application/pdf" });
+    }
+
+    return {
+      metadata: { ...baseMetadata, agent_id: "agente-5" },
+      payload: {
+        approved_pmo_type: pmoTypeResolved,
+        maturity_surveys: {
+          predictive: {
+            survey_type: "predictive",
+            input_method: (respPredictiva ?? []).length > 0 ? "online_survey" : "bulk_upload",
+            answers: formatAnswers(respPredictiva ?? []),
+          },
+          agile: {
+            survey_type: "agile",
+            input_method: (respAgil ?? []).length > 0 ? "online_survey" : "bulk_upload",
+            answers: formatAnswers(respAgil ?? []),
+          },
+        },
+        fase4_diagnostico_referencia: (fase4?.datos_consolidados as any)?.diagnosis || fase4?.datos_consolidados || null,
+      },
+      comments: (comments as any)?.comentario_consultor ?? null,
+      __fileUrls: fileUrls,
+    };
+  }
+
+  // Fase 6 — Enfoque para Guía Metodológica: lee diagnósticos aprobados de Fases 4 y 5
+  if (phaseNumber === 6) {
+    const { data: prevFases } = await supabase
+      .from("fases_estado")
+      .select("numero_fase, datos_consolidados")
+      .eq("proyecto_id", projectId)
+      .in("numero_fase", [4, 5]);
+
+    const faseMap: Record<number, any> = {};
+    for (const f of prevFases ?? []) {
+      const dc = f.datos_consolidados as any;
+      faseMap[f.numero_fase] = dc?.diagnosis ? dc.diagnosis : dc;
+    }
+
+    return {
+      metadata: { ...baseMetadata, agent_id: "agente-6" },
+      payload: {
+        approved_phase4_diagnosis: faseMap[4] ?? null,
+        approved_phase5_diagnosis: faseMap[5] ?? null,
+      },
+      comments,
+    };
+  }
+
+  // Fase 9 — Generador de preguntas de entrevista (Agente 3.1)
+  // Recibe el diagnóstico del Agente 3 (fase 1 en fases_estado) + los documentos originales
+  if (phaseNumber === 9) {
+    // 1. Leer el diagnóstico ya generado por el Agente 3 (guardado en fase 1)
+    const { data: fase1Estado } = await supabase
+      .from("fases_estado")
+      .select("datos_consolidados")
+      .eq("proyecto_id", projectId)
+      .eq("numero_fase", 1)
+      .single();
+
+    const dc = fase1Estado?.datos_consolidados as any;
+    const agent3Diagnosis = dc?.diagnosis ?? dc ?? null;
+
+    // 2. Leer documentos y generar signed URLs frescas (igual que Fase 1)
+    const { data: docs } = await supabase
+      .from("documentos")
+      .select("id, storage_path, categoria, nombre_personalizado, metadatos, created_at")
+      .eq("proyecto_id", projectId);
+
+    const fileUrls: { url: string; type: string }[] = [];
+    for (const d of docs ?? []) {
+      if (d.storage_path) {
+        const freshUrl = await ensureFreshUrl(d.storage_path);
+        const ext = String(d.storage_path).split('?')[0].split(".").pop()?.toLowerCase();
+        fileUrls.push({ url: freshUrl, type: ext === "csv" ? "text/csv" : "application/pdf" });
+      }
+    }
+
+    return {
+      metadata: { ...baseMetadata, phase: "3.1", agent_id: "agente-3-1" },
+      payload: {
+        agent3_diagnosis: agent3Diagnosis,
+      },
+      comments,
+      __fileUrls: fileUrls,
+    };
+  }
+
+  // Fases 7–8: Estructura base para expandir
   return {
     metadata: baseMetadata,
     payload: {},
@@ -283,7 +489,8 @@ async function runAgent(
   phaseNumber: number,
   iteration: number,
   comments: unknown | null,
-  externalFileUrl?: string
+  externalFileUrl?: string,
+  extraFileUrls?: string[]
 ) {
   // Obtener config del agente
   const { data: agentConfig, error: configError } = await supabase
@@ -307,13 +514,19 @@ async function runAgent(
     phaseNumber,
     iteration,
     comments,
-    externalFileUrl
+    externalFileUrl,
+    extraFileUrls
   );
 
   const { __fileUrls, ...inputEnvelope } = envelopeData as any;
 
   // Ensamblar prompt completo
-  const enforceJsonInstruction = "\n\nIMPORTANTE: DEBES DEVOLVER ÚNICAMENTE UN OBJETO JSON VÁLIDO. NO incluyas texto explicativo, ni saludos, ni formato markdown (como ```json). Tu respuesta DEBE empezar con '{' y terminar con '}'.";
+  const enforceJsonInstruction = `
+
+IMPORTANTE: DEBES DEVOLVER ÚNICAMENTE UN OBJETO JSON VÁLIDO.
+RECORDATORIO CRÍTICO: El array 'resultados_por_item' DEBE contener exactamente 21 elementos (uno por cada factor individual: C01-C07, E01-E07, P01-P07). NO resumas los datos en solo 3 puntos de dimensiones generales. Queremos ver el desglose completo en el radar.
+
+Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto extra.`;
   const fullPrompt = `${agentConfig.prompt_sistema}\n\nJSON DE ENTRADA:\n${JSON.stringify(
     inputEnvelope,
     null,
@@ -329,7 +542,10 @@ async function runAgent(
     const filePromises = __fileUrls.map(async (fileData: {url: string, type: string}) => {
       try {
         const res = await fetch(fileData.url);
-        if (!res.ok) return null;
+        if (!res.ok) {
+          console.error(`[pmo-agent] fetch archivo fallido: ${res.status} ${res.statusText} — URL: ${fileData.url.substring(0, 120)}`);
+          return null;
+        }
         const arrayBuffer = await res.arrayBuffer();
         
         // Chunked btoa to avoid "Maximum call stack size exceeded" on large PDFs
@@ -446,7 +662,7 @@ async function runAgent(
       {
         proyecto_id: projectId,
         numero_fase: phaseNumber,
-        estado_visual: "completado",
+        estado_visual: (phaseNumber === 3 || phaseNumber === 9) ? "completado" : "disponible", // Phase 3 & 9 auto-complete
         datos_consolidados: diagnosis,
         updated_at: new Date().toISOString(),
       },
@@ -468,8 +684,17 @@ serve(async (req) => {
   }
 
   try {
-    const { projectId, phaseNumber, iteration = 1, comments = null, externalFileUrl } =
+    const { projectId, phaseNumber, iteration = 1, comments = null, externalFileUrl,
+      pmoType, predictivaFileUrl, agilFileUrl, comentario_consultor } =
       await req.json();
+
+    // Para fase 5 empaquetamos pmoType y comentario en comments
+    const resolvedComments = phaseNumber === 5
+      ? { pmoType, comentario_consultor }
+      : (comments ?? comentario_consultor ?? null);
+
+    // URLs de archivos extra (fase 5)
+    const extraFileUrls: string[] = [predictivaFileUrl, agilFileUrl].filter(Boolean) as string[];
 
     if (!projectId || !phaseNumber) {
       throw new Error("Faltan parámetros requeridos: projectId y phaseNumber");
@@ -511,8 +736,9 @@ serve(async (req) => {
         projectId,
         phaseNumber,
         iteration,
-        comments,
-        externalFileUrl
+        resolvedComments,
+        externalFileUrl,
+        extraFileUrls
       );
       diagnosis = result.diagnosis;
       processingTime = result.processingTime;
@@ -531,6 +757,25 @@ serve(async (req) => {
     if (phaseNumber === 3) {
       // No usar await para no bloquear la respuesta de la fase 3
       checkAndTriggerPhase4(supabase, projectId).catch(e => console.error("Auto trigger Phase 4 error:", e));
+    }
+
+    // Si termina la fase 1 (Agente 3 — Documentación), disparar el Agente 9 en paralelo
+    if (phaseNumber === 1) {
+      (async () => {
+        try {
+          await supabase.from("fases_estado").upsert(
+            { proyecto_id: projectId, numero_fase: 9, estado_visual: "procesando", updated_at: new Date().toISOString() },
+            { onConflict: "proyecto_id,numero_fase" }
+          );
+          await runAgent(supabase, projectId, 9, 1, null);
+        } catch (e) {
+          console.error("[pmo-agent] Error auto-trigger Agente 9:", e);
+          await supabase.from("fases_estado")
+            .update({ estado_visual: "disponible", updated_at: new Date().toISOString() })
+            .eq("proyecto_id", projectId)
+            .eq("numero_fase", 9);
+        }
+      })().catch(e => console.error("Agente 9 background error:", e));
     }
 
     return new Response(

@@ -177,15 +177,39 @@ export function useEntrevistas(projectId: string) {
     }
   };
 
-  const deleteEntrevista = async (id: string, dbId?: string) => {
+  const deleteEntrevista = async (entrevista: EntrevistaLocal) => {
     try {
-      if (dbId) {
-        const { error } = await supabase.from('entrevistas').delete().eq('id', dbId);
-        if (error) throw error;
+      if (entrevista.dbId) {
+        // 1. Eliminar del Storage si tiene archivo
+        if (entrevista.storagePath) {
+          // Extraer ruta relativa del storage
+          const pathMatch = entrevista.storagePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+          const rawPath = pathMatch ? decodeURIComponent(pathMatch[1]) : entrevista.storagePath;
+
+          const { error: storageError } = await supabase.storage
+            .from('documentos-pmo')
+            .remove([rawPath]);
+          
+          if (storageError) {
+            console.warn('Error eliminando archivo de storage:', storageError.message);
+          }
+        }
+
+        // 2. Eliminar de la base de datos
+        const { error: dbError } = await supabase
+          .from('entrevistas')
+          .delete()
+          .eq('id', entrevista.dbId);
+        
+        if (dbError) throw dbError;
       }
-      setEntrevistas((prev) => prev.filter((e) => e.id !== id));
+
+      // 3. Actualizar estado local
+      setEntrevistas((prev) => prev.filter((e) => e.id !== entrevista.id));
+      toast.success('Entrevista eliminada correctamente');
     } catch (err) {
       console.error('Error eliminando entrevista', err);
+      toast.error('Error al eliminar la entrevista');
       throw err;
     }
   };

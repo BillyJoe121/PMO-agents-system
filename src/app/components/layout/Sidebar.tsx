@@ -9,6 +9,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { SoundToggleButton } from '../ui/SoundToggleButton';
 
 interface NavItem {
@@ -32,21 +33,17 @@ export default function Sidebar() {
     return location.pathname.startsWith(path);
   };
 
-  const handleLogout = () => {
-    // TODO: Supabase Auth - Manejar sesión de 8h en componentes de login.
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
     navigate('/');
   };
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-[72px] flex flex-col items-center py-6 z-50 border-r border-gray-100 bg-white shadow-sm print:hidden">
       {/* Logo */}
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center mb-8 flex-shrink-0 cursor-pointer"
-        style={{ background: '#030213' }}
-        onClick={() => navigate('/dashboard')}
-      >
-        <span className="text-white text-sm" style={{ fontWeight: 700 }}>IC</span>
-      </div>
+
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 flex-1 w-full px-2">

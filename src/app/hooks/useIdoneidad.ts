@@ -31,6 +31,7 @@ export function useIdoneidad(projectId: string | undefined) {
         .select('token')
         .eq('proyecto_id', projectId)
         .eq('activo', true)
+        .eq('tipo_encuesta', 'idoneidad')
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
@@ -44,6 +45,7 @@ export function useIdoneidad(projectId: string | undefined) {
         .from('encuestas_respuestas')
         .select('*')
         .eq('proyecto_id', projectId)
+        .eq('tipo_encuesta', 'idoneidad')
         .order('created_at', { ascending: false });
         
       setResponses(respData || []);
@@ -103,7 +105,7 @@ export function useIdoneidad(projectId: string | undefined) {
           event: '*',
           schema: 'public',
           table: 'encuestas_respuestas',
-          filter: `proyecto_id=eq.${projectId}`,
+          filter: `proyecto_id=eq.${projectId}`, // Supabase realtime doesn't support multiple eq easily in basic filter, but we fetch Initial Data which will filter by tipo_encuesta
         },
         () => {
           console.log('[Realtime] Cambio detectado en encuestas_respuestas');
@@ -126,15 +128,15 @@ export function useIdoneidad(projectId: string | undefined) {
   const generateLink = async () => {
     if (!projectId) return null;
     
-    // Invalidate old links
     await supabase
       .from('encuestas_links')
       .update({ activo: false })
-      .eq('proyecto_id', projectId);
+      .eq('proyecto_id', projectId)
+      .eq('tipo_encuesta', 'idoneidad');
 
     const { data, error } = await supabase
       .from('encuestas_links')
-      .insert({ proyecto_id: projectId, activo: true })
+      .insert({ proyecto_id: projectId, activo: true, tipo_encuesta: 'idoneidad' })
       .select('token')
       .single();
 
@@ -150,7 +152,8 @@ export function useIdoneidad(projectId: string | undefined) {
       await supabase
         .from('encuestas_links')
         .update({ activo: false })
-        .eq('proyecto_id', projectId);
+        .eq('proyecto_id', projectId)
+        .eq('tipo_encuesta', 'idoneidad');
       
       setActiveLink(null);
 

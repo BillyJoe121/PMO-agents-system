@@ -54,17 +54,17 @@ const PMO_CONFIG: Record<PmoType, {
   Icon: React.ElementType; tagline: string;
 }> = {
   Ágil: {
-    color: '#059669', bg: '#ecfdf5', border: '#6ee7b7', lightText: '#065f46',
+    color: '#171717', bg: '#f5f5f5', border: '#e5e5e5', lightText: '#404040',
     Icon: Zap,
     tagline: 'Estructura flexible orientada a ciclos iterativos y entrega continua de valor.',
   },
   Híbrida: {
-    color: '#4f46e5', bg: '#eef2ff', border: '#a5b4fc', lightText: '#3730a3',
+    color: '#404040', bg: '#fcfcfc', border: '#e5e5e5', lightText: '#525252',
     Icon: GitMerge,
     tagline: 'Combina prácticas ágiles y predictivas según el contexto y naturaleza de cada proyecto.',
   },
   Predictiva: {
-    color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd', lightText: '#5b21b6',
+    color: '#525252', bg: '#ffffff', border: '#d4d4d4', lightText: '#737373',
     Icon: BarChart2,
     tagline: 'Gestión secuencial con planificación detallada y control formal de cambios.',
   },
@@ -152,7 +152,7 @@ function VersionBadge({ diagnosis }: { diagnosis: DiagnosisResult }) {
   return (
     <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${
       diagnosis.version === 'reprocesado'
-        ? 'bg-amber-50 border-amber-200 text-amber-700'
+        ? 'bg-neutral-800 border-neutral-800 text-white'
         : 'bg-gray-100 border-gray-200 text-gray-500'
     }`} style={{ fontWeight: 500 }}>
       {diagnosis.version === 'reprocesado' ? <RefreshCw size={11} /> : <Sparkles size={11} />}
@@ -246,7 +246,7 @@ function parseDiagnosisPayload(data: any): any | null {
 export default function TipoProyectosModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -257,11 +257,26 @@ export default function TipoProyectosModule() {
     if (!phase) return 'auto-trigger';
     if (phase.status === 'completado') return 'approved';
     if (phase.status === 'procesando') return 'processing';
+    if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'diagnosis';
     return 'auto-trigger';
   };
 
-  const [view, setView] = useState<ModuleView>(deriveInitialView);
-  const [diagnosis, setDiagnosis] = useState<any>(null);
+  const [diagnosis, setDiagnosis] = useState<any>(() => {
+    if (phase?.agentData) {
+      return parseDiagnosisPayload(phase.agentData);
+    }
+    return null;
+  });
+
+  const [view, setView] = useState<ModuleView>(() => {
+    const initialView = deriveInitialView();
+    // If we have parsed diagnosis, force view to diagnosis or approved
+    if (phase?.agentData) {
+      return phase.status === 'completado' ? 'approved' : 'diagnosis';
+    }
+    return initialView;
+  });
+
   const [comment, setComment] = useState('');
   const [savedComment, setSavedComment] = useState('');
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -269,12 +284,22 @@ export default function TipoProyectosModule() {
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const autoTriggered = useRef(false);
-  const initialLoadDone = useRef(false);
+
+  // ── Sync with context if it loads after initial render ──
+  useEffect(() => {
+    if (phase?.agentData && !diagnosis) {
+      const parsed = parseDiagnosisPayload(phase.agentData);
+      if (parsed) {
+        setDiagnosis(parsed);
+        setView(phase.status === 'completado' ? 'approved' : 'diagnosis');
+        autoTriggered.current = true;
+      }
+    }
+  }, [phase?.agentData, phase?.status, diagnosis]);
 
   // ── Load existing diagnosis from DB on mount ──
   useEffect(() => {
-    if (initialLoadDone.current || !projectId) return;
-    initialLoadDone.current = true;
+    if (!projectId) return;
 
     (async () => {
       const { data, error } = await supabase
@@ -286,13 +311,13 @@ export default function TipoProyectosModule() {
 
       if (error || !data) return;
 
-      // If the edge auto-trigger already completed, show the diagnosis directly
-      if (data.estado_visual === 'completado' && data.datos_consolidados) {
+      // If there is data (regardless of status being 'completado' or 'disponible')
+      if (data.datos_consolidados) {
         const parsed = parseDiagnosisPayload(data.datos_consolidados);
         if (parsed) {
           setDiagnosis(parsed);
           // If phase context says 'approved', keep it; otherwise show diagnosis for review
-          if (phase?.status === 'completado') {
+          if (data.estado_visual === 'completado' || phase?.status === 'completado') {
             setView('approved');
           } else {
             setView('diagnosis');
@@ -309,14 +334,14 @@ export default function TipoProyectosModule() {
         return;
       }
     })();
-  }, [projectId, phase?.status]);
+  }, [projectId]); // Run once on mount per project
 
   // RF-F4-02: Auto-trigger on mount when disponible — invokes the edge function
   useEffect(() => {
-    if (autoTriggered.current) return;
+    if (autoTriggered.current || !projectId) return;
     if (view === 'auto-trigger') {
       autoTriggered.current = true;
-      const t1 = setTimeout(async () => {
+      (async () => {
         // Check DB one more time to avoid double-trigger if edge already started
         const { data: check } = await supabase
           .from('fases_estado')
@@ -350,8 +375,7 @@ export default function TipoProyectosModule() {
             toast.error('Error en el Agente 4', { description: detail, duration: 8000 });
           }
         }).catch(e => console.error('[Phase4] invoke failed:', e));
-      }, 2200);
-      return () => clearTimeout(t1);
+      })();
     }
   }, [view, projectId]);
 
@@ -375,31 +399,28 @@ export default function TipoProyectosModule() {
 
       if (!isMounted) return;
 
-      // If reverted to disponible, the agent failed — show error state (NOT auto-trigger, to avoid loop)
-      if (data?.estado_visual === 'disponible') {
-        setIsReprocessing(false);
-        // Sync AppContext so 'Detener agente' button disappears
-        updatePhaseStatus(projectId!, 4, 'disponible');
-        setView('error');
-        toast.error('El Agente 4 encontró un error al procesar.');
-        return;
-      }
-
-      // Success: agent completed and saved diagnosis
-      if (data?.estado_visual === 'completado' && data?.datos_consolidados) {
+      // Success: agent completed and saved diagnosis (may be 'completado' OR 'disponible' with data)
+      if (data?.datos_consolidados && (data?.estado_visual === 'completado' || data?.estado_visual === 'disponible')) {
         const parsed = parseDiagnosisPayload(data.datos_consolidados);
         if (parsed) {
           setDiagnosis(parsed);
           setIsReprocessing(false);
-          // Sync AppContext: phase has results pending approval (use 'disponible' so
-          // 'Detener agente' button disappears; 'completado' is set on Approve)
-          updatePhaseStatus(projectId!, 4, 'disponible');
           setView('diagnosis');
           playAgentSuccess();
           toast.success('Agente 4 completó el diagnóstico', {
             description: `Tipo de PMO: ${parsed.pmoType}`,
           });
+          return;
         }
+      }
+
+      // If reverted to disponible WITHOUT data, the agent truly failed
+      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+        setIsReprocessing(false);
+        updatePhaseStatus(projectId!, 4, 'disponible');
+        setView('error');
+        toast.error('El Agente 4 encontró un error al procesar.');
+        return;
       }
     };
 
@@ -413,7 +434,9 @@ export default function TipoProyectosModule() {
     };
   }, [view, projectId, playAgentSuccess]);
 
-  if (!project || !phase) return null;
+  if (!project) return null;
+  // phase may be undefined briefly when navigating from Phase 3 — use safe defaults
+  const safePhase = phase ?? { number: 4, status: 'disponible' as const, agentData: null, completedAt: null };
 
   // Manual retry handler — resets the guard and re-triggers
   const handleRetry = async () => {
@@ -487,6 +510,9 @@ export default function TipoProyectosModule() {
     setComment('');
 
     try {
+      // 0. Bloquear fases posteriores en AppContext + Supabase
+      await reprocessPhase(projectId!, 4);
+
       // 1. Update DB FIRST so the poll won't see old 'completado' state
       await supabase
         .from('fases_estado')
@@ -599,26 +625,33 @@ export default function TipoProyectosModule() {
   );
 
   const renderProcessing = () => (
-    <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <div
-        className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5"
-        style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+    <AnimatePresence>
+      <motion.div 
+        key="processing-overlay"
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
       >
-        <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
-      </div>
-      <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
-        Procesando
-      </p>
-      <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
-        {isReprocessing ? 'Regenerando diagnóstico' : 'Clasificando tipo de PMO'}
-      </h2>
-      <p className="text-neutral-500 text-[13px] mt-3 max-w-sm leading-relaxed">
-        {isReprocessing
-          ? 'El Agente 4 está incorporando el comentario del consultor y actualizando el diagnóstico…'
-          : 'El Agente 4 está analizando el consolidado de los tres agentes previos…'}
-      </p>
-    </motion.div>
+        <div 
+          className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 
+          style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+        >
+          <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
+        </div>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
+          Procesando
+        </p>
+        <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
+          {isReprocessing ? 'Regenerando diagnóstico' : 'Clasificando tipo de PMO'}
+        </h2>
+        <p className="text-neutral-500 text-[13px] mt-2 max-w-sm text-center">
+          {isReprocessing
+            ? 'El Agente 4 está incorporando el comentario del consultor y actualizando el diagnóstico…'
+            : 'El Agente 4 está analizando el consolidado de los tres agentes previos…'}
+        </p>
+      </motion.div>
+    </AnimatePresence>
   );
 
   const renderDiagnosis = () => {
@@ -643,55 +676,55 @@ export default function TipoProyectosModule() {
         {/* PMO type hero (RF-F4-04) */}
         <PmoTypeCard diagnosis={diagnosis} />
 
-        {/* 2-col: Justification + Key factors */}
-        <div className="grid grid-cols-2 gap-5 mb-5">
-          {/* Justification */}
-          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
-                <Brain size={13} style={{ color: cfg.color }} />
-              </div>
-              <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Justificación del Agente 4</h3>
+        {/* Justification */}
+        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
+              <Brain size={13} style={{ color: cfg.color }} />
             </div>
-            <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-              {diagnosis.justification}
-            </p>
+            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Justificación del Agente 4</h3>
           </div>
+          <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
+            {diagnosis.justification}
+          </p>
+        </div>
 
-          {/* Key factors + recommendation */}
-          <div className="flex flex-col gap-5">
-            <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
-                  <Info size={13} style={{ color: cfg.color }} />
-                </div>
-                <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Evidencia Principal</h3>
-              </div>
-              <ul className="space-y-3">
-                {diagnosis.keyFactors?.map((f: any, i: number) => (
-                  <li key={i} className="flex items-start gap-2.5 text-gray-600 text-sm">
-                    <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
-                      {typeof f === 'string' ? i + 1 : f.split && f.split(':')[0] ? f.split(':')[0].substring(0, 3) : 'EV'}
-                    </div>
-                    <span className="leading-relaxed">{typeof f === 'string' ? f : JSON.stringify(f)}</span>
-                  </li>
-                ))}
-              </ul>
+        {/* Key factors */}
+        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
+              <Info size={13} style={{ color: cfg.color }} />
             </div>
+            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Evidencia Principal</h3>
+          </div>
+          <ul className="space-y-3">
+            {diagnosis.keyFactors?.map((f: any, i: number) => (
+              <li key={i} className="flex items-start gap-2.5 text-gray-600 text-sm">
+                <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{ background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
+                  {typeof f === 'string' ? i + 1 : f.split && f.split(':')[0] ? f.split(':')[0].substring(0, 3) : 'EV'}
+                </div>
+                <span className="leading-relaxed">{typeof f === 'string' ? f : JSON.stringify(f)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
+        {/* Breakdown and Tensiones */}
+        {(diagnosis.type_breakdown || (diagnosis.tensiones && diagnosis.tensiones.length > 0)) && (
+          <div className="grid grid-cols-2 gap-5 mb-5">
             {diagnosis.type_breakdown && (
               <div className="rounded-2xl border p-5" style={{ borderColor: cfg.border, background: cfg.bg }}>
                 <p className="text-xs uppercase tracking-wide mb-3" style={{ color: cfg.color, fontWeight: 700 }}>
                   Composición del Enfoque
                 </p>
                 <div className="flex gap-1 h-3 rounded-full overflow-hidden mb-4 bg-white/50 border border-white/40">
-                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#059669' }} />
-                  <div style={{ width: `${diagnosis.type_breakdown.predictive_weight}%`, background: '#7c3aed' }} />
+                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#262626' }} />
+                  <div style={{ width: `${diagnosis.type_breakdown.predictive_weight}%`, background: '#a3a3a3' }} />
                 </div>
                 <div className="flex justify-between text-[11px] mb-3" style={{ fontWeight: 600 }}>
-                  <span className="text-emerald-700">{diagnosis.type_breakdown.agile_weight}% Ágil</span>
-                  <span className="text-purple-700">{diagnosis.type_breakdown.predictive_weight}% Predictivo</span>
+                  <span className="text-neutral-800">{diagnosis.type_breakdown.agile_weight}% Ágil</span>
+                  <span className="text-neutral-500">{diagnosis.type_breakdown.predictive_weight}% Predictivo</span>
                 </div>
                 <p className="text-xs leading-relaxed" style={{ color: cfg.lightText }}>
                   {diagnosis.type_breakdown.hybrid_rationale}
@@ -700,20 +733,20 @@ export default function TipoProyectosModule() {
             )}
             
             {diagnosis.tensiones && diagnosis.tensiones.length > 0 && (
-              <div className="rounded-2xl border p-5 bg-white border-rose-200">
-                <p className="text-xs uppercase tracking-wide mb-3 text-rose-600" style={{ fontWeight: 700 }}>
+              <div className="rounded-2xl border p-5 bg-white border-neutral-200">
+                <p className="text-xs uppercase tracking-wide mb-3 text-neutral-600" style={{ fontWeight: 700 }}>
                   Tensiones Detectadas
                 </p>
                 <ul className="space-y-3">
                   {diagnosis.tensiones.map((tens: any, i: number) => (
-                    <li key={i} className="text-[12px] text-neutral-700 leading-relaxed border-l-2 border-rose-400 pl-3">
-                      <span className="font-semibold text-rose-900">{tens.tipo}: </span>
+                    <li key={i} className="text-[12px] text-neutral-700 leading-relaxed border-l-2 border-neutral-300 pl-3">
+                      <span className="font-semibold text-neutral-900">{tens.tipo}: </span>
                       {tens.descripcion}
                       {tens.intensidad && (
                         <span className={`ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-md font-medium border ${
-                          tens.intensidad === 'Alta' ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : tens.intensidad === 'Moderada' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : 'bg-gray-50 text-gray-600 border-gray-200'
+                          tens.intensidad === 'Alta' ? 'bg-neutral-800 text-neutral-100 border-neutral-800'
+                          : tens.intensidad === 'Moderada' ? 'bg-neutral-200 text-neutral-700 border-neutral-300'
+                          : 'bg-neutral-100 text-neutral-500 border-neutral-200'
                         }`}>{tens.intensidad}</span>
                       )}
                     </li>
@@ -722,7 +755,7 @@ export default function TipoProyectosModule() {
               </div>
             )}
           </div>
-        </div>
+        )}
 
         {/* Orientaciones por Fuente + Coherencia + Advertencias */}
         {diagnosis.orientaciones_por_fuente && (
@@ -731,13 +764,13 @@ export default function TipoProyectosModule() {
               const data = diagnosis.orientaciones_por_fuente[fuente];
               if (!data) return null;
               const orientColors: Record<string, { bg: string; text: string; border: string }> = {
-                'Agil': { bg: '#ecfdf5', text: '#065f46', border: '#6ee7b7' },
-                'Ágil': { bg: '#ecfdf5', text: '#065f46', border: '#6ee7b7' },
-                'Predictivo': { bg: '#f5f3ff', text: '#5b21b6', border: '#c4b5fd' },
-                'Hibrido': { bg: '#eef2ff', text: '#3730a3', border: '#a5b4fc' },
-                'Híbrido': { bg: '#eef2ff', text: '#3730a3', border: '#a5b4fc' },
+                'Agil': { bg: '#262626', text: '#ffffff', border: '#171717' },
+                'Ágil': { bg: '#262626', text: '#ffffff', border: '#171717' },
+                'Predictivo': { bg: '#f5f5f5', text: '#525252', border: '#e5e5e5' },
+                'Hibrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
+                'Híbrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
               };
-              const colors = orientColors[data.orientacion] || { bg: '#f5f5f5', text: '#525252', border: '#d4d4d4' };
+              const colors = orientColors[data.orientacion] || { bg: '#ffffff', text: '#737373', border: '#f4f4f5' };
               const labels: Record<string, string> = { cuantitativo: 'Encuesta (Cuantitativo)', cualitativo: 'Entrevistas (Cualitativo)', documental: 'Documentos (Documental)' };
               return (
                 <div key={fuente} className="bg-white rounded-2xl border border-neutral-200/70 p-5">
@@ -759,16 +792,12 @@ export default function TipoProyectosModule() {
         <div className="flex gap-5 mb-5">
           {diagnosis.coherencia && (
             <div className={`flex-1 rounded-2xl border p-5 ${
-              diagnosis.coherencia === 'Alta' ? 'bg-emerald-50/50 border-emerald-200' 
-              : diagnosis.coherencia === 'Media' ? 'bg-amber-50/50 border-amber-200'
-              : 'bg-rose-50/50 border-rose-200'
+              diagnosis.coherencia === 'Alta' ? 'bg-neutral-900 text-white border-neutral-900' 
+              : diagnosis.coherencia === 'Media' ? 'bg-neutral-100 text-neutral-800 border-neutral-300'
+              : 'bg-neutral-50 text-neutral-500 border-neutral-200'
             }`}>
-              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1" style={{ fontWeight: 600 }}>Coherencia entre Fuentes</p>
-              <p className={`text-lg ${
-                diagnosis.coherencia === 'Alta' ? 'text-emerald-700' 
-                : diagnosis.coherencia === 'Media' ? 'text-amber-700'
-                : 'text-rose-700'
-              }`} style={{ fontWeight: 700 }}>{diagnosis.coherencia}</p>
+              <p className="text-[10px] uppercase tracking-wider opacity-60 mb-1" style={{ fontWeight: 600 }}>Coherencia entre Fuentes</p>
+              <p className="text-lg" style={{ fontWeight: 700 }}>{diagnosis.coherencia}</p>
             </div>
           )}
           {diagnosis.estado_integracion && (
@@ -780,15 +809,15 @@ export default function TipoProyectosModule() {
         </div>
 
         {diagnosis.advertencias_de_entrada && diagnosis.advertencias_de_entrada.length > 0 && (
-          <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5 mb-5">
+          <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-5 mb-5">
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={14} className="text-amber-600" />
-              <p className="text-xs uppercase tracking-wide text-amber-700" style={{ fontWeight: 700 }}>Advertencias de Entrada</p>
+              <AlertTriangle size={14} className="text-neutral-500" />
+              <p className="text-xs uppercase tracking-wide text-neutral-700" style={{ fontWeight: 700 }}>Advertencias de Entrada</p>
             </div>
             <ul className="space-y-2">
               {diagnosis.advertencias_de_entrada.map((adv: string, i: number) => (
-                <li key={i} className="text-[12px] text-amber-800 leading-relaxed flex items-start gap-2">
-                  <span className="w-1 h-1 rounded-full mt-2 bg-amber-500 flex-shrink-0" />
+                <li key={i} className="text-[12px] text-neutral-600 leading-relaxed flex items-start gap-2">
+                  <span className="w-1 h-1 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
                   {adv}
                 </li>
               ))}
@@ -871,47 +900,167 @@ export default function TipoProyectosModule() {
           <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
             La tipología de PMO ha sido validada y registrada como referencia para las fases siguientes.
           </p>
-          <span className="inline-flex items-center gap-1.5 mt-4 text-emerald-700 text-[12px]" style={{ fontWeight: 500 }}>
+          <span className="inline-flex items-center gap-1.5 mt-4 text-neutral-900 text-[12px]" style={{ fontWeight: 600 }}>
             <CheckCircle2 size={13} /> Fase completada y aprobada
           </span>
         </div>
 
         <PmoTypeCard diagnosis={diagnosis} />
 
-        <div className="grid grid-cols-2 gap-5">
-          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Brain size={14} className="text-gray-400" />
-              <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Justificación</h3>
+        {/* Justification */}
+        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
+              <Brain size={13} style={{ color: cfg.color }} />
             </div>
-            <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-              {diagnosis.justification}
-            </p>
+            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Justificación del Agente 4</h3>
           </div>
-          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Info size={14} className="text-gray-400" />
-              <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Evidencia Principal</h3>
+          <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
+            {diagnosis.justification}
+          </p>
+        </div>
+
+        {/* Key factors */}
+        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
+              <Info size={13} style={{ color: cfg.color }} />
             </div>
-            <ul className="space-y-3">
-              {diagnosis.keyFactors?.map((f: any, i: number) => (
-                <li key={i} className="flex items-start gap-2.5 text-gray-600 text-sm">
-                  <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
-                    style={{ background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
-                    {typeof f === 'string' ? i + 1 : f.split && f.split(':')[0] ? f.split(':')[0].substring(0, 3) : 'EV'}
-                  </div>
-                  <span className="leading-relaxed">{typeof f === 'string' ? f : JSON.stringify(f)}</span>
-                </li>
-              ))}
-            </ul>
-            {phase.completedAt && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-1.5 text-gray-400 text-xs">
-                <CheckCircle2 size={11} className="text-green-500" />
-                Aprobado el {phase.completedAt}
+            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Evidencia Principal</h3>
+          </div>
+          <ul className="space-y-3">
+            {diagnosis.keyFactors?.map((f: any, i: number) => (
+              <li key={i} className="flex items-start gap-2.5 text-gray-600 text-sm">
+                <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{ background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
+                  {typeof f === 'string' ? i + 1 : f.split && f.split(':')[0] ? f.split(':')[0].substring(0, 3) : 'EV'}
+                </div>
+                <span className="leading-relaxed">{typeof f === 'string' ? f : JSON.stringify(f)}</span>
+              </li>
+            ))}
+          </ul>
+          {safePhase.completedAt && (
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-1.5 text-gray-400 text-xs">
+              <CheckCircle2 size={11} className="text-neutral-900" />
+              Aprobado el {safePhase.completedAt}
+            </div>
+          )}
+        </div>
+
+        {/* Breakdown and Tensiones */}
+        {(diagnosis.type_breakdown || (diagnosis.tensiones && diagnosis.tensiones.length > 0)) && (
+          <div className="grid grid-cols-2 gap-5 mb-5">
+            {diagnosis.type_breakdown && (
+              <div className="rounded-2xl border p-5" style={{ borderColor: cfg.border, background: cfg.bg }}>
+                <p className="text-xs uppercase tracking-wide mb-3" style={{ color: cfg.color, fontWeight: 700 }}>
+                  Composición del Enfoque
+                </p>
+                <div className="flex gap-1 h-3 rounded-full overflow-hidden mb-4 bg-white/50 border border-white/40">
+                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#0a0a0a' }} />
+                  <div style={{ width: `${diagnosis.type_breakdown.predictive_weight}%`, background: '#525252' }} />
+                </div>
+                <div className="flex justify-between text-[11px] mb-3" style={{ fontWeight: 600 }}>
+                  <span className="text-neutral-900">{diagnosis.type_breakdown.agile_weight}% Ágil</span>
+                  <span className="text-neutral-600">{diagnosis.type_breakdown.predictive_weight}% Predictivo</span>
+                </div>
+                <p className="text-xs leading-relaxed" style={{ color: cfg.lightText }}>
+                  {diagnosis.type_breakdown.hybrid_rationale}
+                </p>
+              </div>
+            )}
+            
+            {diagnosis.tensiones && diagnosis.tensiones.length > 0 && (
+              <div className="rounded-2xl border p-5 bg-white border-neutral-200">
+                <p className="text-xs uppercase tracking-wide mb-3 text-neutral-900" style={{ fontWeight: 700 }}>
+                  Tensiones Detectadas
+                </p>
+                <ul className="space-y-3">
+                  {diagnosis.tensiones.map((tens: any, i: number) => (
+                    <li key={i} className="text-[12px] text-neutral-700 leading-relaxed border-l-2 border-neutral-300 pl-3">
+                      <span className="font-semibold text-neutral-900">{tens.tipo}: </span>
+                      {tens.descripcion}
+                      {tens.intensidad && (
+                        <span className={`ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-md font-medium border ${
+                          tens.intensidad === 'Alta' ? 'bg-neutral-900 text-white border-neutral-900'
+                          : tens.intensidad === 'Moderada' ? 'bg-neutral-200 text-neutral-700 border-neutral-300'
+                          : 'bg-neutral-100 text-neutral-500 border-neutral-200'
+                        }`}>{tens.intensidad}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
+        )}
+
+        {/* Orientaciones por Fuente + Coherencia + Advertencias */}
+        {diagnosis.orientaciones_por_fuente && (
+          <div className="grid grid-cols-3 gap-5 mb-5">
+            {['cuantitativo', 'cualitativo', 'documental'].map((fuente) => {
+              const data = diagnosis.orientaciones_por_fuente[fuente];
+              if (!data) return null;
+              const orientColors: Record<string, { bg: string; text: string; border: string }> = {
+                'Agil': { bg: '#262626', text: '#ffffff', border: '#171717' },
+                'Ágil': { bg: '#262626', text: '#ffffff', border: '#171717' },
+                'Predictivo': { bg: '#f5f5f5', text: '#525252', border: '#e5e5e5' },
+                'Hibrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
+                'Híbrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
+              };
+              const colors = orientColors[data.orientacion] || { bg: '#ffffff', text: '#737373', border: '#f4f4f5' };
+              const labels: Record<string, string> = { cuantitativo: 'Encuesta (Cuantitativo)', cualitativo: 'Entrevistas (Cualitativo)', documental: 'Documentos (Documental)' };
+              return (
+                <div key={fuente} className="bg-white rounded-2xl border border-neutral-200/70 p-5">
+                  <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-2" style={{ fontWeight: 600 }}>{labels[fuente]}</p>
+                  <div className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] mb-3" style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, fontWeight: 600 }}>
+                    {data.orientacion || 'No disponible'}
+                  </div>
+                  <p className="text-neutral-600 text-[12px] leading-relaxed">{data.evidencia_principal || 'Sin evidencia detallada'}</p>
+                  {data.promedio_general !== undefined && data.promedio_general > 0 && (
+                    <p className="text-neutral-400 text-[11px] mt-2">Promedio: <span className="font-semibold text-neutral-600">{data.promedio_general}</span></p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Coherencia + Estado de integración + Advertencias */}
+        <div className="flex gap-5 mb-5">
+          {diagnosis.coherencia && (
+            <div className={`flex-1 rounded-2xl border p-5 ${
+              diagnosis.coherencia === 'Alta' ? 'bg-neutral-900 text-white border-neutral-900' 
+              : diagnosis.coherencia === 'Media' ? 'bg-neutral-100 text-neutral-800 border-neutral-300'
+              : 'bg-neutral-50 text-neutral-500 border-neutral-200'
+            }`}>
+              <p className="text-[10px] uppercase tracking-wider opacity-60 mb-1" style={{ fontWeight: 600 }}>Coherencia entre Fuentes</p>
+              <p className="text-lg" style={{ fontWeight: 700 }}>{diagnosis.coherencia}</p>
+            </div>
+          )}
+          {diagnosis.estado_integracion && (
+            <div className="flex-1 rounded-2xl border border-neutral-200/70 bg-white p-5">
+              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1" style={{ fontWeight: 600 }}>Estado de Integración</p>
+              <p className="text-lg text-neutral-800" style={{ fontWeight: 700 }}>{diagnosis.estado_integracion}</p>
+            </div>
+          )}
         </div>
+
+        {diagnosis.advertencias_de_entrada && diagnosis.advertencias_de_entrada.length > 0 && (
+          <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-5 mb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={14} className="text-neutral-500" />
+              <p className="text-xs uppercase tracking-wide text-neutral-700" style={{ fontWeight: 700 }}>Advertencias de Entrada</p>
+            </div>
+            <ul className="space-y-2">
+              {diagnosis.advertencias_de_entrada.map((adv: string, i: number) => (
+                <li key={i} className="text-[12px] text-neutral-600 leading-relaxed flex items-start gap-2">
+                  <span className="w-1 h-1 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
+                  {adv}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </motion.div>
     );
   };
@@ -920,10 +1069,10 @@ export default function TipoProyectosModule() {
     <motion.div key="error" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
       className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
       <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-        style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
-        <AlertTriangle size={28} className="text-red-500" />
+        style={{ background: '#f5f5f5', border: '1px solid #e5e5e5' }}>
+        <AlertTriangle size={28} className="text-neutral-400" />
       </div>
-      <p className="text-[11px] uppercase tracking-[0.18em] text-red-400 mb-2" style={{ fontWeight: 600 }}>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 600 }}>
         Error de procesamiento
       </p>
       <h2 className="text-neutral-900 tracking-tight mb-3"
@@ -956,27 +1105,38 @@ export default function TipoProyectosModule() {
           autoTriggered.current = false;
           setView('auto-trigger');
         }}
-        onReprocessed={() => {
-          // Own the full flow — no reprocessPhase() called before this
+        onReprocessed={async () => {
+          // 1. Clear local state first
           autoTriggered.current = true;
           setDiagnosis(null);
           setIsReprocessing(true);
-          // Update AppContext immediately so 'Reprocesar' button disappears
-          updatePhaseStatus(projectId!, 4, 'procesando');
-          // Switch to loading view BEFORE DB/network calls
-          setView('processing');
-          // Update DB then fire agent
-          supabase.from('fases_estado')
+
+          // 2. Block downstream phases (5, 6, 7…) in DB
+          await supabase
+            .from('fases_estado')
+            .update({ estado_visual: 'bloqueado', datos_consolidados: null, updated_at: new Date().toISOString() })
+            .eq('proyecto_id', projectId!)
+            .gt('numero_fase', 4);
+
+          // 3. Set THIS phase to 'procesando' in DB BEFORE switching view (avoids poll seeing 'disponible')
+          await supabase
+            .from('fases_estado')
             .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
             .eq('proyecto_id', projectId!)
-            .eq('numero_fase', 4)
-            .then(() => {
-              supabase.functions.invoke('pmo-agent', {
-                body: { projectId, phaseNumber: 4, iteration: 1 }
-              }).then(({ error }) => {
-                if (error) console.error('[Phase4] Reprocess (header) error:', error);
-              }).catch(e => console.error('[Phase4] Reprocess invoke failed:', e));
-            });
+            .eq('numero_fase', 4);
+
+          // 4. Sync AppContext
+          updatePhaseStatus(projectId!, 4, 'procesando');
+
+          // 5. NOW switch view — polling starts and sees 'procesando', not 'disponible'
+          setView('processing');
+
+          // 6. Fire-and-forget the agent call
+          supabase.functions.invoke('pmo-agent', {
+            body: { projectId, phaseNumber: 4, iteration: 1 }
+          }).then(({ error }) => {
+            if (error) console.error('[Phase4] Reprocess (header) error:', error);
+          }).catch(e => console.error('[Phase4] Reprocess invoke failed:', e));
         }}
       />
 

@@ -14,54 +14,90 @@
  * TODO: RF-F5-06 → persist comentario en 'consultor_comentarios'
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Loader2, CheckCircle2, Brain, ChevronLeft, ChevronRight,
-  Zap, BarChart2, GitMerge, FileUp, Paperclip, ClipboardEdit, Globe,
-  MessageSquare, Save, RefreshCw, ThumbsUp, Send, AlertTriangle,
-  Clock, Sparkles, Info, Target, TrendingUp, AlertCircle, X, Layers, ClipboardList
+  Loader2, CheckCircle2, ChevronLeft, ChevronRight,
+  RefreshCw, ThumbsUp, Send, AlertTriangle,
+  Clock, Sparkles, Target, AlertCircle, Layers, ClipboardList,
+  MessageSquare, Save, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import { useSoundManager } from '../../hooks/useSoundManager';
+import { useMadurez } from '../../hooks/useMadurez';
+import MadurezSurveyPanel from './_shared/MadurezSurveyPanel';
+import { supabase } from '../../lib/supabase';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 type PmoType = 'Ágil' | 'Híbrida' | 'Predictiva';
-type SurveyKey = 'agil' | 'predictiva';
-type EntryMethod = 'online' | 'manual';
-type ModuleView = 'overview' | 'online-survey' | 'manual-entry' | 'processing' | 'results' | 'approved';
+type ModuleView = 'overview' | 'processing' | 'results' | 'approved';
 type DiagnosisVersion = 'original' | 'reprocesado';
 
-interface SurveyState {
-  completed: boolean;
-  method: EntryMethod | null;
-  answers: Record<string, number>;
-  manualText: string;
-  attachedFile: { name: string; size: number } | null;
+interface DomainScore { score: number; nivel: string; }
+
+interface MaturityGap {
+  nombre: string;
+  tipo: string;
+  score: number;
+  nivel: string;
+  impacto_potencial: string;
+}
+
+interface MaturityStrength {
+  nombre: string;
+  tipo: string;
+  score: number;
+  nivel: string;
 }
 
 interface MaturityResult {
   level: number;
   score: number;
-  gaps: string[];
+  gaps: MaturityGap[];
+  fortalezas: MaturityStrength[];
   recommendations: string[];
+  por_dominio?: Record<string, DomainScore>;
+  por_fase?: Record<string, DomainScore>;
+  por_factor?: Record<string, DomainScore>;
+  patrones_estructurales?: string;
 }
+
+interface TopGap { area: string; severity: 'critical' | 'high' | 'medium' | 'low'; }
+
+interface Tension { tipo: string; descripcion: string; impacto: string; }
+
+interface TemaRecurrente { tema: string; frecuencia: number; sintesis: string; relacion_con_brechas: string; }
 
 interface FullResults {
   agil?: MaturityResult;
   predictiva?: MaturityResult;
   overallLevel: number;
+  overallLabel: string;
   overallScore: number;
   summary: string;
   timestamp: string;
   version: DiagnosisVersion;
+  advertencias_de_entrada: string[];
+  top_gaps: TopGap[];
+  recommendations: string[];
+  analisis_cruzado?: {
+    aplica: boolean;
+    perfil: string;
+    coherencia: string;
+    tensiones: Tension[];
+  };
+  analisis_cualitativo?: {
+    total_respuestas_abiertas: number;
+    temas_recurrentes: TemaRecurrente[];
+  };
 }
+
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -74,33 +110,7 @@ const MATURITY_LEVELS = [
   { level: 5, name: 'Optimizado',     color: '#0a0a0a', bg: '#f5f5f5', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
 ];
 
-const QUESTIONS_PREDICTIVA = [
-  { id: 'p1', text: '¿Existe un proceso formal de inicio de proyectos con acta de constitución documentada?', dimension: 'Inicio' },
-  { id: 'p2', text: '¿Se elaboran planes detallados de alcance, tiempo y costo antes de ejecutar cada proyecto?', dimension: 'Planificación' },
-  { id: 'p3', text: '¿Hay un sistema de control de cambios implementado y seguido consistentemente por los equipos?', dimension: 'Control' },
-  { id: 'p4', text: '¿Se realiza gestión formal de riesgos con registro de riesgos y planes de respuesta definidos?', dimension: 'Riesgos' },
-  { id: 'p5', text: '¿Se mide el desempeño del proyecto con indicadores formales como EVM, CPI o SPI?', dimension: 'Métricas' },
-  { id: 'p6', text: '¿Existe gobernanza formal con comités de seguimiento, aprobación y escalamiento de decisiones?', dimension: 'Gobernanza' },
-  { id: 'p7', text: '¿Se documentan y aprovechan las lecciones aprendidas al cerrar formalmente cada proyecto?', dimension: 'Cierre' },
-];
-
-const QUESTIONS_AGIL = [
-  { id: 'a1', text: '¿Los equipos trabajan en ciclos iterativos (sprints o iteraciones) con entregables definidos?', dimension: 'Iteraciones' },
-  { id: 'a2', text: '¿Se realizan retrospectivas periódicas y sus acciones de mejora se implementan efectivamente?', dimension: 'Mejora' },
-  { id: 'a3', text: '¿El product backlog está priorizado, refinado y actualizado de forma continua?', dimension: 'Backlog' },
-  { id: 'a4', text: '¿Los equipos tienen autonomía real para decidir cómo ejecutar y organizar su trabajo?', dimension: 'Autonomía' },
-  { id: 'a5', text: '¿Se mide la velocidad del equipo (velocity) y se utiliza como insumo para la planificación futura?', dimension: 'Métricas' },
-  { id: 'a6', text: '¿Existe un Product Owner o rol equivalente con poder de decisión sobre el alcance del backlog?', dimension: 'Roles' },
-  { id: 'a7', text: '¿Las entregas de valor llegan al usuario final de forma frecuente, continua y validada?', dimension: 'Entrega' },
-];
-
-const LIKERT = [
-  { value: 1, label: 'Nunca',          desc: 'No existe ninguna práctica al respecto' },
-  { value: 2, label: 'Raramente',      desc: 'Ocurre de forma esporádica y no sistemática' },
-  { value: 3, label: 'A veces',        desc: 'Se aplica en algunos proyectos o áreas' },
-  { value: 4, label: 'Frecuentemente', desc: 'Es una práctica habitual en la mayoría de casos' },
-  { value: 5, label: 'Siempre',        desc: 'Está institucionalizado y se aplica consistentemente' },
-];
+// Constants eliminated in favor of database integration
 
 const MOCK_RESULTS_PREDICTIVA: MaturityResult = {
   level: 3, score: 67,
@@ -207,283 +217,7 @@ function MaturityLevelBar({ level }: { level: number }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Inline step-by-step survey
-// ---------------------------------------------------------------------------
-function InlineSurvey({
-  surveyKey,
-  onComplete,
-  onBack,
-  initialAnswers,
-}: {
-  surveyKey: SurveyKey;
-  onComplete: (answers: Record<string, number>) => void;
-  onBack: () => void;
-  initialAnswers: Record<string, number>;
-}) {
-  const questions = surveyKey === 'agil' ? QUESTIONS_AGIL : QUESTIONS_PREDICTIVA;
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>(initialAnswers);
-  const q = questions[step];
-  const selected = answers[q.id];
-  const isLast = step === questions.length - 1;
-  const pct = ((step + 1) / questions.length) * 100;
-
-  return (
-    <motion.div key="inline-survey" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-      {/* Survey header */}
-      <div className="flex items-center justify-between mb-5">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm transition-colors">
-          <ChevronLeft size={15} /> Volver al resumen
-        </button>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400" style={{ fontWeight: 500 }}>
-            Pregunta {step + 1} de {questions.length}
-          </span>
-          <span className="px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-600" style={{ fontWeight: 600 }}>
-            Encuesta {surveyKey === 'agil' ? 'Ágil' : 'Predictiva'}
-          </span>
-        </div>
-      </div>
-
-      <div className="h-1.5 bg-neutral-200 rounded-full mb-8 overflow-hidden">
-        <motion.div className="h-full rounded-full bg-neutral-900"
-          initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.35 }} />
-      </div>
-
-      {/* Question */}
-      <AnimatePresence mode="wait">
-        <motion.div key={q.id} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.2 }}>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-wide mb-4 bg-neutral-100 text-neutral-600" style={{ fontWeight: 600 }}>
-            {q.dimension}
-          </span>
-          <h2 className="text-neutral-900 mb-7 leading-snug" style={{ fontSize: '1.25rem', fontWeight: 600 }}>{q.text}</h2>
-
-          <div className="space-y-2.5">
-            {LIKERT.map(opt => {
-              const isSel = selected === opt.value;
-              const accent = '#0a0a0a';
-              return (
-                <motion.button key={opt.value} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-                  onClick={() => setAnswers(prev => ({ ...prev, [q.id]: opt.value }))}
-                  className="w-full text-left px-5 py-3.5 rounded-2xl border transition-all flex items-center gap-4"
-                  style={{ borderColor: isSel ? accent : '#e5e7eb', background: isSel ? '#fafaf9' : '#fff' }}>
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0"
-                    style={{ background: isSel ? accent : '#f3f4f6', color: isSel ? '#fff' : '#6b7280', fontWeight: 700 }}>
-                    {opt.value}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-neutral-800 text-sm" style={{ fontWeight: isSel ? 600 : 500 }}>{opt.label}</p>
-                    <p className="text-neutral-400 text-xs mt-0.5">{opt.desc}</p>
-                  </div>
-                  {isSel && <CheckCircle2 size={16} style={{ color: accent }} className="flex-shrink-0" />}
-                </motion.button>
-              );
-            })}
-          </div>
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Navigation */}
-      <div className="flex items-center justify-between mt-7 pt-6 border-t border-gray-100">
-        <button onClick={() => setStep(s => s - 1)} disabled={step === 0}
-          className="flex items-center gap-2 px-4 py-2.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[13px] hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          style={{ fontWeight: 500 }}>
-          <ChevronLeft size={15} /> Anterior
-        </button>
-        <div className="flex gap-1">
-          {questions.map((_, i) => (
-            <div key={i} className="rounded-full transition-all"
-              style={{ width: i === step ? 18 : 7, height: 7, background: i <= step ? '#0a0a0a' : '#e5e7eb', opacity: i === step ? 1 : 0.5 }} />
-          ))}
-        </div>
-        <motion.button
-          whileHover={selected ? { scale: 1.02 } : {}} whileTap={selected ? { scale: 0.98 } : {}}
-          onClick={() => isLast ? onComplete(answers) : setStep(s => s + 1)}
-          disabled={!selected}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-          style={{ background: '#0a0a0a', fontWeight: 600 }}>
-          {isLast ? <><CheckCircle2 size={14} /> Completar</> : <>Siguiente <ChevronRight size={15} /></>}
-        </motion.button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Manual entry panel
-// ---------------------------------------------------------------------------
-function ManualEntryPanel({
-  surveyKey,
-  initialText,
-  onComplete,
-  onBack,
-}: {
-  surveyKey: SurveyKey;
-  initialText: string;
-  onComplete: (text: string) => void;
-  onBack: () => void;
-}) {
-  const [text, setText] = useState(initialText);
-  const [attached, setAttached] = useState<{ name: string; size: number } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isReading, setIsReading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const fmt = (b: number) => b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`;
-
-  const processFile = (file: File) => {
-    const readable = file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md');
-    setAttached({ name: file.name, size: file.size });
-    if (readable) {
-      setIsReading(true);
-      const r = new FileReader();
-      r.onload = e => { setText(e.target?.result as string || ''); setIsReading(false); };
-      r.readAsText(file, 'UTF-8');
-    }
-  };
-
-  const accent = '#0a0a0a';
-  const accentBg = '#f5f5f5';
-
-  return (
-    <motion.div key="manual" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm transition-colors">
-          <ChevronLeft size={15} /> Volver al resumen
-        </button>
-        <span className="px-2.5 py-1 rounded-full text-xs" style={{ background: accentBg, color: accent, fontWeight: 600 }}>
-          Encuesta {surveyKey === 'agil' ? 'Ágil' : 'Predictiva'} · Carga manual
-        </span>
-      </div>
-
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <h3 className="text-gray-800 mb-1" style={{ fontWeight: 600 }}>Carga de datos de encuesta</h3>
-        <p className="text-gray-400 text-sm mb-5">
-          Pegue los resultados recolectados o cargue un archivo (.txt, .md, .pdf, .docx). El Agente 5 procesará el texto para extraer puntuaciones y observaciones.
-        </p>
-
-        {/* File upload button */}
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-gray-600 text-sm" style={{ fontWeight: 500 }}>Datos / Transcripción de respuestas</label>
-          <button onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-neutral-300 text-neutral-500 hover:border-neutral-500 hover:text-neutral-700 hover:bg-neutral-50 transition-all text-xs"
-            style={{ fontWeight: 500 }}>
-            <FileUp size={11} /> Cargar archivo
-          </button>
-          <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.doc,.docx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ''; }} />
-        </div>
-
-        {/* Attached badge */}
-        <AnimatePresence>
-          {attached && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-2 overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs">
-                <Paperclip size={10} />
-                <span className="flex-1 truncate" style={{ fontWeight: 500 }}>{attached.name}</span>
-                <span className="opacity-60">{fmt(attached.size)}</span>
-                <button onClick={() => { setAttached(null); setText(''); }}><X size={10} /></button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Dropzone textarea */}
-        <div
-          className={`relative rounded-xl border-2 transition-all mb-2 ${isDragging ? 'border-neutral-400 bg-neutral-50' : 'border-neutral-200/80'}`}
-          onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) processFile(f); }}
-        >
-          {isReading && (
-            <div className="absolute inset-0 z-10 bg-white/90 rounded-xl flex items-center justify-center gap-2">
-              <Loader2 size={16} className="animate-spin text-gray-400" />
-              <span className="text-gray-400 text-xs">Leyendo archivo…</span>
-            </div>
-          )}
-          <textarea value={text} onChange={e => setText(e.target.value)}
-            placeholder={`Pegue aquí los datos de la encuesta de madurez ${surveyKey === 'agil' ? 'Ágil' : 'Predictiva'}...\n\nEj:\nDimensión Iteraciones: 3/5\nDimensión Mejora: 2/5\n...`}
-            rows={10} className="w-full px-4 py-3 rounded-xl text-sm outline-none resize-y leading-relaxed bg-transparent border-0 focus:ring-0" />
-        </div>
-        <p className="text-gray-400 text-xs text-right mb-5">{text.length} caracteres</p>
-
-        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-          onClick={() => { if (!text.trim()) { toast.error('Ingrese datos antes de continuar.'); return; } onComplete(text); }}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm"
-          style={{ background: accent, fontWeight: 600 }}>
-          <CheckCircle2 size={15} />
-          Guardar y marcar encuesta como completada
-        </motion.button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Survey card (overview)
-// ---------------------------------------------------------------------------
-function SurveyCard({
-  surveyKey,
-  status,
-  onOnline,
-  onManual,
-}: {
-  surveyKey: SurveyKey;
-  status: boolean;
-  onOnline: () => void;
-  onManual: () => void;
-}) {
-  const isAgil = surveyKey === 'agil';
-  const accent = '#0a0a0a';
-  const bg = '#f5f5f5';
-  const Icon = ClipboardList;
-  const label = isAgil ? 'Ágil' : 'Predictiva';
-
-  return (
-    <div className={`bg-white rounded-2xl border shadow-sm p-5 transition-all ${status ? 'border-emerald-200 bg-emerald-50/20' : 'border-neutral-200/80'}`}>
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-          <Icon size={20} style={{ color: accent }} />
-        </div>
-        <div className="flex-1">
-          <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Encuesta de Madurez {label}</p>
-          <p className="text-gray-400 text-xs">{QUESTIONS_PREDICTIVA.length} preguntas · Escala Likert 1–5</p>
-        </div>
-        {status
-          ? <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200">
-              <CheckCircle2 size={12} className="text-emerald-600" />
-              <span className="text-emerald-700 text-xs" style={{ fontWeight: 600 }}>Completada</span>
-            </div>
-          : <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 border border-gray-200">
-              <AlertCircle size={12} className="text-gray-400" />
-              <span className="text-gray-500 text-xs" style={{ fontWeight: 600 }}>Pendiente</span>
-            </div>
-        }
-      </div>
-
-      {!status ? (
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={onOnline}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-neutral-200/80 text-sm transition-all hover:bg-neutral-50"
-            style={{ color: '#0a0a0a', fontWeight: 500 }}>
-            <Globe size={14} /> Completar en línea
-          </button>
-          <button onClick={onManual}
-            className="flex items-center justify-center gap-2 py-2.5 rounded-full border border-neutral-200/80 text-neutral-600 text-[13px] hover:bg-neutral-50 transition-all"
-            style={{ fontWeight: 500 }}>
-            <ClipboardEdit size={14} /> Cargar datos
-          </button>
-        </div>
-      ) : (
-        <button onClick={onOnline}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-full border border-neutral-200/80 text-neutral-400 text-[12px] hover:bg-neutral-50 transition-all"
-          style={{ fontWeight: 500 }}>
-          <RefreshCw size={11} /> Volver a responder
-        </button>
-      )}
-    </div>
-  );
-}
+// Legacy inline components removed
 
 // ---------------------------------------------------------------------------
 // Version badge + Approve modal (shared pattern from Phase 4)
@@ -492,7 +226,7 @@ function VersionBadge({ version, timestamp }: { version: DiagnosisVersion; times
   const ts = new Date(timestamp);
   const fmt = ts.toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${version === 'reprocesado' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`} style={{ fontWeight: 500 }}>
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${version === 'reprocesado' ? 'bg-neutral-900 border-neutral-900 text-white' : 'bg-gray-100 border-gray-200 text-gray-500'}`} style={{ fontWeight: 500 }}>
       {version === 'reprocesado' ? <RefreshCw size={10} /> : <Sparkles size={10} />}
       Diagnóstico {version === 'reprocesado' ? 'reprocesado' : 'original'}
       <span className="opacity-50">·</span>
@@ -501,29 +235,37 @@ function VersionBadge({ version, timestamp }: { version: DiagnosisVersion; times
   );
 }
 
-function ApproveModal({ open, onCancel, onConfirm, isLoading }: { open: boolean; onCancel: () => void; onConfirm: () => void; isLoading: boolean }) {
+function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
+  open: boolean; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
+}) {
   return (
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onCancel} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6">
-            <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-                <ThumbsUp size={20} className="text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Aprobar diagnóstico de madurez</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">La Fase 5 quedará <strong>completada</strong> y la Fase 6 se desbloqueará automáticamente. Esta acción no puede deshacerse.</p>
-              </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onCancel} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6"
+          >
+            <div className="mb-5">
+              <h3 className="text-neutral-900 mb-1.5" style={{ fontWeight: 500, fontSize: '1.0625rem', letterSpacing: '-0.01em' }}>¿Aprobar este diagnóstico?</h3>
+              <p className="text-neutral-500 text-[13px] leading-relaxed">
+                La Fase 5 quedará completada y la Fase 6 se desbloqueará automáticamente. Esta acción no puede deshacerse.
+              </p>
             </div>
             <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[13px] hover:bg-neutral-50" style={{ fontWeight: 500 }}>Cancelar</button>
+              <button onClick={onCancel}
+                className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[13px] hover:bg-neutral-50 transition-colors"
+                style={{ fontWeight: 500 }}>
+                Cancelar
+              </button>
               <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
+                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 transition-all"
                 style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
-                {isLoading ? <><Loader2 size={14} className="animate-spin" /> Aprobando…</> : <><ThumbsUp size={14} /> Aprobar</>}
+                {isLoading
+                  ? <><Loader2 size={13} className="animate-spin" /> Aprobando…</>
+                  : 'Aprobar diagnóstico'}
               </button>
             </div>
           </motion.div>
@@ -536,7 +278,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: { open: boolean;
 // ---------------------------------------------------------------------------
 // Single maturity result card
 // ---------------------------------------------------------------------------
-function MaturityResultCard({ surveyKey, result, pmoType }: { surveyKey: SurveyKey; result: MaturityResult; pmoType: PmoType }) {
+function MaturityResultCard({ surveyKey, result, pmoType, manager }: { surveyKey: 'predictiva' | 'agil'; result: MaturityResult; pmoType: PmoType; manager: any }) {
   const ml = MATURITY_LEVELS[result.level - 1];
   const isAgil = surveyKey === 'agil';
   const accent = '#0a0a0a';
@@ -546,13 +288,27 @@ function MaturityResultCard({ surveyKey, result, pmoType }: { surveyKey: SurveyK
     <div className="bg-white rounded-2xl border border-neutral-200/70 shadow-sm overflow-hidden">
       {/* Level header */}
       <div className="p-5 border-b border-gray-100">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${accent}18` }}>
-            <Icon size={16} style={{ color: accent }} />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${accent}18` }}>
+              <Icon size={16} style={{ color: accent }} />
+            </div>
+            <p className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>
+              Madurez {isAgil ? 'Ágil' : 'Predictiva'}
+            </p>
           </div>
-          <p className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>
-            Madurez {isAgil ? 'Ágil' : 'Predictiva'}
-          </p>
+          <div className="flex items-center gap-2">
+            {manager.responses.length > 0 && (
+              <button onClick={manager.downloadCSV} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 rounded-lg text-[11px] text-neutral-700 transition-colors" title="Descargar respuestas online (CSV)">
+                <Download size={12} /> CSV
+              </button>
+            )}
+            {manager.existingFileUrl && (
+              <button onClick={() => window.open(manager.existingFileUrl, '_blank')} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-900 rounded-lg text-[11px] text-white transition-colors" title="Descargar archivo cargado manualmente">
+                <Download size={12} /> Archivo original
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4 mb-4">
           <div>
@@ -576,25 +332,66 @@ function MaturityResultCard({ surveyKey, result, pmoType }: { surveyKey: SurveyK
         <MaturityLevelBar level={result.level} />
         <p className="text-gray-500 text-xs mt-3 leading-relaxed">{ml.desc}</p>
       </div>
+      {/* Sub-scores (Domains/Factors) */}
+      {(result.por_dominio || result.por_factor) && (
+        <div className="p-5 border-b border-gray-100 bg-neutral-50/50">
+          <p className="text-[11px] uppercase tracking-wider text-gray-500 mb-4" style={{ fontWeight: 700 }}>
+            Desglose por {isAgil ? 'Factores' : 'Dominios'}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {Object.entries((isAgil ? result.por_factor : result.por_dominio) || {}).map(([key, data]) => (
+              <div key={key} className="bg-white border border-neutral-200/60 rounded-xl p-3 shadow-sm">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1 truncate" title={key}>{key.replace(/_/g, ' ')}</p>
+                <div className="flex items-end justify-between">
+                  <span className="text-lg font-bold text-gray-800 leading-none">{data.score}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium truncate max-w-[60px]" title={data.nivel}>{data.nivel}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Strengths */}
+      {result.fortalezas && result.fortalezas.length > 0 && (
+        <div className="p-5 border-b border-gray-100">
+          <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3" style={{ fontWeight: 700 }}>Fortalezas Destacadas</p>
+          <ul className="space-y-2.5">
+            {result.fortalezas.map((f, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-[13px] text-gray-600 leading-relaxed">
+                <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5 text-neutral-400" />
+                <div>
+                  <span className="font-medium text-gray-800">{f.nombre}</span>
+                  {f.tipo && <span className="text-gray-400 text-[11px] ml-2">({f.tipo})</span>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Gaps */}
       <div className="p-5 border-b border-gray-100">
-        <p className="text-xs uppercase tracking-wider text-gray-400 mb-3" style={{ fontWeight: 700 }}>Brechas identificadas</p>
-        <ul className="space-y-2">
+        <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3" style={{ fontWeight: 700 }}>Brechas Identificadas</p>
+        <ul className="space-y-3">
           {result.gaps.map((g, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-              <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" style={{ color: ml.color }} />
-              {g}
+            <li key={i} className="flex items-start gap-2.5 text-[13px] text-gray-600 leading-relaxed bg-neutral-50/80 p-3 rounded-xl border border-neutral-200/60">
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-neutral-400" />
+              <div className="flex-1">
+                <p className="font-medium text-gray-800 mb-1">{g.nombre}</p>
+                {g.impacto_potencial && <p className="text-gray-500 text-[12px]">{g.impacto_potencial}</p>}
+              </div>
             </li>
           ))}
         </ul>
       </div>
       {/* Recommendations */}
-      <div className="p-5">
-        <p className="text-xs uppercase tracking-wider text-gray-400 mb-3" style={{ fontWeight: 700 }}>Recomendaciones</p>
-        <ul className="space-y-2">
+      <div className="p-5 bg-neutral-50">
+        <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-4" style={{ fontWeight: 700 }}>Recomendaciones</p>
+        <ul className="space-y-3">
           {result.recommendations.map((r, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-              <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-white mt-0.5" style={{ background: accent, fontSize: '0.6rem', fontWeight: 700 }}>{i + 1}</span>
+            <li key={i} className="flex items-start gap-3 text-[13px] text-gray-700 leading-relaxed">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-white border border-neutral-300 text-neutral-600 mt-0.5" style={{ fontSize: '0.65rem', fontWeight: 700 }}>{i + 1}</span>
               {r}
             </li>
           ))}
@@ -605,12 +402,206 @@ function MaturityResultCard({ surveyKey, result, pmoType }: { surveyKey: SurveyK
 }
 
 // ---------------------------------------------------------------------------
+// Parser helper (module-level, stable reference, no hook)
+// ---------------------------------------------------------------------------
+function parseAgentResults(datos: any): FullResults | null {
+  if (!datos) return null;
+  let obj = datos;
+  if (typeof datos === 'string') {
+    try { obj = JSON.parse(datos); } catch { return null; }
+  }
+  const d = obj.diagnosis ?? obj.data?.diagnosis ?? obj.data ?? obj;
+  if (!d) return null;
+
+  const hasMeaningfulData =
+    d.overall_maturity_score != null || d.overallScore != null ||
+    d.overall_maturity_level != null || d.predictive_maturity != null ||
+    d.predictiva != null || d.madurez_predictiva != null ||
+    d.agile_maturity != null || d.agil != null || d.madurez_agil != null;
+  if (!hasMeaningfulData) return null;
+
+  const labelToLevel = (label: string | number | undefined): number => {
+    if (typeof label === 'number') return Math.max(1, Math.min(5, Math.round(label)));
+    const map: Record<string, number> = {
+      'informal': 1, 'básico': 2, 'basico': 2, 'inicial': 1,
+      'estándar': 3, 'estandar': 3, 'definido': 3,
+      'avanzado': 4, 'gestionado': 4, 'excelencia': 5, 'optimizado': 5,
+    };
+    return map[String(label ?? '').toLowerCase().trim()] ?? 1;
+  };
+  const ns = (raw: number) => raw <= 5 ? Math.round(raw * 20) : Math.round(raw);
+  const globalRecs: string[] = Array.isArray(d.recommendations) ? d.recommendations : [];
+
+  const parseDomainMap = (map: any): Record<string, DomainScore> | undefined => {
+    if (!map || typeof map !== 'object') return undefined;
+    const result: Record<string, DomainScore> = {};
+    for (const [k, v] of Object.entries(map)) {
+      const val = v as any;
+      result[k] = { score: ns(Number(val?.score ?? 0)), nivel: String(val?.nivel ?? '') };
+    }
+    return result;
+  };
+
+  const parseGaps = (src: any[]): MaturityGap[] =>
+    (src ?? []).map((b: any) => typeof b === 'string'
+      ? { nombre: b, tipo: '', score: 0, nivel: '', impacto_potencial: b }
+      : { nombre: b.nombre || '', tipo: b.tipo || '', score: ns(Number(b.score ?? 0)), nivel: b.nivel || '', impacto_potencial: b.impacto_potencial || '' }
+    ).filter(g => g.nombre || g.impacto_potencial);
+
+  const parseStrengths = (src: any[]): MaturityStrength[] =>
+    (src ?? []).map((f: any) => typeof f === 'string'
+      ? { nombre: f, tipo: '', score: 0, nivel: '' }
+      : { nombre: f.nombre || '', tipo: f.tipo || '', score: ns(Number(f.score ?? 0)), nivel: f.nivel || '' }
+    ).filter(f => f.nombre);
+
+  const toMaturity = (src: any): MaturityResult | undefined => {
+    if (!src || src.aplica === false) return undefined;
+    const score = ns(Number(src.score_global ?? src.score ?? 0));
+    const level = labelToLevel(src.nivel_global ?? src.overall_level ?? src.level ?? src.nivel);
+    return {
+      level, score,
+      gaps: parseGaps(src.brechas ?? src.gaps ?? []),
+      fortalezas: parseStrengths(src.fortalezas ?? []),
+      recommendations: src.recommendations ?? src.recomendaciones ?? globalRecs,
+      por_dominio: parseDomainMap(src.por_dominio),
+      por_fase: parseDomainMap(src.por_fase),
+      por_factor: parseDomainMap(src.por_factor),
+      patrones_estructurales: src.patrones_estructurales,
+    };
+  };
+
+  const predictiva = toMaturity(d.predictive_maturity ?? d.predictiva ?? d.madurez_predictiva);
+  const agil = toMaturity(d.agile_maturity ?? d.agil ?? d.madurez_agil);
+
+  let overallScore = ns(Number(d.overall_maturity_score ?? d.overallScore ?? 0));
+  if (overallScore === 0) {
+    const scores = [predictiva?.score, agil?.score].filter(Boolean) as number[];
+    if (scores.length > 0) overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  }
+  let overallLevel = d.overall_maturity_level
+    ? labelToLevel(d.overall_maturity_level)
+    : (overallScore >= 80 ? 5 : overallScore >= 65 ? 4 : overallScore >= 50 ? 3 : overallScore >= 35 ? 2 : 1);
+  if (overallLevel === 1 && overallScore > 20)
+    overallLevel = overallScore >= 80 ? 5 : overallScore >= 65 ? 4 : overallScore >= 50 ? 3 : overallScore >= 35 ? 2 : 1;
+  overallLevel = Math.max(1, Math.min(5, overallLevel));
+
+  const overallLabel = d.overall_maturity_label ?? MATURITY_LEVELS[overallLevel - 1]?.name ?? '';
+  const insumos = d.insumos_para_agente_6;
+  const summary = (Array.isArray(insumos?.recomendaciones_generales) ? insumos.recomendaciones_generales.join(' ') : null) ?? d.summary ?? d.resumen ?? '';
+  const iteration = obj.metadata?.iteration ?? 1;
+
+  const analisis_cruzado = d.analisis_cruzado ? {
+    aplica: d.analisis_cruzado.aplica ?? false,
+    perfil: d.analisis_cruzado.perfil ?? '',
+    coherencia: d.analisis_cruzado.coherencia ?? '',
+    tensiones: (d.analisis_cruzado.tensiones ?? []).map((t: any) => ({ tipo: t.tipo ?? '', descripcion: t.descripcion ?? '', impacto: t.impacto ?? '' })),
+  } : undefined;
+
+  const analisis_cualitativo = d.analisis_cualitativo ? {
+    total_respuestas_abiertas: d.analisis_cualitativo.total_respuestas_abiertas ?? 0,
+    temas_recurrentes: (d.analisis_cualitativo.temas_recurrentes ?? []).map((t: any) => ({ tema: t.tema ?? '', frecuencia: t.frecuencia ?? 0, sintesis: t.sintesis ?? '', relacion_con_brechas: t.relacion_con_brechas ?? '' })),
+  } : undefined;
+
+  return {
+    agil, predictiva, overallLevel, overallLabel, overallScore, summary,
+    timestamp: obj.metadata?.timestamp ?? new Date().toISOString(),
+    version: iteration > 1 ? 'reprocesado' : 'original',
+    advertencias_de_entrada: (d.advertencias_de_entrada ?? []).map(String),
+    top_gaps: (d.top_gaps ?? []).map((g: any) => ({ area: g.area ?? '', severity: g.severity ?? 'medium' })),
+    recommendations: Array.isArray(d.recommendations) ? d.recommendations : (Array.isArray(insumos?.recomendaciones_generales) ? insumos.recomendaciones_generales : []),
+    analisis_cruzado,
+    analisis_cualitativo,
+  };
+}
+
+
+// ---------------------------------------------------------------------------
 // Main Module
+function AnalysisDetails({ results }: { results: FullResults }) {
+  if (!results.analisis_cruzado && !results.analisis_cualitativo && !results.top_gaps?.length) return null;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      {/* Top Gaps */}
+      {results.top_gaps && results.top_gaps.length > 0 && (
+        <div className="bg-white rounded-2xl border border-neutral-200/70 p-5 shadow-sm">
+          <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-4" style={{ fontWeight: 700 }}>Top Brechas Críticas</p>
+          <ul className="space-y-3">
+            {results.top_gaps.map((g, i) => (
+              <li key={i} className="flex items-center justify-between text-[13px] pb-3 border-b border-neutral-100 last:border-0 last:pb-0">
+                <span className="font-medium text-gray-700">{g.area}</span>
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                  g.severity === 'critical' ? 'bg-neutral-800 text-neutral-100' :
+                  g.severity === 'high' ? 'bg-neutral-200 text-neutral-700' :
+                  'bg-neutral-100 text-neutral-500'
+                }`}>
+                  {g.severity}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Analisis Cualitativo */}
+      {results.analisis_cualitativo && results.analisis_cualitativo.temas_recurrentes.length > 0 && (
+        <div className="bg-white rounded-2xl border border-neutral-200/70 p-5 shadow-sm">
+          <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-1" style={{ fontWeight: 700 }}>Análisis Cualitativo</p>
+          <p className="text-[10px] text-gray-400 mb-4 uppercase tracking-wider">{results.analisis_cualitativo.total_respuestas_abiertas} respuestas procesadas</p>
+          <ul className="space-y-4">
+            {results.analisis_cualitativo.temas_recurrentes.map((t, i) => (
+              <li key={i} className="text-[13px] border-l border-neutral-200 pl-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-bold text-gray-700">{t.tema}</span>
+                  <span className="text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-md font-medium">{t.frecuencia} menciones</span>
+                </div>
+                <p className="text-gray-500 leading-relaxed text-[12px]">{t.sintesis}</p>
+                {t.relacion_con_brechas && <p className="text-neutral-400 text-[11px] mt-1 italic">Relación: {t.relacion_con_brechas}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Analisis Cruzado (Híbrido) */}
+      {results.analisis_cruzado?.aplica && (
+        <div className="lg:col-span-2 bg-neutral-50 rounded-2xl border border-neutral-200/70 p-6 shadow-sm text-neutral-800">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1" style={{ fontWeight: 700 }}>Análisis Cruzado Híbrido</p>
+              <p className="text-lg font-bold text-neutral-900 tracking-tight">{results.analisis_cruzado.perfil}</p>
+            </div>
+            <div className="px-3 py-1.5 rounded-lg bg-white border border-neutral-200 shadow-sm">
+              <span className="text-[10px] uppercase tracking-wider text-neutral-400 block mb-0.5">Coherencia Metodológica</span>
+              <span className="font-bold text-[13px] text-neutral-700">{results.analisis_cruzado.coherencia}</span>
+            </div>
+          </div>
+          
+          {results.analisis_cruzado.tensiones && results.analisis_cruzado.tensiones.length > 0 && (
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3" style={{ fontWeight: 700 }}>Tensiones Identificadas</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {results.analisis_cruzado.tensiones.map((t, i) => (
+                  <div key={i} className="bg-white border border-neutral-200/80 rounded-xl p-4">
+                    <p className="font-medium text-neutral-800 text-[13px] mb-1.5">{t.tipo}</p>
+                    <p className="text-[12px] text-neutral-500 leading-relaxed mb-2">{t.descripcion}</p>
+                    <p className="text-[11px] text-neutral-400 italic">Impacto: {t.impacto}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 export default function MadurezModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -622,24 +613,27 @@ export default function MadurezModule() {
   const needsAgil = pmoType === 'Ágil' || pmoType === 'Híbrida';
   const needsPredictiva = pmoType === 'Predictiva' || pmoType === 'Híbrida';
 
-  const initView = (): ModuleView => {
+  // State — derive initial view from phase status (same pattern as Phase 4)
+  const [view, setView] = useState<ModuleView>(() => {
     if (!phase) return 'overview';
     if (phase.status === 'completado') return 'approved';
     if (phase.status === 'procesando') return 'processing';
+    if (phase.status === 'bloqueado') return 'overview';
+    // 'disponible' with data = pending review; without data = overview
+    if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'results';
     return 'overview';
-  };
-
-  const [view, setView] = useState<ModuleView>(initView);
-  const [activeSurvey, setActiveSurvey] = useState<{ key: SurveyKey; method: EntryMethod } | null>(null);
-
-  const [surveys, setSurveys] = useState<Record<SurveyKey, SurveyState>>({
-    agil:       { completed: false, method: null, answers: {}, manualText: '', attachedFile: null },
-    predictiva: { completed: false, method: null, answers: {}, manualText: '', attachedFile: null },
   });
 
-  const [results, setResults] = useState<FullResults | null>(
-    phase?.status === 'completado' ? buildMockResults(pmoType) : null
-  );
+  // Managers
+  const predictivaManager = useMadurez(projectId, 'predictiva');
+  const agilManager = useMadurez(projectId, 'agil');
+
+  const [results, setResults] = useState<FullResults | null>(() => {
+    if (phase?.agentData && phase.status !== 'bloqueado') {
+      return parseAgentResults(phase.agentData);
+    }
+    return null;
+  });
   const [comment, setComment] = useState('');
   const [savedComment, setSavedComment] = useState('');
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -647,50 +641,170 @@ export default function MadurezModule() {
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
 
-  // Simulate agent processing on entering processing view
-  const processingStarted = useRef(false);
-  if (view === 'processing' && !processingStarted.current) {
-    processingStarted.current = true;
-    setTimeout(() => {
-      const r = buildMockResults(pmoType);
-      setResults(r);
-      setView('results');
-      playAgentSuccess(); // Agent_Success: Agente 5 terminó, resultados listos para revisión
-      toast.success('Agente 5 completó el análisis de madurez', {
-        description: `Nivel general: ${MATURITY_LEVELS[r.overallLevel - 1].name} (${r.overallScore}/100)`,
-      });
-    }, 5000);
-  }
+  // ── Sync with context — only when we have real results and aren't actively processing ──
+  useEffect(() => {
+    // Never override the processing view from context sync
+    if (phase?.status === 'bloqueado' || phase?.status === 'procesando') return;
+    if (phase?.agentData && !results) {
+      const parsed = parseAgentResults(phase.agentData);
+      if (parsed) {
+        setResults(parsed);
+        setView(phase.status === 'completado' ? 'approved' : 'results');
+      }
+    }
+  }, [phase?.agentData, phase?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load from DB on mount ──
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados, estado_visual')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 5)
+        .single();
+
+      if (error || !data) return;
+
+      // Blocked = clean slate
+      if (data.estado_visual === 'bloqueado') {
+        setResults(null);
+        setView('overview');
+        return;
+      }
+
+      // Has data = show results or approved (same as Phase 4: disponible + data → diagnosis view)
+      if (data.datos_consolidados) {
+        const parsed = parseAgentResults(data.datos_consolidados);
+        if (parsed) {
+          setResults(parsed);
+          if (data.estado_visual === 'completado') {
+            setView('approved');
+          } else if (data.estado_visual === 'procesando') {
+            setView('processing');
+          } else {
+            // 'disponible' with data = agent finished, pending review
+            setView('results');
+          }
+          return;
+        }
+      }
+
+      // disponible with no data = overview (hasn't been processed yet)
+      if (data.estado_visual === 'disponible' && !data.datos_consolidados) {
+        setResults(null);
+        setView('overview');
+      }
+
+      // procesando with no data = still running
+      if (data.estado_visual === 'procesando') {
+        setView('processing');
+      }
+    })();
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Polling — activates when view==='processing', exactly like Phase 4 ──
+  useEffect(() => {
+    if (view !== 'processing') return;
+
+    let isMounted = true;
+
+    const fetchResult = async () => {
+      if (!isMounted || !projectId) return;
+      const { data, error } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados, estado_visual')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 5)
+        .single();
+
+      if (error || !isMounted) return;
+
+      // Agent finished successfully (completado OR disponible + data)
+      if (data?.datos_consolidados && (data.estado_visual === 'completado' || data.estado_visual === 'disponible')) {
+        const parsed = parseAgentResults(data.datos_consolidados);
+        if (parsed) {
+          setResults(parsed);
+          setIsReprocessing(false);
+          setView('results');
+          playAgentSuccess();
+          toast.success('Agente 5 completó el análisis de madurez', {
+            description: `Nivel general: ${MATURITY_LEVELS[(parsed.overallLevel || 1) - 1]?.name} (${parsed.overallScore}/100)`,
+          });
+          return;
+        }
+      }
+
+      // Agent failed (reverted to disponible with no data)
+      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+        setIsReprocessing(false);
+        updatePhaseStatus(projectId!, 5, 'disponible');
+        setView('overview');
+        toast.error('El Agente 5 encontró un error. Intente nuevamente.');
+      }
+    };
+
+    fetchResult();
+    const intervalId = setInterval(fetchResult, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [view, projectId, playAgentSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!project || !phase) return null;
 
   // Survey completion check
-  const agilDone = !needsAgil || surveys.agil.completed;
-  const predictivaDone = !needsPredictiva || surveys.predictiva.completed;
-  const allDone = agilDone && predictivaDone;
-  const doneCount = [needsAgil && surveys.agil.completed, needsPredictiva && surveys.predictiva.completed].filter(Boolean).length;
+  const hasPredictivaData = predictivaManager.responses.length > 0 || predictivaManager.existingFileName || predictivaManager.externalFile;
+  const hasAgilData = agilManager.responses.length > 0 || agilManager.existingFileName || agilManager.externalFile;
+
+  const predictivaDone = !needsPredictiva || hasPredictivaData;
+  const agilDone = !needsAgil || hasAgilData;
+  
+  const allDone = predictivaDone && agilDone;
+  const doneCount = [needsAgil && hasAgilData, needsPredictiva && hasPredictivaData].filter(Boolean).length;
   const totalCount = [needsAgil, needsPredictiva].filter(Boolean).length;
 
   // ── Handlers ──
-  const completeSurvey = (key: SurveyKey, answers: Record<string, number>) => {
-    setSurveys(prev => ({ ...prev, [key]: { ...prev[key], completed: true, method: 'online', answers } }));
-    setActiveSurvey(null);
-    setView('overview');
-    toast.success(`Encuesta ${key === 'agil' ? 'Ágil' : 'Predictiva'} completada`);
-  };
-
-  const completeManual = (key: SurveyKey, text: string) => {
-    setSurveys(prev => ({ ...prev, [key]: { ...prev[key], completed: true, method: 'manual', manualText: text } }));
-    setActiveSurvey(null);
-    setView('overview');
-    toast.success(`Datos de encuesta ${key === 'agil' ? 'Ágil' : 'Predictiva'} guardados`);
-  };
-
-  const handleSend = () => {
-    // TODO: N8N_WEBHOOK_AGENTE_5
+  const handleSend = async () => {
     updatePhaseStatus(projectId!, 5, 'procesando');
-    processingStarted.current = false;
     setView('processing');
+    setResults(null);
+    
+    try {
+      await supabase
+        .from('fases_estado')
+        .update({
+          estado_visual: 'procesando',
+          datos_consolidados: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 5);
+
+      let predictivaFileUrl: string | null = null;
+      let agilFileUrl: string | null = null;
+      if (needsPredictiva) predictivaFileUrl = await predictivaManager.uploadFileIfAny() || null;
+      if (needsAgil) agilFileUrl = await agilManager.uploadFileIfAny() || null;
+
+      const response = await supabase.functions.invoke('pmo-agent', {
+        body: {
+          projectId,
+          phaseNumber: 5,
+          iteration: 1,
+          pmoType,
+          ...(predictivaFileUrl && { predictivaFileUrl }),
+          ...(agilFileUrl && { agilFileUrl }),
+        }
+      });
+      if (response.error) throw new Error(response.error.message);
+      // Polling is now driven by the useEffect(view==='processing') — nothing else needed
+    } catch (err: any) {
+      toast.error('Error enviando datos al Agente 5', { description: err.message });
+      updatePhaseStatus(projectId!, 5, 'disponible');
+      setView('overview');
+    }
   };
 
   const handleSaveComment = async () => {
@@ -705,17 +819,43 @@ export default function MadurezModule() {
   const handleReprocess = async () => {
     if (!comment.trim()) { toast.error('Escriba un comentario para re-procesar.'); return; }
     setIsReprocessing(true);
-    setView('processing');
-    processingStarted.current = false;
-    await new Promise(r => setTimeout(r, 4000));
-    const updated = buildMockResults(pmoType, comment);
-    setResults(updated);
-    setSavedComment(comment);
-    setComment('');
-    setView('results');
-    setIsReprocessing(false);
-    playAgentSuccess(); // Agent_Success: reprocesado listo para revisión
-    toast.success('Diagnóstico reprocesado con su comentario');
+    setResults(null);
+
+    try {
+      // Bloquear fases posteriores y limpiar datos
+      await reprocessPhase(projectId!, 5);
+
+      await supabase
+        .from('fases_estado')
+        .update({
+          estado_visual: 'procesando',
+          datos_consolidados: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 5);
+
+      updatePhaseStatus(projectId!, 5, 'procesando');
+      // Set view to processing AFTER supabase update so the polling useEffect picks it up
+      setView('processing');
+
+      const response = await supabase.functions.invoke('pmo-agent', {
+        body: {
+          projectId,
+          phaseNumber: 5,
+          iteration: 2,
+          pmoType,
+          comentario_consultor: comment,
+        }
+      });
+      if (response.error) throw new Error(response.error.message);
+      setSavedComment(comment);
+      setComment('');
+    } catch (err: any) {
+      toast.error('Error re-procesando', { description: err.message });
+      setIsReprocessing(false);
+      setView('results');
+    }
   };
 
   const handleApprove = async () => {
@@ -750,6 +890,17 @@ export default function MadurezModule() {
             <PmoIcon size={11} /> PMO {pmoType}
           </div>
         )}
+        onReprocessed={async () => {
+          // 1. Block downstream phases (6, 7…)
+          await reprocessPhase(projectId!, 5);
+          // 2. Clear local state
+          setResults(null);
+          setComment('');
+          setSavedComment('');
+          setIsReprocessing(false);
+          // 3. Reset view to survey management
+          setView('overview');
+        }}
       />
 
       <div className="max-w-[1100px] mx-auto px-10 py-10">
@@ -764,7 +915,7 @@ export default function MadurezModule() {
                   Evaluación de madurez {pmoType}
                 </h1>
                 <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
-                  Según la clasificación de la Fase 4, su organización tendrá una <span className="text-neutral-900" style={{ fontWeight: 500 }}>PMO {pmoType}</span>. Complete {totalCount === 2 ? 'ambas encuestas' : 'la encuesta'} para que el Agente 5 procese el diagnóstico de madurez.
+                  Según la clasificación de la Fase 4, su organización tendrá una <span className="text-neutral-900" style={{ fontWeight: 500 }}>PMO {pmoType}</span>. Gestione {totalCount === 2 ? 'ambas encuestas' : 'la encuesta'} para que el Agente 5 procese el diagnóstico de madurez.
                 </p>
 
                 <div className="grid grid-cols-3 gap-px bg-neutral-200/60 rounded-2xl overflow-hidden mt-7 border border-neutral-200/60">
@@ -783,7 +934,7 @@ export default function MadurezModule() {
                   <div className="bg-white px-5 py-4">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Estado</p>
                     <div className="mt-1.5 flex items-center gap-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${allDone ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full ${allDone ? 'bg-neutral-800' : 'bg-neutral-400'}`} />
                       <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>
                         {allDone ? 'Listo para enviar' : 'En curso'}
                       </p>
@@ -792,30 +943,34 @@ export default function MadurezModule() {
                 </div>
               </div>
 
-              {/* Survey cards — 2 col for Híbrida, 1 col otherwise */}
-              <div className={`grid gap-5 mb-6 ${pmoType === 'Híbrida' ? 'grid-cols-2' : 'grid-cols-1 max-w-xl'}`}>
+              {/* Survey Panels */}
+              <div className="grid gap-8 mb-6">
                 {needsPredictiva && (
-                  <SurveyCard surveyKey="predictiva" status={surveys.predictiva.completed}
-                    onOnline={() => { setActiveSurvey({ key: 'predictiva', method: 'online' }); setView('online-survey' as any); }}
-                    onManual={() => { setActiveSurvey({ key: 'predictiva', method: 'manual' }); setView('manual-entry' as any); }} />
+                  <MadurezSurveyPanel 
+                    title="Encuesta de Madurez Predictiva"
+                    subtitle="Evaluación de prácticas tradicionales (Inicio, Planificación, Riesgos...)"
+                    manager={predictivaManager} 
+                  />
                 )}
                 {needsAgil && (
-                  <SurveyCard surveyKey="agil" status={surveys.agil.completed}
-                    onOnline={() => { setActiveSurvey({ key: 'agil', method: 'online' }); setView('online-survey' as any); }}
-                    onManual={() => { setActiveSurvey({ key: 'agil', method: 'manual' }); setView('manual-entry' as any); }} />
+                  <MadurezSurveyPanel 
+                    title="Encuesta de Madurez Ágil"
+                    subtitle="Evaluación de prácticas ágiles (Iteraciones, Backlog, Ceremonias...)"
+                    manager={agilManager} 
+                  />
                 )}
               </div>
 
               {/* Progress indicator (RF-F5-03) */}
               {pmoType === 'Híbrida' && (
-                <div className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border mb-6 ${allDone ? 'bg-emerald-50/60 border-emerald-200/80' : 'bg-amber-50/60 border-amber-200/80'}`}>
+                <div className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border mb-6 ${allDone ? 'bg-neutral-900 border-neutral-900' : 'bg-neutral-50 border-neutral-200'}`}>
                   {allDone
-                    ? <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" strokeWidth={1.75} />
-                    : <AlertCircle size={14} className="text-amber-600 flex-shrink-0" strokeWidth={1.75} />}
-                  <p className="text-[13px]" style={{ fontWeight: 500, color: allDone ? '#047857' : '#92400e' }}>
+                    ? <CheckCircle2 size={14} className="text-white flex-shrink-0" strokeWidth={1.75} />
+                    : <AlertCircle size={14} className="text-neutral-400 flex-shrink-0" strokeWidth={1.75} />}
+                  <p className="text-[13px]" style={{ fontWeight: 500, color: allDone ? '#ffffff' : '#737373' }}>
                     {allDone
-                      ? 'Ambas encuestas completadas. Listo para enviar al Agente 5.'
-                      : `${doneCount} de ${totalCount} encuestas completadas — ${totalCount - doneCount} pendiente${totalCount - doneCount > 1 ? 's' : ''}`}
+                      ? 'Ambas encuestas tienen datos. Listo para enviar al Agente 5.'
+                      : `${doneCount} de ${totalCount} encuestas con datos — ${totalCount - doneCount} pendiente${totalCount - doneCount > 1 ? 's' : ''}`}
                   </p>
                 </div>
               )}
@@ -823,64 +978,44 @@ export default function MadurezModule() {
               {/* Send to Agent 5 */}
               <div className="flex justify-end">
                 <motion.button
-                  whileHover={allDone ? { scale: 1.02 } : {}} whileTap={allDone ? { scale: 0.97 } : {}}
+                  whileHover={allDone ? { scale: 1.02 } : {}} 
+                  whileTap={allDone ? { scale: 0.97 } : {}}
                   onClick={allDone ? handleSend : undefined}
                   disabled={!allDone}
                   className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-white text-[13px] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:-translate-y-px"
                   style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
-                  <Send size={15} /> Marcar como completa y Enviar al Agente 5
+                  <Send size={15} /> Confirmar encuestas y Enviar al Agente 5
                 </motion.button>
               </div>
             </motion.div>
           )}
 
-          {/* ── Inline survey ── */}
-          {(view as string) === 'online-survey' && activeSurvey?.method === 'online' && (
-            <motion.div key="online-survey" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <InlineSurvey
-                surveyKey={activeSurvey.key}
-                initialAnswers={surveys[activeSurvey.key].answers}
-                onComplete={answers => completeSurvey(activeSurvey.key, answers)}
-                onBack={() => { setActiveSurvey(null); setView('overview'); }}
-              />
-            </motion.div>
-          )}
-
-          {/* ── Manual entry ── */}
-          {(view as string) === 'manual-entry' && activeSurvey?.method === 'manual' && (
-            <motion.div key="manual-entry" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <ManualEntryPanel
-                surveyKey={activeSurvey.key}
-                initialText={surveys[activeSurvey.key].manualText}
-                onComplete={text => completeManual(activeSurvey.key, text)}
-                onBack={() => { setActiveSurvey(null); setView('overview'); }}
-              />
-            </motion.div>
-          )}
-
-          {/* ── Processing ── */}
+          {/* ── Processing Overlay ── */}
           {view === 'processing' && (
-            <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-              <div className="relative mb-8">
-                <div className="w-24 h-24 rounded-full border-4 border-neutral-100 flex items-center justify-center">
-                  <Loader2 size={40} className="text-neutral-900 animate-spin" />
-                </div>
-                <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 2 }}
-                  className="absolute inset-0 rounded-full border-4 border-neutral-200 opacity-30" />
+            <motion.div 
+              key="processing-overlay" 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+            >
+              <div 
+                className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 
+                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+              >
+                <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
               </div>
-              <h2 className="text-gray-900 mb-3" style={{ fontWeight: 700, fontSize: '1.375rem' }}>
-                {isReprocessing ? 'Re-procesando diagnóstico…' : 'Agente 5 analizando madurez'}
+              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
+                Procesando
+              </p>
+              <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
+                {isReprocessing ? 'Re-procesando diagnóstico' : 'Analizando madurez'}
               </h2>
-              <p className="text-gray-500 text-sm max-w-sm leading-relaxed mb-4">
+              <p className="text-neutral-500 text-[13px] mt-2 max-w-sm text-center">
                 {isReprocessing
                   ? 'El Agente 5 está incorporando el comentario del consultor y recalibrando el diagnóstico de madurez…'
-                  : `Procesando las encuestas de madurez ${pmoType === 'Híbrida' ? 'Predictiva y Ágil' : pmoType} para determinar el nivel de madurez actual de la PMO…`}
+                  : `Procesando las encuestas de madurez ${pmoType === 'Híbrida' ? 'Predictiva y Ágil' : pmoType} para determinar el nivel actual…`}
               </p>
-              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-xl">
-                <Loader2 size={13} className="animate-spin" />
-                <span className="text-xs" style={{ fontWeight: 500 }}>Esto puede tomar unos momentos</span>
-              </div>
             </motion.div>
           )}
 
@@ -933,15 +1068,31 @@ export default function MadurezModule() {
                 </div>
               </div>
 
-              {/* Per-survey results */}
               <div className={`grid gap-5 mb-5 ${pmoType === 'Híbrida' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {results.predictiva && (
-                  <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} />
+                  <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} manager={predictivaManager} />
                 )}
                 {results.agil && (
-                  <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} />
+                  <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} manager={agilManager} />
                 )}
               </div>
+
+              <AnalysisDetails results={results} />
+
+              {/* Global Recommendations (for Hybrid it makes sense to show global recommendations here) */}
+              {results.recommendations && results.recommendations.length > 0 && (
+                <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-4" style={{ fontWeight: 700 }}>Recomendaciones Globales</p>
+                  <ul className="space-y-3">
+                    {results.recommendations.map((r, i) => (
+                      <li key={i} className="flex items-start gap-3 text-[13px] text-gray-700 leading-relaxed">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 text-neutral-600 mt-0.5" style={{ fontSize: '0.65rem', fontWeight: 700 }}>{i + 1}</span>
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* RF-F5-06: Comments */}
               <div className="bg-white rounded-2xl border border-neutral-200/70 p-6">
@@ -996,7 +1147,7 @@ export default function MadurezModule() {
                 <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
                   El nivel de madurez ha sido validado y registrado como referencia para la guía metodológica.
                 </p>
-                <span className="inline-flex items-center gap-1.5 mt-4 text-emerald-700 text-[12px]" style={{ fontWeight: 500 }}>
+                <span className="inline-flex items-center gap-1.5 mt-4 text-neutral-900 text-[12px]" style={{ fontWeight: 600 }}>
                   <CheckCircle2 size={13} /> Fase completada y aprobada
                 </span>
               </div>
@@ -1019,17 +1170,34 @@ export default function MadurezModule() {
                     <p style={{ fontSize: '1.5rem', fontWeight: 800, color: MATURITY_LEVELS[results.overallLevel - 1].color }}>{results.overallScore}/100</p>
                     {phase.completedAt && (
                       <p className="text-gray-400 text-xs mt-1 flex items-center gap-1 justify-end">
-                        <CheckCircle2 size={10} className="text-green-500" /> Aprobado el {phase.completedAt}
+                        <CheckCircle2 size={10} className="text-neutral-900" /> Aprobado el {phase.completedAt}
                       </p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className={`grid gap-5 ${pmoType === 'Híbrida' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                {results.predictiva && <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} />}
-                {results.agil && <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} />}
+              <div className={`grid gap-5 mb-5 ${pmoType === 'Híbrida' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {results.predictiva && <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} manager={predictivaManager} />}
+                {results.agil && <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} manager={agilManager} />}
               </div>
+
+              <AnalysisDetails results={results} />
+
+              {/* Global Recommendations */}
+              {results.recommendations && results.recommendations.length > 0 && (
+                <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-4" style={{ fontWeight: 700 }}>Recomendaciones Globales</p>
+                  <ul className="space-y-3">
+                    {results.recommendations.map((r, i) => (
+                      <li key={i} className="flex items-start gap-3 text-[13px] text-gray-700 leading-relaxed">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 text-neutral-600 mt-0.5" style={{ fontSize: '0.65rem', fontWeight: 700 }}>{i + 1}</span>
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </motion.div>
           )}
 

@@ -617,12 +617,16 @@ function QuestionEditForm({
 }
 
 /* ── Questions List for a given survey type ── */
-function QuestionList({ questions, surveyType, onUpdate }: {
+function QuestionList({ questions, surveyType, onUpdate, onSaveQuestion, onDeleteQuestion, onInsertQuestion }: {
   questions: BankQuestion[];
-  surveyType: SurveyType;
+  surveyType: string;
   onUpdate: (updated: BankQuestion[]) => void;
+  onSaveQuestion: (id: string, text: string, dimension: string) => Promise<void>;
+  onDeleteQuestion: (id: string) => Promise<void>;
+  onInsertQuestion: (text: string, dimension: string, surveyType: string) => Promise<BankQuestion>;
 }) {
   const [isSaving, setIsSaving] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const list = questions.filter(q => q.surveyType?.toLowerCase() === surveyType?.toLowerCase());
   const others = questions.filter(q => q.surveyType?.toLowerCase() !== surveyType?.toLowerCase());
@@ -639,7 +643,6 @@ function QuestionList({ questions, surveyType, onUpdate }: {
   const cancelEdit = (id: string) => {
     const q = questions.find(x => x.id === id);
     if (q?.isNew) {
-      // Discard unsaved new question
       onUpdate(questions.filter(x => x.id !== id));
     } else {
       onUpdate(questions.map(x => x.id === id ? { ...x, isEditing: false } : x));
@@ -650,8 +653,8 @@ function QuestionList({ questions, surveyType, onUpdate }: {
     const q = questions.find(x => x.id === id);
     if (!q) return;
     const newText = (q.editText ?? q.text).trim();
+    const newDimension = q.editDimension ?? q.dimension;
     if (!newText) {
-      // Empty question → discard
       if (q.isNew) {
         onUpdate(questions.filter(x => x.id !== id));
       } else {
@@ -663,39 +666,63 @@ function QuestionList({ questions, surveyType, onUpdate }: {
     const newType = q.editType ?? q.type;
     if (newType === 'multiple') {
       const opts = q.editOptions ?? q.options ?? [];
-      const validOpts = opts.filter(o => o.trim());
-      if (validOpts.length < 2) {
+      if (opts.filter(o => o.trim()).length < 2) {
         toast.error('Debes definir al menos 2 opciones de respuesta.');
         return;
       }
     }
     setIsSaving(id);
-    // TODO: update banco_preguntas set pregunta_texto = '...' where id = '...'
-    await new Promise(r => setTimeout(r, 500));
-    onUpdate(questions.map(x => x.id === id
-      ? {
-          ...x,
-          text: newText,
-          dimension: x.editDimension ?? x.dimension,
-          type: newType,
-          options: newType === 'multiple' ? (x.editOptions ?? x.options) : undefined,
-          isEditing: false,
-          isNew: false,
-          editText: undefined,
-          editDimension: undefined,
-          editType: undefined,
-          editOptions: undefined,
-        }
-      : x
-    ));
-    setIsSaving(null);
-    toast.success('Pregunta guardada correctamente.');
+    try {
+      if (q.isNew) {
+        // Persist new question to DB
+        const saved = await onInsertQuestion(newText, newDimension, surveyType);
+        // Replace temp question with the real one from DB
+        onUpdate([...others, { ...saved, surveyType, type: newType }]);
+        toast.success('Pregunta creada y guardada correctamente.');
+      } else {
+        // Update existing question in DB
+        await onSaveQuestion(id, newText, newDimension);
+        onUpdate(questions.map(x => x.id === id
+          ? {
+              ...x,
+              text: newText,
+              dimension: newDimension,
+              type: newType,
+              options: newType === 'multiple' ? (x.editOptions ?? x.options) : undefined,
+              isEditing: false,
+              isNew: false,
+              editText: undefined,
+              editDimension: undefined,
+              editType: undefined,
+              editOptions: undefined,
+            }
+          : x
+        ));
+        toast.success('Pregunta actualizada correctamente.');
+      }
+    } catch (err: any) {
+      toast.error('Error guardando la pregunta.', { description: err?.message });
+    } finally {
+      setIsSaving(null);
+    }
   };
 
-  const deleteQuestion = (id: string) => {
+  const deleteQuestion = async (id: string) => {
     const q = questions.find(x => x.id === id);
+    if (!q) return;
+    // Optimistic: remove from UI immediately
     onUpdate(questions.filter(x => x.id !== id));
-    if (q?.text) toast.success('Pregunta eliminada.');
+    setIsDeleting(id);
+    try {
+      await onDeleteQuestion(id);
+      toast.success('Pregunta eliminada permanentemente.');
+    } catch (err: any) {
+      // Rollback
+      onUpdate(questions);
+      toast.error('Error al eliminar la pregunta.', { description: err?.message });
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
   const patchQuestion = (id: string, patch: Partial<BankQuestion>) => {
@@ -927,6 +954,9 @@ function QuestionsSection() {
               questions={questions}
               surveyType={activeSurveyType}
               onUpdate={setQuestions}
+              onSaveQuestion={updateQuestion}
+              onDeleteQuestion={deleteQuestion}
+              onInsertQuestion={insertQuestion}
             />
           </motion.div>
         </AnimatePresence>

@@ -466,82 +466,88 @@ function ProcessingView({
 }) {
   const pct = Math.min(100, Math.round((currentStep / steps.length) * 100));
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-xl mx-auto px-8 text-center">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Procesando</p>
-      <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-6 relative" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-        <Brain size={20} className="text-neutral-700" strokeWidth={1.75} />
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-          className="absolute inset-0 rounded-full border-2 border-transparent"
-          style={{ borderTopColor: '#0a0a0a' }}
-        />
-      </div>
-
-      <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
-        {isAdjustment ? 'Revisando la guía' : 'Generando la guía metodológica'}
-      </h2>
-      <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed mb-2">
-        {isAdjustment
-          ? 'El Agente 7 está incorporando los ajustes del consultor y generando una nueva versión.'
-          : 'La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6. El proceso continúa en segundo plano.'}
-      </p>
-      <p className="text-amber-700 text-[11px] mb-8 flex items-center gap-1.5 justify-center">
-        <AlertCircle size={11} strokeWidth={1.75} />
-        No cierre esta pantalla mientras se completa la generación.
-      </p>
-
-      <div className="w-full mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Progreso</span>
-          <span className="text-neutral-900 text-[12px] tabular-nums" style={{ fontWeight: 500 }}>{pct}%</span>
-        </div>
-        <div className="h-1 bg-neutral-200/70 rounded-full overflow-hidden">
+    <AnimatePresence>
+      <motion.div 
+        key="processing-overlay"
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center p-8"
+      >
+        <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-6 relative shadow-sm">
+          <Brain size={22} className="text-neutral-700" strokeWidth={1.75} />
           <motion.div
-            className="h-full rounded-full"
-            style={{ background: '#0a0a0a' }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+            className="absolute inset-0 rounded-full border-2 border-transparent"
+            style={{ borderTopColor: '#0a0a0a' }}
           />
         </div>
-      </div>
 
-      {/* Step list */}
-      <div className="w-full text-left space-y-2">
-        {steps.map((step, idx) => {
-          const done = idx < currentStep;
-          const active = idx === currentStep;
-          return (
+        <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+        <h2 className="text-neutral-900 tracking-tight mb-2" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
+          {isAdjustment ? 'Revisando la guía' : 'Generando la guía metodológica'}
+        </h2>
+        <p className="text-neutral-500 text-[13px] max-w-md text-center leading-relaxed mb-6">
+          {isAdjustment
+            ? 'El Agente 7 está incorporando los ajustes del consultor y generando una nueva versión.'
+            : 'La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6.'}
+        </p>
+
+        <div className="w-full max-w-sm mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Progreso</span>
+            <span className="text-neutral-900 text-[12px] tabular-nums" style={{ fontWeight: 500 }}>{pct}%</span>
+          </div>
+          <div className="h-1 bg-neutral-200/70 rounded-full overflow-hidden">
             <motion.div
-              key={step.id}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: done || active ? 1 : 0.4, x: 0 }}
-              transition={{ delay: idx * 0.06 }}
-              className="flex items-start gap-3 p-3 rounded-xl"
-              style={{ background: active ? '#fff' : 'transparent', border: active ? '1px solid rgba(229,229,229,0.7)' : '1px solid transparent', boxShadow: active ? '0 1px 2px rgba(0,0,0,0.02)' : undefined }}
-            >
-              <div className="flex-shrink-0 mt-0.5">
-                {done
-                  ? <CheckCircle2 size={14} className="text-emerald-500" strokeWidth={1.75} />
-                  : active
-                    ? <Loader2 size={14} className="animate-spin text-neutral-700" strokeWidth={1.75} />
-                    : <Circle size={14} className="text-neutral-300" strokeWidth={1.75} />}
-              </div>
-              <div>
-                <p className="text-[13px]" style={{ fontWeight: active ? 500 : done ? 500 : 400, color: active ? '#0a0a0a' : done ? '#404040' : '#a3a3a3' }}>
-                  {step.label}
-                </p>
-                {active && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-neutral-500 text-[12px] mt-0.5">
-                    {step.detail}
-                  </motion.p>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-    </div>
+              className="h-full rounded-full"
+              style={{ background: '#0a0a0a' }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+            />
+          </div>
+        </div>
+
+        {/* Step list */}
+        <div className="w-full max-w-sm text-left space-y-1.5 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
+          {steps.map((step, idx) => {
+            const done = idx < currentStep;
+            const active = idx === currentStep;
+            if (!done && !active) return null; // Solo mostrar lo completado y lo actual para no saturar el overlay
+            return (
+              <motion.div
+                key={step.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${active ? 'bg-white border-neutral-200 shadow-sm' : 'bg-transparent border-transparent opacity-60'}`}
+              >
+                <div className="flex-shrink-0 mt-0.5">
+                  {done
+                    ? <CheckCircle2 size={14} className="text-neutral-900" strokeWidth={1.75} />
+                    : <Loader2 size={14} className="animate-spin text-neutral-700" strokeWidth={1.75} />}
+                </div>
+                <div>
+                  <p className="text-[13px]" style={{ fontWeight: active ? 600 : 500, color: '#0a0a0a' }}>
+                    {step.label}
+                  </p>
+                  {active && (
+                    <p className="text-neutral-500 text-[12px] mt-0.5 leading-snug">
+                      {step.detail}
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+        
+        <p className="text-neutral-400 text-[10px] mt-8 flex items-center gap-1.5 justify-center uppercase tracking-widest">
+          <AlertCircle size={10} strokeWidth={1.75} />
+          No cierre esta pantalla
+        </p>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
@@ -551,7 +557,7 @@ function VersionBadge({ version }: { version: DocVersion }) {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${version.status === 'revisado' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${version.status === 'revisado' ? 'bg-neutral-800 border-neutral-800 text-white' : 'bg-gray-100 border-gray-200 text-gray-500'}`}
       style={{ fontWeight: 500 }}>
       {version.status === 'revisado' ? <RotateCcw size={10} /> : <Sparkles size={10} />}
       Versión {version.number} — {version.status === 'revisado' ? `revisada el ${fmt}` : `generada el ${fmt}`}
@@ -565,8 +571,7 @@ function DocumentRenderer({ chapters, org, pmoType, version }: {
   chapters: GuideChapter[]; org: string; pmoType: PmoType; version: DocVersion;
 }) {
   const fmt = new Date(version.generatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
-  const pmoColors: Record<PmoType, string> = { Ágil: '#059669', Híbrida: '#4f46e5', Predictiva: '#7c3aed' };
-  const accent = pmoColors[pmoType];
+  const accent = '#0a0a0a';
 
   return (
     <div className="bg-white shadow-2xl mx-auto" style={{ width: 'min(794px, 100%)' }}>
@@ -586,7 +591,7 @@ function DocumentRenderer({ chapters, org, pmoType, version }: {
         <p className="opacity-70 text-sm mb-1" style={{ fontWeight: 500 }}>{org}</p>
         <p className="opacity-50 text-xs">PMO {pmoType} · Generada por IA · {fmt}</p>
         <div className="mt-6 flex items-center gap-3">
-          <span className="px-3 py-1.5 rounded-full text-xs" style={{ background: `${accent}30`, color: '#fff', border: `1px solid ${accent}60`, fontWeight: 600 }}>
+          <span className="px-3 py-1.5 rounded-full text-xs" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', fontWeight: 600 }}>
             Versión {version.number}.0
           </span>
           <span className="px-3 py-1.5 rounded-full text-xs border border-white/20 text-white/70">
@@ -701,8 +706,8 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading, versionNum }: {
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
             className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6">
             <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 size={20} className="text-green-600" />
+              <div className="w-10 h-10 rounded-xl bg-neutral-900 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 size={20} className="text-white" />
               </div>
               <div>
                 <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Aprobar Guía Metodológica</h3>
@@ -717,7 +722,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading, versionNum }: {
               <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50" style={{ fontWeight: 500 }}>Cancelar</button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#16a34a', fontWeight: 600 }}>
+                style={{ background: '#0a0a0a', fontWeight: 600 }}>
                 {isLoading ? <><Loader2 size={14} className="animate-spin" />Aprobando…</> : <><CheckCircle2 size={14} />Aprobar guía</>}
               </button>
             </div>
@@ -1049,7 +1054,7 @@ export default function GuiaMetodologicaView() {
                     )}
                   </div>
                   {currentVersionIdx === idx && (
-                    <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0 mt-1" strokeWidth={1.75} />
+                    <CheckCircle2 size={12} className="text-neutral-900 flex-shrink-0 mt-1" strokeWidth={1.75} />
                   )}
                 </button>
               ))}

@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, CheckCircle2, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { useEncuestaExterna } from '../../hooks/useEncuestaExterna';
 
-const INTERPRETATION_MAP: Record<number, string> = {
+const INTERPRETATION_MAP_IDONEIDAD: Record<number, string> = {
   0: 'Altamente ágil',
   1: 'Altamente ágil',
   2: 'Predominantemente ágil',
@@ -24,6 +24,14 @@ const INTERPRETATION_MAP: Record<number, string> = {
   8: 'Predominantemente predictivo',
   9: 'Predominantemente predictivo',
   10: 'Altamente predictivo',
+};
+
+const INTERPRETATION_MAP_MADUREZ: Record<number, string> = {
+  1: 'Nunca',
+  2: 'Raramente',
+  3: 'A veces',
+  4: 'Frecuentemente',
+  5: 'Siempre'
 };
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
@@ -49,7 +57,10 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 
 export default function ExternalSurveyView() {
   const { surveyId } = useParams();
-  const { preguntas, isLoading, error, submitRespuestas } = useEncuestaExterna(surveyId || '');
+  const { linkInfo, preguntas, isLoading, error, submitRespuestas } = useEncuestaExterna(surveyId || '');
+  
+  const isIdoneidad = linkInfo?.tipo_encuesta === 'idoneidad';
+  const surveyTitle = isIdoneidad ? 'Idoneidad Organizacional' : (linkInfo?.tipo_encuesta === 'agil' ? 'Madurez Ágil' : 'Madurez Predictiva');
   
   const [hasStarted, setHasStarted] = useState(false);
   const [userInfo, setUserInfo] = useState({ nombre: '', cargo: '', area: '' });
@@ -184,7 +195,7 @@ export default function ExternalSurveyView() {
               <span style={{ fontWeight: 800, fontSize: '0.75rem' }}>PMO</span>
             </div>
             <div>
-              <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Idoneidad Organizacional</p>
+              <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>{surveyTitle}</p>
             </div>
           </div>
         </header>
@@ -192,15 +203,23 @@ export default function ExternalSurveyView() {
         <main className="flex-1 flex flex-col items-center px-4 py-6">
           <div className="w-full max-w-xl bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-100">
-              <h1 className="text-xl font-bold text-gray-900 mb-2">Encuesta de Madurez y Enfoque</h1>
+              <h1 className="text-xl font-bold text-gray-900 mb-2">
+                {isIdoneidad ? 'Encuesta de Madurez y Enfoque' : `Encuesta de ${surveyTitle}`}
+              </h1>
               <p className="text-gray-600 text-sm leading-relaxed mb-4">
-                Este instrumento evalúa las características críticas de la organización para determinar el enfoque de gestión más eficiente (Predictivo, Ágil o Híbrido) basado en el Apéndice X3 de la Guía Práctica de Ágil del PMI®.
+                {isIdoneidad 
+                  ? 'Este instrumento evalúa las características críticas de la organización para determinar el enfoque de gestión más eficiente (Predictivo, Ágil o Híbrido) basado en el Apéndice X3 de la Guía Práctica de Ágil del PMI®.' 
+                  : 'Este instrumento evalúa el nivel de madurez actual en las prácticas de gestión de proyectos de su organización.'}
               </p>
               <div className="bg-indigo-50/50 text-indigo-800 text-xs p-3 rounded-xl border border-indigo-100/50 space-y-1">
                 <p><strong>Instrucciones:</strong></p>
                 <ul className="list-disc pl-4 space-y-0.5 opacity-90">
                   <li>Responda según la situación actual, no según cómo debería ser.</li>
-                  <li>La escala va del 0 (Altamente Ágil) al 10 (Altamente Predictivo).</li>
+                  <li>
+                    {isIdoneidad 
+                      ? 'La escala va del 0 (Altamente Ágil) al 10 (Altamente Predictivo).' 
+                      : 'La escala va de 1 (Nunca) a 5 (Siempre).'}
+                  </li>
                   <li>No existen respuestas correctas o incorrectas.</li>
                 </ul>
               </div>
@@ -268,7 +287,7 @@ export default function ExternalSurveyView() {
             </div>
             <div>
               <p className="text-gray-400 text-xs" style={{ fontWeight: 500 }}>Universidad ICESI · PMO Intelligence Platform</p>
-              <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Encuesta de Madurez de la PMO</p>
+              <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Encuesta de {surveyTitle}</p>
             </div>
           </div>
           {/* Progress Bar */}
@@ -333,7 +352,7 @@ export default function ExternalSurveyView() {
                       </div>
                     )}
 
-                    {parts.scale && (
+                    {isIdoneidad && parts.scale && (
                       <div className="bg-indigo-50/40 border border-indigo-100/60 rounded-xl p-3 mb-3">
                         <span className="block text-xs font-bold text-indigo-500 uppercase tracking-wider mb-2">
                           Escala y Criterios de Calificación
@@ -350,22 +369,28 @@ export default function ExternalSurveyView() {
                   </>
                 );
               })()}
-              <p className="text-gray-500 text-sm mb-3">Mueve el selector para calificar del 1 (Ágil) al 10 (Predictivo).</p>
+              <p className="text-gray-500 text-sm mb-3">
+                {isIdoneidad 
+                  ? 'Mueve el selector para calificar del 1 (Ágil) al 10 (Predictivo).' 
+                  : 'Seleccione un valor en la escala del 1 (Nunca) al 5 (Siempre).'}
+              </p>
 
-              {/* Likert Scale UI (1-10) */}
+              {/* Likert Scale UI */}
               <div className="mt-2 relative pt-3 pb-6">
                 {/* Visual labels */}
-                <div className="flex justify-between text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
-                  <span>← Más Ágil</span>
-                  <span>Más Predictivo →</span>
-                </div>
+                {isIdoneidad && (
+                  <div className="flex justify-between text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                    <span>← Más Ágil</span>
+                    <span>Más Predictivo →</span>
+                  </div>
+                )}
 
-                {/* The 1-10 Buttons Row */}
+                {/* The Buttons Row */}
                 <div className="flex justify-between items-center w-full relative">
                   {/* Track line behind buttons */}
                   <div className="absolute left-0 right-0 h-1 bg-gray-200 rounded-full z-0 top-1/2 -translate-y-1/2 mx-4" />
                   
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => {
+                  {(isIdoneidad ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] : [1, 2, 3, 4, 5]).map((val) => {
                     const isSelected = selectedAnswer === val;
                     return (
                       <button
@@ -397,7 +422,7 @@ export default function ExternalSurveyView() {
                         exit={{ opacity: 0, y: -5 }}
                         className="text-indigo-600 font-semibold"
                       >
-                        {selectedAnswer}: {INTERPRETATION_MAP[selectedAnswer]}
+                        {selectedAnswer}: {isIdoneidad ? INTERPRETATION_MAP_IDONEIDAD[selectedAnswer] : INTERPRETATION_MAP_MADUREZ[selectedAnswer]}
                       </motion.p>
                     ) : (
                       <p className="text-gray-400 text-sm">Selecciona un valor para continuar</p>

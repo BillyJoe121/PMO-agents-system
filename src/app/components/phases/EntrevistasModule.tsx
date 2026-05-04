@@ -4,11 +4,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, AlertTriangle, Send,
   User, Briefcase, FileText, CheckCircle2, MessageSquare, Sparkles, ChevronDown,
-  Calendar, Clock, MousePointerClick, Upload, Paperclip, FileUp
+  Calendar, Clock, MousePointerClick, Upload, Paperclip, FileUp, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
+import JSZip from 'jszip';
 import { useApp } from '../../context/AppContext';
 import { useEntrevistas, type EntrevistaLocal as Entrevista, type EntrevistasDiagnosis } from '../../hooks/useEntrevistas';
+import { useSoundManager } from '../../hooks/useSoundManager';
+import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 
@@ -164,11 +167,26 @@ function DetailPanel({ entrevista, onEdit, onDelete }: DetailPanelProps) {
       {entrevista.fileName && (
         <div className="mb-6">
           <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Archivo adjunto</p>
-          <a
-            href={entrevista.storagePath}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors w-full group"
+          <button
+            onClick={async () => {
+              try {
+                let url = entrevista.storagePath || '';
+                if (url && url.includes('token=')) {
+                  const match = url.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+                  if (match && match[1]) {
+                    const rawPath = decodeURIComponent(match[1]);
+                    const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(rawPath, 3600);
+                    if (data?.signedUrl) url = data.signedUrl;
+                  }
+                }
+                if (url) {
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }
+              } catch (err) {
+                console.error('Error al abrir archivo:', err);
+              }
+            }}
+            className="inline-flex items-center gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors w-full group text-left"
           >
             <div className="w-8 h-8 rounded-lg bg-white border border-indigo-100/50 flex items-center justify-center flex-shrink-0 group-hover:border-indigo-200 transition-colors">
               <FileText size={14} className="text-indigo-500" strokeWidth={1.75} />
@@ -177,7 +195,7 @@ function DetailPanel({ entrevista, onEdit, onDelete }: DetailPanelProps) {
               <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>{entrevista.fileName}</p>
               <p className="text-indigo-500 text-[11px]">Ver documento original ↗</p>
             </div>
-          </a>
+          </button>
         </div>
       )}
 
@@ -212,7 +230,10 @@ interface FormPanelProps {
 }
 
 function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: FormPanelProps) {
-  const title = mode === 'edit' ? `Editando: ${formData.nombre || 'Entrevista'}` : 'Nueva Entrevista';
+  const isBanco = formData.cargo === 'No aplica' && formData.area === 'No aplica';
+  const title = mode === 'edit' 
+    ? (isBanco ? `Editando Banco: ${formData.nombre || 'Documento'}` : `Editando: ${formData.nombre || 'Entrevista'}`) 
+    : (isBanco ? 'Nuevo Banco de Entrevistas' : 'Nueva Entrevista');
 
   // ---- File upload state ----
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -300,13 +321,14 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
         {/* Nombre */}
         <div className="flex flex-col gap-1.5">
           <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-            <User size={11} strokeWidth={1.75} /> Nombre del entrevistado
+            {isBanco ? <FileUp size={11} strokeWidth={1.75} /> : <User size={11} strokeWidth={1.75} />} 
+            {isBanco ? 'Nombre del documento o lote' : 'Nombre del entrevistado'}
           </label>
           <input
             type="text"
             value={formData.nombre}
             onChange={e => onChange('nombre', e.target.value)}
-            placeholder="Ej: Juan Carlos Restrepo"
+            placeholder={isBanco ? 'Ej: Transcripciones Grupo Operaciones' : 'Ej: Juan Carlos Restrepo'}
             className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
               ${formErrors.nombre ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
             `}
@@ -315,33 +337,35 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
         </div>
 
         {/* Cargo + Área */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-              <Briefcase size={11} strokeWidth={1.75} /> Cargo / Rol
-            </label>
-            <input
-              type="text"
-              value={formData.cargo}
-              onChange={e => onChange('cargo', e.target.value)}
-              placeholder="Ej: Gerente de Operaciones"
-              className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
-                ${formErrors.cargo ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
-              `}
-            />
-            {formErrors.cargo && <p className="text-rose-500 text-[11px]">{formErrors.cargo}</p>}
+        {!isBanco && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
+                <Briefcase size={11} strokeWidth={1.75} /> Cargo / Rol
+              </label>
+              <input
+                type="text"
+                value={formData.cargo}
+                onChange={e => onChange('cargo', e.target.value)}
+                placeholder="Ej: Gerente de Operaciones"
+                className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
+                  ${formErrors.cargo ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
+                `}
+              />
+              {formErrors.cargo && <p className="text-rose-500 text-[11px]">{formErrors.cargo}</p>}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Área / Departamento</label>
+              <input
+                type="text"
+                value={formData.area}
+                onChange={e => onChange('area', e.target.value)}
+                placeholder="Ej: TI, Finanzas…"
+                className="w-full px-3.5 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none transition-all bg-white focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 placeholder:text-neutral-400"
+              />
+            </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Área / Departamento</label>
-            <input
-              type="text"
-              value={formData.area}
-              onChange={e => onChange('area', e.target.value)}
-              placeholder="Ej: TI, Finanzas…"
-              className="w-full px-3.5 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none transition-all bg-white focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 placeholder:text-neutral-400"
-            />
-          </div>
-        </div>
+        )}
 
         {/* Notes + Upload */}
         <div className="flex flex-col gap-1.5 flex-1">
@@ -512,6 +536,7 @@ export default function EntrevistasModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getProject, updatePhaseStatus } = useApp();
+  const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 2);
@@ -541,27 +566,107 @@ export default function EntrevistasModule() {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // ---- Send & processing state ----
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-
-  // ---- Completed view accordion ----
+  const [showConfirm, setShowConfirm]       = useState(false);
+  const [isSending, setIsSending]           = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  useEffect(() => {
-    if (isProcessing) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+  // ---- Handlers (declared before early returns) ──────────────────────────────
+  const handleDownloadZip = async () => {
+    if (entrevistas.length === 0) {
+      toast.error('No hay entrevistas registradas.');
+      return;
     }
-    return () => { document.body.style.overflow = ''; };
-  }, [isProcessing]);
 
-  // ---- Handlers ----
+    setIsDownloadingZip(true);
+    const zip = new JSZip();
+    const folder = zip.folder("Entrevistas_PMO");
+
+    try {
+      for (const e of entrevistas) {
+        if (e.storagePath && e.fileName) {
+          try {
+            let fileData: Blob | null = null;
+            if (e.storagePath.startsWith('http')) {
+              try {
+                const res = await fetch(e.storagePath);
+                if (res.ok) {
+                  fileData = await res.blob();
+                } else if (res.status === 403 || res.status === 401 || !res.ok) {
+                  // Probablemente el token expiró, intentamos extraer el path y descargar vía SDK
+                  const pathMatch = e.storagePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+                  const rawPath = pathMatch ? decodeURIComponent(pathMatch[1]) : e.storagePath;
+                  
+                  if (rawPath) {
+                    const { data: storageBlob, error: storageErr } = await supabase.storage
+                      .from('documentos-pmo')
+                      .download(rawPath);
+                    if (!storageErr) fileData = storageBlob;
+                  }
+                }
+              } catch (fetchErr) {
+                console.warn("Fetch falló, intentando descarga directa...", fetchErr);
+                // Fallback catch
+                const pathMatch = e.storagePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+                const rawPath = pathMatch ? decodeURIComponent(pathMatch[1]) : e.storagePath;
+                if (rawPath) {
+                  const { data: storageBlob, error: storageErr } = await supabase.storage
+                    .from('documentos-pmo')
+                    .download(rawPath);
+                  if (!storageErr) fileData = storageBlob;
+                }
+              }
+            } 
+            
+            // Si aún no tenemos data (o no era una URL), intentamos descarga directa con el path guardado
+            if (!fileData && !e.storagePath.startsWith('http')) {
+              const pathMatch = e.storagePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+              const rawPath = pathMatch ? decodeURIComponent(pathMatch[1]) : e.storagePath;
+              
+              const { data: storageBlob, error: storageErr } = await supabase.storage
+                .from('documentos-pmo')
+                .download(rawPath);
+              if (!storageErr) fileData = storageBlob;
+            }
+
+            if (fileData) {
+              folder?.file(e.fileName, fileData);
+            } else {
+              folder?.file(`${e.nombre}_error_descarga.txt`, `No se pudo obtener el archivo original: ${e.fileName}\nPath: ${e.storagePath}`);
+            }
+          } catch (err) {
+            console.error(`Error al procesar archivo ${e.fileName}:`, err);
+            folder?.file(`${e.nombre}_error_critico.txt`, `Error inesperado al descargar ${e.fileName}`);
+          }
+        } else {
+          const content = `ENTREVISTA REGISTRADA\n\nNombre: ${e.nombre}\nCargo: ${e.cargo}\nÁrea: ${e.area}\nFecha: ${e.createdAt || 'N/A'}\n\nNOTAS:\n${e.notas}`;
+          const safeName = e.nombre.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          folder?.file(`${safeName}.txt`, content);
+        }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Entrevistas_${project?.companyName.replace(/\s+/g, '_') || 'Proyecto'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Archivo comprimido generado con éxito');
+    } catch (error) {
+      console.error('Error generando el ZIP:', error);
+      toast.error('Error al generar el archivo comprimido.');
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
   const handleSelectInterview = (e: Entrevista) => {
     setSelectedId(e.id);
     setPanelMode('detail');
@@ -574,6 +679,13 @@ export default function EntrevistasModule() {
     setPanelMode('new');
   };
 
+  const handleNewDocumentBanco = () => {
+    setSelectedId(null);
+    setFormData({ ...EMPTY_FORM, cargo: 'No aplica', area: 'No aplica' });
+    setFormErrors({});
+    setPanelMode('new');
+  };
+
   const handleEdit = () => {
     const entrevista = entrevistas.find(e => e.id === selectedId);
     if (!entrevista) return;
@@ -582,16 +694,19 @@ export default function EntrevistasModule() {
     setPanelMode('edit');
   };
 
-  const handleDelete = (id: string) => {
-    setEntrevistas(prev => prev.filter(e => e.id !== id));
-    if (selectedId === id) {
-      setSelectedId(null);
-      setPanelMode('empty');
+  const handleDelete = async (entrevista: Entrevista) => {
+    try {
+      await deleteEntrevista(entrevista);
+      if (selectedId === entrevista.id) {
+        setSelectedId(null);
+        setPanelMode('empty');
+      }
+    } catch (error) {
+      console.error('Error al eliminar entrevista:', error);
     }
-    toast.success('Entrevista eliminada');
   };
 
-  const handleFormChange = (field: string, value: string) => {
+  const handleFormChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setFormErrors(prev => ({ ...prev, [field]: '' }));
   };
@@ -609,7 +724,6 @@ export default function EntrevistasModule() {
     if (Object.keys(errs).length > 0) { setFormErrors(errs); return; }
 
     const loadingToast = toast.loading('Guardando...');
-
     try {
       if (panelMode === 'edit' && selectedId) {
         const existing = entrevistas.find(e => e.id === selectedId);
@@ -624,7 +738,7 @@ export default function EntrevistasModule() {
         setPanelMode('detail');
       } else {
         const newE: Entrevista = {
-          id: `local_${Date.now()}`, // Temporary local ID
+          id: `local_${Date.now()}`,
           ...formData,
           createdAt: new Date().toLocaleDateString('es-CO'),
         };
@@ -671,11 +785,13 @@ export default function EntrevistasModule() {
       const result = await processPhase();
       if (result) {
         updatePhaseStatus(projectId!, 2, 'completado', 'Análisis consolidado de entrevistas completado.');
+        playPhaseComplete();
         toast.success('¡Fase 2 completada!', { description: 'El Agente ha finalizado el análisis de entrevistas.' });
         await fetchInitialData();
       }
     } catch {
       updatePhaseStatus(projectId!, 2, 'disponible');
+      playProcessError();
     } finally {
       setIsSending(false);
     }
@@ -766,55 +882,11 @@ export default function EntrevistasModule() {
           /* COMPLETED VIEW                                           */
           /* ======================================================= */
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div className="grid grid-cols-5 gap-5">
-              {/* Read-only accordion list */}
-              <div className="col-span-2 order-2 bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Entrevistas registradas</h3>
-                  <span className="text-[11px] text-neutral-400 tabular-nums">{entrevistas.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {entrevistas.map(e => (
-                    <div key={e.id}>
-                      <button
-                        onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
-                        className="w-full flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 text-left">
-                          <div className="w-8 h-8 rounded-full bg-white border border-neutral-200/80 flex items-center justify-center">
-                            <User size={13} className="text-neutral-700" strokeWidth={1.75} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>{e.nombre}</p>
-                              {e.fileName && (
-                                <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1">
-                                  <Paperclip size={10} /> PDF
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-neutral-500 text-[11px]">{e.cargo} · {e.area}</p>
-                          </div>
-                        </div>
-                        <ChevronDown size={13} className={`text-neutral-400 transition-transform ${expandedId === e.id ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-                      </button>
-                      <AnimatePresence>
-                        {expandedId === e.id && (
-                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-                            <p className="text-neutral-700 text-[13px] p-4 leading-relaxed bg-neutral-50 rounded-b-xl border-t border-neutral-100 whitespace-pre-wrap">
-                              {e.notas}
-                            </p>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="flex flex-col gap-5">
 
               {/* Agent diagnosis */}
               {diagnosis && (
-                <div className="col-span-3 order-1 flex flex-col gap-5">
+                <div className="flex flex-col gap-5">
 
                   {/* Top Summary Card */}
                   <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
@@ -845,50 +917,49 @@ export default function EntrevistasModule() {
                     </div>
                   </div>
 
-                  {/* Recurring Themes & Key Findings */}
-                  <div className="grid grid-cols-2 gap-5">
-                    {diagnosis.recurring_themes && diagnosis.recurring_themes.length > 0 && (
-                      <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Temas Recurrentes</p>
-                        <div className="space-y-4">
-                          {diagnosis.recurring_themes.map((theme, i) => (
-                            <div key={i} className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
-                              <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>{theme.theme}</p>
-                              <div className="flex items-center gap-2 mt-1.5">
-                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[10px]" style={{ fontWeight: 500 }}>{theme.frequency}</span>
-                                <span className="text-neutral-400 text-[11px] truncate">Por: {theme.mentioned_by.join(', ')}</span>
-                              </div>
+                  {/* Recurring Themes */}
+                  {diagnosis.recurring_themes && diagnosis.recurring_themes.length > 0 && (
+                    <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Temas Recurrentes</p>
+                      <div className="space-y-4">
+                        {diagnosis.recurring_themes.map((theme, i) => (
+                          <div key={i} className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
+                            <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>{theme.theme}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-600 text-[10px]" style={{ fontWeight: 500 }}>{theme.frequency}</span>
+                              <span className="text-neutral-400 text-[11px] truncate">Por: {theme.mentioned_by.join(', ')}</span>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {diagnosis.key_findings && diagnosis.key_findings.length > 0 && (
-                      <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Hallazgos Clave</p>
-                        <ul className="space-y-3">
-                          {diagnosis.key_findings.map((finding, i) => (
-                            <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
-                              <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-900 flex-shrink-0" />
-                              {finding}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                  {/* Key Findings */}
+                  {diagnosis.key_findings && diagnosis.key_findings.length > 0 && (
+                    <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Hallazgos Clave</p>
+                      <ul className="space-y-3">
+                        {diagnosis.key_findings.map((finding, i) => (
+                          <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
+                            <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-900 flex-shrink-0" />
+                            {finding}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* Critical Voices */}
                   {diagnosis.critical_voices && diagnosis.critical_voices.length > 0 && (
-                    <div className="rounded-2xl border border-rose-100 bg-rose-50/30 p-6">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-rose-500 mb-4" style={{ fontWeight: 500 }}>Voces Críticas</p>
-                      <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-2xl border border-neutral-200/70 bg-neutral-50/50 p-6">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>Voces Críticas</p>
+                      <div className="space-y-4">
                         {diagnosis.critical_voices.map((voice, i) => (
-                          <div key={i} className="p-4 bg-white rounded-xl border border-rose-100">
-                            <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>{voice.interviewee_name}</p>
-                            <p className="text-rose-600 text-[12px] leading-relaxed mb-2">"{voice.key_insight}"</p>
-                            <span className="inline-block px-2 py-0.5 bg-neutral-100 text-neutral-500 rounded text-[10px]" style={{ fontWeight: 500 }}>Relevancia: {voice.relevance}</span>
+                          <div key={i} className="p-5 bg-white rounded-xl border border-neutral-200/70">
+                            <p className="text-neutral-900 text-[13px] mb-1.5" style={{ fontWeight: 600 }}>{voice.interviewee_name}</p>
+                            <p className="text-neutral-700 text-[13px] leading-relaxed mb-3">"{voice.key_insight}"</p>
+                            <span className="inline-block px-2.5 py-1 bg-neutral-50 border border-neutral-100 text-neutral-500 rounded-md text-[10px]" style={{ fontWeight: 500 }}>Relevancia: {voice.relevance}</span>
                           </div>
                         ))}
                       </div>
@@ -897,12 +968,12 @@ export default function EntrevistasModule() {
 
                   {/* Recomendaciones */}
                   {diagnosis.recommendations && diagnosis.recommendations.length > 0 && (
-                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-6">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-indigo-500 mb-4" style={{ fontWeight: 500 }}>Recomendaciones</p>
+                    <div className="rounded-2xl border border-neutral-200/70 bg-neutral-50 p-6">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>Recomendaciones</p>
                       <ul className="space-y-3">
                         {diagnosis.recommendations.map((rec, i) => (
                           <li key={i} className="flex items-start gap-3 text-neutral-700 text-[13px] leading-relaxed">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-2 flex-shrink-0" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-neutral-400 mt-2 flex-shrink-0" />
                             {rec}
                           </li>
                         ))}
@@ -912,6 +983,63 @@ export default function EntrevistasModule() {
 
                 </div>
               )}
+
+              {/* Read-only accordion list */}
+              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Entrevistas registradas</h3>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleDownloadZip}
+                      disabled={isDownloadingZip}
+                      className="flex items-center gap-1.5 text-[11px] text-neutral-500 hover:text-neutral-900 transition-colors disabled:opacity-50"
+                      style={{ fontWeight: 500 }}
+                    >
+                      {isDownloadingZip ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                      Descargar todo
+                    </button>
+                    <span className="text-[11px] text-neutral-400 tabular-nums">{entrevistas.length}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {entrevistas.map(e => (
+                    <div key={e.id}>
+                      <button
+                        onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
+                        className="w-full flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 text-left">
+                          <div className="w-8 h-8 rounded-full bg-white border border-neutral-200/80 flex items-center justify-center">
+                            <User size={13} className="text-neutral-700" strokeWidth={1.75} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>{e.nombre}</p>
+                              {e.fileName && (
+                                <span className="bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 border border-neutral-200/60">
+                                  <Paperclip size={10} /> PDF
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-neutral-500 text-[11px]">{e.cargo} · {e.area}</p>
+                          </div>
+                        </div>
+                        <ChevronDown size={13} className={`text-neutral-400 transition-transform ${expandedId === e.id ? 'rotate-180' : ''}`} strokeWidth={1.75} />
+                      </button>
+                      <AnimatePresence>
+                        {expandedId === e.id && (
+                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+                            <p className="text-neutral-700 text-[13px] p-4 leading-relaxed bg-neutral-50 rounded-b-xl border-t border-neutral-100 whitespace-pre-wrap">
+                              {e.notas}
+                            </p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
           </motion.div>
         ) : (
@@ -924,11 +1052,21 @@ export default function EntrevistasModule() {
               <motion.button
                 whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                 onClick={handleNewInterview}
-                className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-neutral-300 text-neutral-700 text-[13px] mb-4 transition-all hover:bg-white hover:border-neutral-400"
+                className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-neutral-300 text-neutral-700 text-[13px] mb-2 transition-all hover:bg-white hover:border-neutral-400"
                 style={{ fontWeight: 500 }}
               >
                 <Plus size={14} strokeWidth={1.75} />
                 Agregar nueva entrevista
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ y: -1 }} whileTap={{ y: 0 }}
+                onClick={handleNewDocumentBanco}
+                className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-neutral-300 text-neutral-700 text-[13px] mb-4 transition-all hover:bg-neutral-50 hover:border-neutral-400"
+                style={{ fontWeight: 500 }}
+              >
+                <FileUp size={14} strokeWidth={1.75} />
+                Agregar documento con banco de entrevistas
               </motion.button>
 
               {/* List */}
@@ -970,7 +1108,7 @@ export default function EntrevistasModule() {
                           </div>
                         </div>
                         <button
-                          onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id); }}
+                          onClick={(ev) => { ev.stopPropagation(); handleDelete(e); }}
                           className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-300 hover:text-rose-600 hover:bg-rose-50 transition-colors flex-shrink-0"
                         >
                           <Trash2 size={12} strokeWidth={1.75} />
@@ -1008,7 +1146,7 @@ export default function EntrevistasModule() {
                       key={`detail-${selectedEntrevista.id}`}
                       entrevista={selectedEntrevista}
                       onEdit={handleEdit}
-                      onDelete={() => handleDelete(selectedEntrevista.id)}
+                      onDelete={() => handleDelete(selectedEntrevista)}
                     />
                   )}
 
@@ -1044,7 +1182,7 @@ export default function EntrevistasModule() {
               className="px-6 py-3 rounded-full text-white text-[13px] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
             >
-              Marcar fase como completada
+              Enviar al Agente
             </motion.button>
           </div>
         </div>

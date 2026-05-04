@@ -13,6 +13,7 @@ export interface EncuestaLink {
   proyecto_id: string;
   token: string;
   activo: boolean;
+  tipo_encuesta: string;
 }
 
 export function useEncuestaExterna(token: string) {
@@ -50,6 +51,7 @@ export function useEncuestaExterna(token: string) {
         const { data: qData, error: qError } = await supabase
           .from('banco_preguntas')
           .select('id, codigo, categoria, texto_pregunta')
+          .eq('tipo_encuesta', linkData.tipo_encuesta)
           .order('codigo', { ascending: true });
 
         if (qError) throw qError;
@@ -92,6 +94,7 @@ export function useEncuestaExterna(token: string) {
         nombre_encuestado: nombre,
         cargo_encuestado: cargo,
         area_encuestado: area,
+        tipo_encuesta: linkInfo.tipo_encuesta,
         respuestas: respuestasArray
       });
 

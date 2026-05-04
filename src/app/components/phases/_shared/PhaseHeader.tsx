@@ -80,9 +80,8 @@ export default function PhaseHeader({
 
             <span className="text-neutral-300">/</span>
 
-            {/* Current phase */}
             <div className="flex items-center gap-2 min-w-0">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-neutral-900 text-white text-[10px] tabular-nums flex-shrink-0" style={{ fontWeight: 600 }}>
+              <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-white text-[10px] tabular-nums flex-shrink-0 ${phase?.status === 'completado' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.2)]' : 'bg-neutral-900'}`} style={{ fontWeight: 600 }}>
                 {phaseNumber}
               </span>
               <span className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>
@@ -186,7 +185,7 @@ export default function PhaseHeader({
                 if (isCurrent) {
                   itemClass = "bg-neutral-900 border-neutral-900 text-white font-medium shadow-sm hover:bg-neutral-800";
                 } else if (isCompleted) {
-                  itemClass = "bg-emerald-50/40 border-emerald-100/60 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200/70";
+                  itemClass = "bg-neutral-100/60 border-neutral-200/60 text-neutral-900 hover:bg-neutral-100 hover:border-neutral-300";
                 } else if (isBlocked) {
                   itemClass = "bg-transparent border-transparent text-neutral-400 cursor-not-allowed opacity-60";
                 } else {
@@ -206,7 +205,7 @@ export default function PhaseHeader({
                         isCurrent
                           ? "bg-white/20 text-white"
                           : isCompleted
-                          ? "bg-emerald-100 text-emerald-800"
+                          ? "bg-emerald-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.2)]"
                           : "bg-neutral-100 text-neutral-600"
                       }`}
                     >

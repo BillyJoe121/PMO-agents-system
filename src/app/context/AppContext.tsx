@@ -3,6 +3,7 @@ import React, {
   useEffect, useCallback, ReactNode,
 } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS
@@ -161,6 +162,8 @@ const AppContext = createContext<AppContextType | null>(null);
 // PROVEEDOR
 // ─────────────────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<Auditor>({
@@ -229,10 +232,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchProjects();
-    fetchCurrentUser();
+    if (session) {
+      fetchProjects();
+      fetchCurrentUser();
+    } else {
+      setProjects([]);
+      setCurrentUser({ id: '', name: 'Usuario', initials: 'US', color: '#030213' });
+    }
+  }, [session, fetchProjects, fetchCurrentUser]);
 
-    // Suscripción a Realtime de Supabase para detectar cuando agentes terminan en background
+  useEffect(() => {
+    if (!session) return;
     const channel = supabase
       .channel('realtime_fases_estado_global')
       .on(
@@ -439,6 +449,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               status: 'disponible' as PhaseStatus,
               completedAt: undefined,
               agentDiagnosis: undefined,
+              agentData: undefined,
             };
           }
           if (phase.number > phaseNumber) {
@@ -447,6 +458,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               status: 'bloqueado' as PhaseStatus,
               completedAt: undefined,
               agentDiagnosis: undefined,
+              agentData: undefined,
             };
           }
           return phase;

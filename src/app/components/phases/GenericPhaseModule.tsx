@@ -22,8 +22,8 @@ function ConfirmModal({ open, phaseName, onCancel, onConfirm, isLoading }: {
             style={{ boxShadow: '0 24px 64px -16px rgba(0,0,0,0.18)' }}
           >
             <div className="flex items-start gap-4 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={16} className="text-amber-600" strokeWidth={1.75} />
+              <div className="w-10 h-10 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={16} className="text-neutral-500" strokeWidth={1.75} />
               </div>
               <div>
                 <h3 className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>
@@ -124,7 +124,7 @@ export default function GenericPhaseModule() {
               {phase.name}
             </h1>
             {isCompleted && (
-              <div className="inline-flex items-center gap-1.5 mt-3 text-emerald-700 text-[12px]" style={{ fontWeight: 500 }}>
+              <div className="inline-flex items-center gap-1.5 mt-3 text-neutral-900 text-[12px]" style={{ fontWeight: 600 }}>
                 <CheckCircle2 size={13} /> Fase completada
               </div>
             )}
@@ -157,7 +157,7 @@ export default function GenericPhaseModule() {
             <p className="text-neutral-700 text-[14px] leading-relaxed">{phase.agentDiagnosis}</p>
             {phase.completedAt && (
               <p className="text-neutral-400 text-[11px] mt-5 flex items-center gap-1.5">
-                <CheckCircle2 size={11} className="text-emerald-500" />
+                <CheckCircle2 size={11} className="text-neutral-900" />
                 Completada el {phase.completedAt}
               </p>
             )}

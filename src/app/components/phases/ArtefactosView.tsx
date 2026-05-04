@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, X, Download, Archive, RotateCcw,
+  ArrowLeft, X, Download, Archive,
   Loader2, AlertTriangle, CheckCircle2, Send,
   FileSpreadsheet, FileText, File,
 } from 'lucide-react';
@@ -64,16 +64,16 @@ const MOCK_ARTIFACTS: Artifact[] = [
 ];
 
 function FormatIcon({ format }: { format: Artifact['format'] }) {
-  if (format === 'xlsx') return <FileSpreadsheet size={28} className="text-green-600" />;
-  if (format === 'docx') return <FileText size={28} className="text-blue-600" />;
-  return <File size={28} className="text-red-500" />;
+  if (format === 'xlsx') return <FileSpreadsheet size={28} className="text-neutral-900" />;
+  if (format === 'docx') return <FileText size={28} className="text-neutral-700" />;
+  return <File size={28} className="text-neutral-500" />;
 }
 
 function FormatBadge({ format }: { format: Artifact['format'] }) {
   const styles = {
-    xlsx: 'bg-green-100 text-green-700',
-    docx: 'bg-blue-100 text-blue-700',
-    pdf: 'bg-red-100 text-red-600',
+    xlsx: 'bg-neutral-900 text-white',
+    docx: 'bg-neutral-200 text-neutral-800',
+    pdf: 'bg-neutral-100 text-neutral-600',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full uppercase tracking-wide ${styles[format]}`} style={{ fontWeight: 600 }}>
@@ -127,8 +127,8 @@ function ConfirmFinalModal({
             className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6"
           >
             <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={20} className="text-amber-600" />
+              <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} className="text-neutral-600" />
               </div>
               <div>
                 <h3 className="text-gray-900 mb-2" style={{ fontWeight: 600 }}>Cierre definitivo del proyecto</h3>
@@ -138,7 +138,7 @@ function ConfirmFinalModal({
                 </p>
               </div>
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700 leading-relaxed">
+            <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 mb-5 text-xs text-neutral-600 leading-relaxed">
               Esta acción cerrará el proyecto y notificará al cliente. Esta operación es irreversible.
             </div>
             <div className="flex gap-3">
@@ -153,7 +153,7 @@ function ConfirmFinalModal({
                 onClick={onConfirm}
                 disabled={isLoading}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#16a34a', fontWeight: 600 }}
+                style={{ background: '#0a0a0a', fontWeight: 600 }}
               >
                 {isLoading
                   ? <><Loader2 size={14} className="animate-spin" /> Cerrando...</>
@@ -176,8 +176,6 @@ export default function ArtefactosView() {
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 8);
 
-  const [adjustmentText, setAdjustmentText] = useState('');
-  const [isReprocessing, setIsReprocessing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
@@ -185,23 +183,12 @@ export default function ArtefactosView() {
 
   const isCompleted = phase.status === 'completado';
 
-  const handleReprocess = async () => {
-    if (!adjustmentText.trim()) {
-      toast.error('Ingresa los ajustes antes de re-procesar.');
-      return;
-    }
-    setIsReprocessing(true);
-    // RF-F8-04: Implementar JSZip o llamar a endpoint de Supabase Edge Function para comprimir
-    await new Promise(r => setTimeout(r, 3000));
-    setIsReprocessing(false);
-    setAdjustmentText('');
-    toast.success('Artefactos re-procesados', { description: 'El Agente 8 actualizó el paquete.' });
-  };
+
 
   const handleFinalApprove = async () => {
     setIsSending(true);
-    // TODO: Mutación final -> update public.proyectos set fecha_cierre = NOW()
-    await new Promise(r => setTimeout(r, 1000));
+    // TODO: Mutación real -> update public.proyectos set fecha_cierre = NOW()
+    // Timeout eliminado por petición del usuario
     setIsSending(false);
     setShowConfirm(false);
     updatePhaseStatus(projectId!, 8, 'completado',
@@ -210,8 +197,39 @@ export default function ArtefactosView() {
     navigate(`/dashboard/project/${projectId}`);
   };
 
+  const renderProcessing = () => (
+    <AnimatePresence>
+      {isSending && (
+        <motion.div 
+          key="processing-overlay"
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+        >
+          <div 
+            className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 
+            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+          >
+            <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
+          </div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
+            Procesando
+          </p>
+          <h2 className="text-neutral-900 tracking-tight mb-2" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
+            Finalizando proyecto
+          </h2>
+          <p className="text-neutral-500 text-[13px] mt-2 max-w-sm text-center">
+            El Agente 8 está consolidando el paquete final de artefactos y registrando el cierre del proyecto...
+          </p>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {renderProcessing()}
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm flex-shrink-0">
         <div className="px-6 py-4 flex items-center justify-between">
@@ -261,21 +279,8 @@ export default function ArtefactosView() {
             </button>
           </div>
 
-          {/* Reprocessing Overlay */}
+          {/* Artifacts Grid Container */}
           <div className="flex-1 overflow-y-auto p-6 relative">
-            <AnimatePresence>
-              {isReprocessing && (
-                <motion.div
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center"
-                >
-                  <Loader2 size={36} className="text-blue-500 animate-spin mb-3" />
-                  <p className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>Regenerando artefactos...</p>
-                  <p className="text-gray-400 text-xs mt-1">El Agente 8 está procesando los cambios</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {/* RF-F8-03 */}
             <div className="grid grid-cols-3 gap-4">
               {MOCK_ARTIFACTS.map(artifact => (
@@ -291,49 +296,32 @@ export default function ArtefactosView() {
             <div>
               <h3 className="text-gray-700 text-sm mb-1" style={{ fontWeight: 600 }}>Estado del Paquete</h3>
               <div className="flex items-center gap-2 text-sm mt-2">
-                <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-neutral-900 flex-shrink-0" />
                 <span className="text-gray-600">{MOCK_ARTIFACTS.length} artefactos generados</span>
               </div>
               <div className="flex items-center gap-2 text-sm mt-1.5">
-                <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-neutral-400 flex-shrink-0" />
                 <span className="text-gray-600">Agente 8 completó el procesamiento</span>
               </div>
             </div>
 
             <hr className="border-gray-100" />
 
-            {/* Adjustment Panel */}
-            {!isCompleted ? (
-              <div>
-                <label className="block text-gray-700 text-sm mb-2" style={{ fontWeight: 600 }}>
-                  Solicitar ajustes al paquete de artefactos
-                </label>
-                <textarea
-                  value={adjustmentText}
-                  onChange={e => setAdjustmentText(e.target.value)}
-                  placeholder="Ej: Actualiza la Matriz de Riesgos para incluir riesgos de ciberseguridad en la columna de impacto..."
-                  rows={7}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-none leading-relaxed bg-white"
-                />
-                <p className="text-gray-400 text-xs text-right mt-1">{adjustmentText.length} caracteres</p>
-                <motion.button
-                  whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-                  onClick={handleReprocess}
-                  disabled={isReprocessing}
-                  className="w-full mt-3 py-3 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60"
-                  style={{ background: '#d97706', fontWeight: 600 }}
-                >
-                  {isReprocessing
-                    ? <><Loader2 size={14} className="animate-spin" /> Procesando...</>
-                    : <><RotateCcw size={14} /> Re-procesar Artefactos</>}
-                </motion.button>
+            {/* Adjustment Panel Removed */}
+            {!isCompleted && (
+              <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex items-start gap-3">
+                <AlertTriangle size={18} className="text-neutral-400 flex-shrink-0 mt-0.5" />
+                <p className="text-neutral-500 text-xs leading-relaxed">
+                  Revise los documentos generados. Al completar el proyecto, el paquete de artefactos se congelará y se entregará al cliente.
+                </p>
               </div>
-            ) : (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-                <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
+            )}
+            {isCompleted && (
+              <div className="bg-neutral-900 border border-neutral-900 rounded-xl p-4 flex items-center gap-3">
+                <CheckCircle2 size={18} className="text-white flex-shrink-0" />
                 <div>
-                  <p className="text-green-800 text-sm" style={{ fontWeight: 600 }}>Proyecto completado</p>
-                  <p className="text-green-600 text-xs mt-0.5">Todos los artefactos fueron aprobados.</p>
+                  <p className="text-white text-sm" style={{ fontWeight: 600 }}>Proyecto completado</p>
+                  <p className="text-neutral-400 text-xs mt-0.5">Todos los artefactos fueron aprobados.</p>
                 </div>
               </div>
             )}
@@ -345,14 +333,14 @@ export default function ArtefactosView() {
               <motion.button
                 whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
                 onClick={() => setShowConfirm(true)}
-                className="w-full py-4 rounded-xl text-white flex flex-col items-center justify-center"
-                style={{ background: '#16a34a', fontWeight: 700 }}
+                className="w-full py-4 rounded-xl text-white flex flex-col items-center justify-center shadow-lg"
+                style={{ background: '#0a0a0a', fontWeight: 700 }}
               >
                 <div className="flex items-center gap-2">
                   <CheckCircle2 size={18} />
                   Aprobar Artefactos y Completar Proyecto
                 </div>
-                <span className="text-green-200 text-xs mt-0.5" style={{ fontWeight: 400 }}>
+                <span className="text-neutral-400 text-xs mt-0.5" style={{ fontWeight: 400 }}>
                   Esta acción es irreversible
                 </span>
               </motion.button>

@@ -48,6 +48,15 @@ export interface AgentDiagnosis {
     descripcion: string;
     impacto_confiabilidad: string;
   }>;
+  estado_documentos?: Array<{
+    document_id: string;
+    codigo_catalogo: string;
+    nombre: string;
+    estado: string;
+    vigencia: string;
+    valor_analitico: string;
+    nivel_analisis: string;
+  }>;
   insumos_para_agente_4: {
     nivel_estandarizacion: string;
     nivel_calidad_documental: string;
@@ -171,7 +180,7 @@ export function useDocumentacion(projectId: string) {
           .insert({
             proyecto_id: projectId,
             storage_path: signedUrl,
-            categoria: doc.category === 'otro' ? doc.customCategory : doc.category,
+            categoria: doc.category === 'D11' ? doc.customCategory : doc.category,
             nombre_personalizado: doc.name,
             metadatos: { size_kb: Math.round(doc.size / 1024), original_name: doc.name },
           })
@@ -262,6 +271,41 @@ export function useDocumentacion(projectId: string) {
     return result;
   }, [uploadDocuments, runAgent]);
 
+  /**
+   * ELIMINAR documento: borra del Storage, de la tabla documentos y del estado local.
+   */
+  const deleteDocument = useCallback(async (doc: DocumentoLocal) => {
+    // 1. Si ya está en la DB, borrarlo
+    if (doc.dbId) {
+      // 1a. Extraer la ruta raw del storage (sin el token de la signed URL)
+      const rawPath = doc.storagePath
+        ? doc.storagePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/)?.[1]
+        : null;
+
+      if (rawPath) {
+        const decodedPath = decodeURIComponent(rawPath);
+        const { error: storageError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .remove([decodedPath]);
+        if (storageError) console.warn('Error borrando del storage:', storageError.message);
+      }
+
+      const { error: dbError } = await supabase
+        .from('documentos')
+        .delete()
+        .eq('id', doc.dbId);
+
+      if (dbError) {
+        toast.error(`Error eliminando ${doc.name}: ${dbError.message}`);
+        return;
+      }
+    }
+
+    // 2. Quitar del estado local
+    setDocumentos(prev => prev.filter(d => d.id !== doc.id));
+    toast.success(`${doc.name} eliminado correctamente.`);
+  }, [projectId]);
+
   return {
     isUploading,
     isAnalyzing,
@@ -274,5 +318,6 @@ export function useDocumentacion(projectId: string) {
     processPhase,
     runAgent,
     fetchInitialData,
+    deleteDocument,
   };
 }

@@ -11,7 +11,7 @@
  * TODO: RF-F6-04 → supabase.from('fases_resultado').upsert({ proyecto_id, fase: 6, json: resultado })
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -25,6 +25,7 @@ import { useApp } from '../../context/AppContext';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
+import { supabase } from '../../lib/supabase';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +83,7 @@ function parseMaturityLevel(diag?: string): number {
 // PMO config
 // ---------------------------------------------------------------------------
 const PMO_ICON: Record<PmoType, React.ElementType> = { Ágil: Zap, Híbrida: GitMerge, Predictiva: BarChart2 };
-const PMO_COLOR: Record<PmoType, string> = { Ágil: '#059669', Híbrida: '#4f46e5', Predictiva: '#7c3aed' };
+const PMO_COLOR: Record<PmoType, string> = { Ágil: '#171717', Híbrida: '#404040', Predictiva: '#525252' };
 
 // ---------------------------------------------------------------------------
 // Mock result builder
@@ -275,6 +276,102 @@ function buildResult(pmoType: PmoType, maturityLevel: number, comment?: string):
 }
 
 // ---------------------------------------------------------------------------
+// Agent result adapter: maps real pmo-agent output → EnfoqueResult for the UI
+// ---------------------------------------------------------------------------
+function mapAgentResult(datos: any): EnfoqueResult | null {
+  if (!datos) return null;
+  const d = datos.diagnosis ?? datos;
+  if (!d) return null;
+
+  const ga = d.guide_approach ?? {};
+  const pc = d.parametros_construccion ?? {};
+  const severityMap: Record<string, Criticidad> = {
+    critical: 'Alta', high: 'Alta', medium: 'Media', low: 'Baja',
+  };
+
+  // Principios: frameworks + tono + extensión
+  const principios: { titulo: string; descripcion: string }[] = [
+    ga.primary_framework   ? { titulo: 'Marco primario',   descripcion: ga.primary_framework } : null,
+    ga.secondary_framework ? { titulo: 'Marco secundario', descripcion: ga.secondary_framework } : null,
+    pc.tone                ? { titulo: 'Tono de la guía',  descripcion: `${pc.tone}. ${pc.tone_justification ?? ''}`.trim() } : null,
+    pc.recommended_length  ? { titulo: 'Extensión recomendada', descripcion: `${pc.recommended_length}. ${pc.length_justification ?? ''}`.trim() } : null,
+  ].filter(Boolean) as { titulo: string; descripcion: string }[];
+
+  // Puntos débiles from critical_weaknesses
+  const puntosDebiles: PuntoDebil[] = (d.critical_weaknesses ?? []).map((w: any) => ({
+    area: w.weakness ?? '',
+    criticidad: severityMap[w.severity] ?? 'Media',
+    descripcion: w.content_type_needed ? `Tipo de contenido necesario: ${w.content_type_needed}` : '',
+    impacto: (w.guide_sections_recommended ?? []).length > 0
+      ? `Abordar en secciones: ${(w.guide_sections_recommended ?? []).join(', ')}`
+      : '',
+  }));
+
+  // Instrucciones: groupings from secciones + parametros
+  const adicionales = (d.insumos_base_utilizados?.secciones_adicionales_activadas ?? []) as string[];
+  const instrucciones: InstruccionAgente7[] = [
+    {
+      categoria: 'Alcance y estructura de la guía',
+      icon: Target,
+      directrices: [
+        'Secciones base incluidas (S01–S10): siempre presentes.',
+        adicionales.length > 0
+          ? `Secciones adicionales activadas: ${adicionales.join(', ')}`
+          : 'No se activaron secciones adicionales.',
+        ...(d.secciones ?? [])
+          .filter((s: any) => s.tipo === 'adicional')
+          .map((s: any) => `${s.id} — ${s.titulo}: ${s.condicion_inclusion}`),
+      ].filter(Boolean),
+    },
+    {
+      categoria: 'Audiencia y tono',
+      icon: Lightbulb,
+      directrices: [
+        `Audiencia objetivo: ${(pc.target_audience ?? []).join(', ') || 'No especificada'}`,
+        pc.tone ? `Tono: ${pc.tone}` : null,
+        pc.tone_justification ?? null,
+        pc.recommended_length ? `Extensión: ${pc.recommended_length}` : null,
+        pc.length_justification ?? null,
+      ].filter(Boolean) as string[],
+    },
+    {
+      categoria: 'Énfasis especiales para el Agente 7',
+      icon: ListChecks,
+      directrices: (pc.special_emphasis ?? []).length > 0
+        ? pc.special_emphasis
+        : ['Sin énfasis especiales adicionales.'],
+    },
+    {
+      categoria: 'Secciones con nivel de detalle Alto',
+      icon: BookOpen,
+      directrices: (d.secciones ?? [])
+        .filter((s: any) => s.nivel_detalle_recomendado === 'Alto')
+        .map((s: any) => `${s.id} — ${s.titulo}: ${s.enfasis}`)
+        .concat(
+          (d.secciones ?? []).filter((s: any) => s.nivel_detalle_recomendado === 'Alto').length === 0
+            ? ['Ninguna sección marcada con detalle Alto.']
+            : []
+        ),
+    },
+    {
+      categoria: 'Advertencias del diagnóstico',
+      icon: ShieldAlert,
+      directrices: (d.advertencias_de_entrada ?? []).length > 0
+        ? d.advertencias_de_entrada
+        : ['No se detectaron advertencias en los datos de entrada.'],
+    },
+  ].filter(instr => instr.directrices.length > 0);
+
+  return {
+    enfoque: { tipo: ga.type ?? '', orientacion: ga.strategic_orientation ?? '', principios },
+    puntosDebiles,
+    instrucciones,
+    timestamp: new Date().toISOString(),
+    version: (datos.metadata?.iteration ?? 1) > 1 ? 'reprocesado' : 'original',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Shared: Version badge
 // ---------------------------------------------------------------------------
 function VersionBadge({ version, timestamp }: { version: DiagnosisVersion; timestamp: string }) {
@@ -303,25 +400,28 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onCancel} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6">
-            <div className="flex items-start gap-4 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-                <ThumbsUp size={20} className="text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-gray-900 mb-1" style={{ fontWeight: 600 }}>Aprobar instrucciones para el Agente 7</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">
-                  La Fase 6 quedará <strong>completada</strong>. Las instrucciones aprobadas se enviarán al Agente 7 para construir la Guía Metodológica. Esta acción no puede deshacerse.
-                </p>
-              </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 p-6"
+          >
+            <div className="mb-5">
+              <h3 className="text-neutral-900 mb-1.5" style={{ fontWeight: 500, fontSize: '1.0625rem', letterSpacing: '-0.01em' }}>¿Aprobar estas instrucciones?</h3>
+              <p className="text-neutral-500 text-[13px] leading-relaxed">
+                La Fase 6 quedará completada y las instrucciones se enviarán al Agente 7 para construir la Guía Metodológica. Esta acción no puede deshacerse.
+              </p>
             </div>
             <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50" style={{ fontWeight: 500 }}>Cancelar</button>
+              <button onClick={onCancel}
+                className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[13px] hover:bg-neutral-50 transition-colors"
+                style={{ fontWeight: 500 }}>
+                Cancelar
+              </button>
               <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
+                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 transition-all"
                 style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
-                {isLoading ? <><Loader2 size={14} className="animate-spin" />Aprobando…</> : <><ThumbsUp size={14} />Aprobar instrucciones</>}
+                {isLoading
+                  ? <><Loader2 size={13} className="animate-spin" /> Aprobando…</>
+                  : 'Aprobar instrucciones'}
               </button>
             </div>
           </motion.div>
@@ -387,8 +487,8 @@ function EnfoqueSection({ result, pmoType }: { result: EnfoqueResult; pmoType: P
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: `${color}20` }}>
-          <Target size={11} style={{ color }} />
+        <div className="w-5 h-5 rounded flex items-center justify-center bg-neutral-100">
+          <Target size={11} className="text-neutral-600" />
         </div>
         <h2 className="text-gray-700 text-sm uppercase tracking-wide" style={{ fontWeight: 700 }}>
           1 — Definición de enfoque
@@ -397,18 +497,17 @@ function EnfoqueSection({ result, pmoType }: { result: EnfoqueResult; pmoType: P
 
       {/* Type hero */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl border-2 p-5 mb-4"
-        style={{ borderColor: `${color}40`, background: `linear-gradient(135deg, ${color}08 0%, ${color}04 100%)` }}>
+        className="rounded-2xl border border-neutral-200 bg-white p-6 mb-4 shadow-sm">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm" style={{ background: color }}>
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-neutral-900 shadow-sm">
             <Icon size={22} className="text-white" />
           </div>
           <div className="flex-1">
-            <p className="text-xs uppercase tracking-widest mb-1" style={{ color, fontWeight: 700 }}>Tipo de guía recomendado</p>
-            <h3 className="text-gray-900 mb-2" style={{ fontWeight: 700, fontSize: '1.1rem', lineHeight: 1.3 }}>
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1" style={{ fontWeight: 700 }}>Tipo de guía recomendado</p>
+            <h3 className="text-neutral-900 mb-2" style={{ fontWeight: 700, fontSize: '1.1rem', lineHeight: 1.3 }}>
               {result.enfoque.tipo}
             </h3>
-            <p className="text-gray-600 text-sm leading-relaxed">{result.enfoque.orientacion}</p>
+            <p className="text-gray-500 text-sm leading-relaxed">{result.enfoque.orientacion}</p>
           </div>
         </div>
       </motion.div>
@@ -421,14 +520,14 @@ function EnfoqueSection({ result, pmoType }: { result: EnfoqueResult; pmoType: P
         <div className="grid grid-cols-2 gap-3">
           {result.enfoque.principios.map((p, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-              className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
-              <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                style={{ background: `${color}15`, color, fontSize: '0.6rem', fontWeight: 800 }}>
+              className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-neutral-50/30 hover:border-gray-200 transition-colors">
+              <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 bg-neutral-900 text-white"
+                style={{ fontSize: '0.65rem', fontWeight: 800 }}>
                 {i + 1}
               </div>
               <div>
-                <p className="text-gray-800 text-xs mb-0.5" style={{ fontWeight: 600 }}>{p.titulo}</p>
-                <p className="text-gray-500 text-xs leading-relaxed">{p.descripcion}</p>
+                <p className="text-neutral-800 text-xs mb-0.5" style={{ fontWeight: 600 }}>{p.titulo}</p>
+                <p className="text-neutral-500 text-xs leading-relaxed">{p.descripcion}</p>
               </div>
             </motion.div>
           ))}
@@ -442,22 +541,22 @@ function EnfoqueSection({ result, pmoType }: { result: EnfoqueResult; pmoType: P
 // Section: Puntos débiles
 // ---------------------------------------------------------------------------
 const CRIT_CONFIG: Record<Criticidad, { color: string; bg: string; border: string; Icon: React.ElementType }> = {
-  Alta:  { color: '#dc2626', bg: '#fef2f2', border: '#fecaca', Icon: ShieldAlert },
-  Media: { color: '#d97706', bg: '#fffbeb', border: '#fde68a', Icon: AlertTriangle },
-  Baja:  { color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb', Icon: AlertTriangle },
+  Alta:  { color: '#171717', bg: '#f5f5f5', border: '#e5e5e5', Icon: ShieldAlert },
+  Media: { color: '#525252', bg: '#fafafa', border: '#f4f4f5', Icon: AlertTriangle },
+  Baja:  { color: '#737373', bg: '#ffffff', border: '#f4f4f5', Icon: AlertTriangle },
 };
 
 function PuntosDebilesSection({ result }: { result: EnfoqueResult }) {
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-5 h-5 rounded flex items-center justify-center bg-red-50">
-          <ShieldAlert size={11} className="text-red-500" />
+        <div className="w-5 h-5 rounded flex items-center justify-center bg-neutral-100">
+          <ShieldAlert size={11} className="text-neutral-600" />
         </div>
         <h2 className="text-gray-700 text-sm uppercase tracking-wide" style={{ fontWeight: 700 }}>
           2 — Puntos débiles identificados
         </h2>
-        <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-red-50 text-red-600 border border-red-200" style={{ fontWeight: 600 }}>
+        <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-600 border border-neutral-200" style={{ fontWeight: 600 }}>
           {result.puntosDebiles.filter(p => p.criticidad === 'Alta').length} críticos
         </span>
       </div>
@@ -502,13 +601,13 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-5 h-5 rounded flex items-center justify-center bg-indigo-50">
-          <Brain size={11} className="text-indigo-500" />
+        <div className="w-5 h-5 rounded flex items-center justify-center bg-neutral-100">
+          <Brain size={11} className="text-neutral-600" />
         </div>
         <h2 className="text-gray-700 text-sm uppercase tracking-wide" style={{ fontWeight: 700 }}>
           3 — Instrucciones para el Agente 7
         </h2>
-        <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-indigo-50 text-indigo-600 border border-indigo-200" style={{ fontWeight: 600 }}>
+        <span className="ml-auto px-2 py-0.5 rounded-full text-xs bg-neutral-100 text-neutral-600 border border-neutral-200" style={{ fontWeight: 600 }}>
           {result.instrucciones.reduce((a, i) => a + i.directrices.length, 0)} directrices
         </span>
       </div>
@@ -543,22 +642,22 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
                     style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
                 </button>
 
-                <AnimatePresence>
-                  {isOpen && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.22 }} className="overflow-hidden">
-                      <ul className="px-5 pb-4 space-y-2 bg-gray-50 border-t border-gray-100">
-                        {instr.directrices.map((d, j) => (
-                          <li key={j} className="flex items-start gap-2.5 pt-2">
-                            <span className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 text-white text-xs"
-                              style={{ background: '#0a0a0a', fontSize: '0.6rem', fontWeight: 700 }}>{j + 1}</span>
-                            <p className="text-gray-600 text-sm leading-relaxed">{d}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <motion.div 
+                  initial={false}
+                  animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
+                  transition={{ duration: 0.22 }} 
+                  className="overflow-hidden print:!h-auto print:!opacity-100"
+                >
+                  <ul className="px-5 pb-4 space-y-2 bg-gray-50 border-t border-gray-100 print:bg-white print:border-none">
+                    {instr.directrices.map((d, j) => (
+                      <li key={j} className="flex items-start gap-2.5 pt-2">
+                        <span className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 text-white text-xs"
+                          style={{ background: '#0a0a0a', fontSize: '0.6rem', fontWeight: 700 }}>{j + 1}</span>
+                        <p className="text-gray-600 text-sm leading-relaxed">{d}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
               </div>
             );
           })}
@@ -625,7 +724,7 @@ function CommentsSection({
 export default function EnfoqueModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
 
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
@@ -642,6 +741,7 @@ export default function EnfoqueModule() {
     if (!phase) return 'auto-trigger';
     if (phase.status === 'completado') return 'approved';
     if (phase.status === 'procesando') return 'processing';
+    if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'results';
     return 'auto-trigger';
   };
 
@@ -656,29 +756,79 @@ export default function EnfoqueModule() {
   const [isApproving, setIsApproving] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const autoTriggered = useRef(false);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartTimeRef = useRef<number>(0);
 
-  // RF-F6-01: Auto-trigger on mount when disponible
+  // Start polling fases_estado for agent result
+  const startPolling = useCallback((afterTimestamp?: number) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    const minTime = afterTimestamp ?? pollStartTimeRef.current;
+    pollIntervalRef.current = setInterval(async () => {
+      if (!projectId) return;
+      const { data } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados, updated_at')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 6)
+        .single();
+      if (data?.datos_consolidados) {
+        // Skip stale data from before this poll session started
+        if (minTime > 0 && new Date(data.updated_at).getTime() < minTime) return;
+        const mapped = mapAgentResult(data.datos_consolidados);
+        if (mapped) {
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
+          setResult(mapped);
+          setView('results');
+          playAgentSuccess();
+          toast.success('Agente 6 definió el enfoque metodológico', { description: mapped.enfoque.tipo });
+        }
+      }
+    }, 4000);
+  }, [projectId, playAgentSuccess]);
+
+  // On mount: load existing result if any, resume polling if procesando
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 6)
+        .single();
+      if (data?.datos_consolidados) {
+        const mapped = mapAgentResult(data.datos_consolidados);
+        if (mapped) setResult(mapped);
+      }
+    })();
+    if (phase?.status === 'procesando') startPolling();
+    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // RF-F6-01: Auto-trigger — call real API when phase becomes disponible
   useEffect(() => {
     if (autoTriggered.current) return;
     if (view === 'auto-trigger') {
       autoTriggered.current = true;
-      const t1 = setTimeout(() => { updatePhaseStatus(projectId!, 6, 'procesando'); setView('processing'); }, 2400);
-      return () => clearTimeout(t1);
+      (async () => {
+        updatePhaseStatus(projectId!, 6, 'procesando');
+        setView('processing');
+        try {
+          const response = await supabase.functions.invoke('pmo-agent', {
+            body: { projectId, phaseNumber: 6, iteration: 1 }
+          });
+          if (response.error) throw new Error(response.error.message);
+          startPolling();
+        } catch (err: any) {
+          toast.error('Error iniciando Agente 6', { description: err.message });
+          updatePhaseStatus(projectId!, 6, 'disponible');
+          setView('auto-trigger');
+          autoTriggered.current = false;
+        }
+      })();
     }
-  }, [view]);
-
-  // Processing → results after delay
-  useEffect(() => {
-    if (view !== 'processing') return;
-    const t = setTimeout(() => {
-      const r = buildResult(pmoType, maturityLevel);
-      setResult(r);
-      setView('results');
-      playAgentSuccess(); // Agent_Success: Agente 6 terminó, enfoque listo para revisión
-      toast.success('Agente 6 definió el enfoque metodológico', { description: r.enfoque.tipo });
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [view]);
+  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!project || !phase) return null;
 
@@ -696,19 +846,29 @@ export default function EnfoqueModule() {
     if (!comment.trim()) { toast.error('Escriba un comentario para re-procesar.'); return; }
     autoTriggered.current = true;
     setView('processing');
-    await new Promise(r => setTimeout(r, 4000));
-    const updated = buildResult(pmoType, maturityLevel, comment);
-    setResult(updated);
-    setSavedComment(comment);
-    setComment('');
-    setView('results');
-    playAgentSuccess(); // Agent_Success: reprocesado listo para revisión
-    toast.success('Enfoque reprocesado con su comentario');
+    try {
+      // Bloquear fases posteriores
+      await reprocessPhase(projectId!, 6);
+
+      const ts = Date.now();
+      pollStartTimeRef.current = ts;
+
+      const response = await supabase.functions.invoke('pmo-agent', {
+        body: { projectId, phaseNumber: 6, iteration: 2, comments: comment }
+      });
+      if (response.error) throw new Error(response.error.message);
+      setSavedComment(comment);
+      setComment('');
+      startPolling(ts);
+    } catch (err: any) {
+      toast.error('Error re-procesando Agente 6', { description: (err as Error).message });
+      setView('results');
+    }
   };
 
   const handleApprove = async () => {
     setIsApproving(true);
-    await new Promise(r => setTimeout(r, 700));
+    // Timeout eliminado por petición del usuario
     setIsApproving(false);
     setShowApproveModal(false);
     // RF-F6-04: persiste resultado + desbloquea Fase 7
@@ -753,6 +913,18 @@ export default function EnfoqueModule() {
             <Code2 size={11} /> Ver JSON
           </button>
         ) : undefined}
+        onReprocessed={async () => {
+          // 1. Block downstream phases (7, 8…)
+          await reprocessPhase(projectId!, 6);
+          // 2. Clear local state
+          setResult(null);
+          setComment('');
+          setSavedComment('');
+          if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null; }
+          autoTriggered.current = false;
+          // 3. Reset view to auto-trigger — it will re-fire the agent
+          setView('auto-trigger');
+        }}
       />
 
       <div className="max-w-[1100px] mx-auto px-10 py-10">
@@ -798,16 +970,26 @@ export default function EnfoqueModule() {
 
           {/* Processing */}
           {view === 'processing' && (
-            <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Procesando</p>
-              <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <motion.div 
+              key="processing-overlay"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+            >
+              <div 
+                className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 
+                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+              >
                 <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
               </div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
+                Procesando
+              </p>
               <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
                 Agente 6 definiendo enfoque
               </h2>
-              <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed">
+              <p className="text-neutral-500 text-[13px] max-w-md text-center leading-relaxed">
                 Analizando el consolidado de <span className="text-neutral-900" style={{ fontWeight: 500 }}>PMO {pmoType}</span> · <span className="text-neutral-900" style={{ fontWeight: 500 }}>Nivel {maturityLevel}</span> para determinar el tipo de guía, identificar puntos débiles y generar instrucciones para el Agente 7.
               </p>
             </motion.div>
