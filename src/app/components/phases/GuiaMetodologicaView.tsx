@@ -24,7 +24,7 @@ import type { ElementType } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ArrowLeft, X, Download, FileText, Clock, RotateCcw, Loader2,
+  Download, FileText, Clock, RotateCcw, Loader2,
   CheckCircle2, Send, Brain, ChevronRight, Sparkles, MessageSquare,
   BookOpen, Shield, BarChart2, Users, Lightbulb,
   ExternalLink, AlertCircle, GitCommitHorizontal, Circle,
@@ -33,6 +33,8 @@ import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import NextPhaseButton from './_shared/NextPhaseButton';
+import PhaseHeader from './_shared/PhaseHeader';
+import { supabase } from '../../lib/supabase';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,6 +54,7 @@ interface DocVersion {
   generatedAt: string; // ISO string
   comment?: string;    // comentario que disparó esta versión (null = original)
   status: 'generado' | 'revisado';
+  data?: any;
 }
 
 interface GuideChapter {
@@ -67,6 +70,8 @@ interface GuideChapter {
   }[];
 }
 
+type GuideSubsection = GuideChapter['subsections'][number];
+
 // ---------------------------------------------------------------------------
 // Processing steps config (RF-F7-02)
 // ---------------------------------------------------------------------------
@@ -79,8 +84,6 @@ const PROCESSING_STEPS: ProcessingStep[] = [
   { id: 6, label: 'Formateando documento final', detail: 'Aplicando estilos, índice de contenidos y portada...', durationMs: 1200 },
 ];
 
-const TOTAL_PROCESSING_MS = PROCESSING_STEPS.reduce((a, s) => a + s.durationMs, 0);
-
 // ---------------------------------------------------------------------------
 // Parsers
 // ---------------------------------------------------------------------------
@@ -90,12 +93,6 @@ function parsePmoType(diag?: string): PmoType {
   if (diag.includes('Predictiva')) return 'Predictiva';
   return 'Híbrida';
 }
-function parseMaturityLevel(diag?: string): number {
-  if (!diag) return 2;
-  const m = diag.match(/Nivel\s+(\d)/i);
-  return m ? parseInt(m[1]) : 2;
-}
-
 // ---------------------------------------------------------------------------
 // Document builder
 // ---------------------------------------------------------------------------
@@ -381,6 +378,25 @@ function buildChapters(pmoType: PmoType, org: string): GuideChapter[] {
 // ---------------------------------------------------------------------------
 // Standalone HTML generator for download (RF-F7-03)
 // ---------------------------------------------------------------------------
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function htmlParagraphs(value?: string): string {
+  const lines = String(value ?? '').split(/\n+/).map(line => line.trim()).filter(Boolean);
+  return lines.map(line => `<p>${escapeHtml(line)}</p>`).join('');
+}
+
+function htmlList(items?: string[]): string {
+  if (!items?.length) return '';
+  return `<ul>${items.map(item => `<li>${escapeHtml(item).replace(/\n/g, '<br>')}</li>`).join('')}</ul>`;
+}
+
 function generateDownloadHTML(
   chapters: GuideChapter[], org: string, pmoType: PmoType, version: DocVersion
 ): string {
@@ -389,14 +405,14 @@ function generateDownloadHTML(
 
   const chapHtml = chapters.map(ch => {
     const secHtml = ch.subsections.map(s => {
-      const listHtml = s.items ? `<ul>${s.items.map(i => `<li>${i}</li>`).join('')}</ul>` : '';
+      const listHtml = htmlList(s.items);
       const tblHtml = s.table
-        ? `<table><thead><tr>${s.table.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
-           <tbody>${s.table.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+        ? `<table><thead><tr>${s.table.headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+           <tbody>${s.table.rows.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c).replace(/\n/g, '<br>')}</td>`).join('')}</tr>`).join('')}</tbody></table>`
         : '';
-      return `<h3>${s.title}</h3><p>${s.content}</p>${listHtml}${tblHtml}`;
+      return `<h3>${escapeHtml(s.title)}</h3>${htmlParagraphs(s.content)}${listHtml}${tblHtml}`;
     }).join('');
-    return `<div class="chapter"><h2>${ch.number}. ${ch.title}</h2><p class="intro">${ch.intro}</p>${secHtml}</div>`;
+    return `<div class="chapter"><h2>${ch.number}. ${escapeHtml(ch.title)}</h2><div class="intro">${htmlParagraphs(ch.intro)}</div>${secHtml}</div>`;
   }).join('');
 
   return `<!DOCTYPE html>
@@ -418,7 +434,7 @@ function generateDownloadHTML(
   h2 { font-size: 1.25em; color: #030213; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #030213; }
   h3 { font-size: 1em; color: #374151; font-weight: 700; margin: 20px 0 8px; }
   p { margin-bottom: 12px; color: #374151; }
-  p.intro { color: #4b5563; font-style: italic; }
+  .intro p { color: #4b5563; font-style: italic; }
   ul { margin: 8px 0 16px 20px; }
   li { margin-bottom: 5px; }
   table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
@@ -434,15 +450,15 @@ function generateDownloadHTML(
 <button class="print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
 <div class="cover">
   <h1>Guía Metodológica<br>para la PMO</h1>
-  <p><strong>${org}</strong></p>
-  <p>PMO Tipo: ${pmoType}</p>
+  <p><strong>${escapeHtml(org)}</strong></p>
+  <p>PMO Tipo: ${escapeHtml(pmoType)}</p>
   <p>Generada por PMO Intelligence Platform · Agente 7</p>
   <div class="badge">Versión ${version.number} — ${fmt(version.generatedAt)}</div>
 </div>
 <div class="content">
 <div class="toc">
   <h2>Tabla de contenidos</h2>
-  ${chapters.map((c, i) => `<div class="toc-item"><span>${c.number}. ${c.title}</span><span>${i + 3}</span></div>`).join('')}
+  ${chapters.map((c, i) => `<div class="toc-item"><span>${c.number}. ${escapeHtml(c.title)}</span><span>${i + 3}</span></div>`).join('')}
 </div>
 ${chapHtml}
 <div class="footer">
@@ -472,14 +488,14 @@ function ProcessingView({
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center p-8"
+        className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
       >
-        <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-6 relative shadow-sm">
-          <Brain size={22} className="text-neutral-700" strokeWidth={1.75} />
+        <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5 shadow-sm">
+          <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-            className="absolute inset-0 rounded-full border-2 border-transparent"
+            className="hidden"
             style={{ borderTopColor: '#0a0a0a' }}
           />
         </div>
@@ -494,7 +510,7 @@ function ProcessingView({
             : 'La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6.'}
         </p>
 
-        <div className="w-full max-w-sm mb-8">
+        <div className="hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Progreso</span>
             <span className="text-neutral-900 text-[12px] tabular-nums" style={{ fontWeight: 500 }}>{pct}%</span>
@@ -510,7 +526,7 @@ function ProcessingView({
         </div>
 
         {/* Step list */}
-        <div className="w-full max-w-sm text-left space-y-1.5 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
+        <div className="hidden">
           {steps.map((step, idx) => {
             const done = idx < currentStep;
             const active = idx === currentStep;
@@ -567,6 +583,21 @@ function VersionBadge({ version }: { version: DocVersion }) {
 }
 
 /** Document renderer — A4 style within the viewer canvas */
+function TextBlock({ text, className = '' }: { text?: string; className?: string }) {
+  const lines = String(text ?? '').split(/\n+/).map(line => line.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+
+  return (
+    <div className={`space-y-2 ${className}`}>
+      {lines.map((line, index) => (
+        <p key={index} className="text-gray-600 text-sm leading-relaxed">
+          {line}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function DocumentRenderer({ chapters, org, pmoType, version }: {
   chapters: GuideChapter[]; org: string; pmoType: PmoType; version: DocVersion;
 }) {
@@ -640,14 +671,14 @@ function DocumentRenderer({ chapters, org, pmoType, version }: {
                   <h3 className="text-gray-800 text-sm mb-2" style={{ fontWeight: 700 }}>
                     {ch.number}.{si + 1} {sec.title}
                   </h3>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-3">{sec.content}</p>
+                  <TextBlock text={sec.content} className="mb-3" />
 
                   {sec.items && (
                     <ul className="space-y-1.5 mb-3">
                       {sec.items.map((item, ii) => (
                         <li key={ii} className="flex items-start gap-2 text-sm text-gray-600">
                           <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: accent }} />
-                          {item}
+                          <span className="whitespace-pre-line leading-relaxed">{item}</span>
                         </li>
                       ))}
                     </ul>
@@ -667,7 +698,7 @@ function DocumentRenderer({ chapters, org, pmoType, version }: {
                           {sec.table.rows.map((row, ri) => (
                             <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#f9fafb' }}>
                               {row.map((cell, ci) => (
-                                <td key={ci} className="px-4 py-2.5 text-gray-600 border-t border-gray-100">{cell}</td>
+                                <td key={ci} className="px-4 py-2.5 text-gray-600 border-t border-gray-100 whitespace-pre-line">{cell}</td>
                               ))}
                             </tr>
                           ))}
@@ -733,59 +764,458 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading, versionNum }: {
   );
 }
 
+const CHAPTER_ICONS: ElementType[] = [BookOpen, Shield, GitCommitHorizontal, BarChart2, Users, Lightbulb];
+const TECHNICAL_KEYS = new Set([
+  'error',
+  'metadata',
+  'agent_id',
+  'project_id',
+  'timestamp',
+  'generated_at',
+  'processing_time_seconds',
+  'phase',
+  'status',
+  'iteration',
+  'section_id',
+  'sections_generated',
+  'generation_notes',
+  'document_version',
+]);
+const TITLE_KEYS = new Set([
+  'titulo',
+  'title',
+  'nombre',
+  'nombre_rol',
+  'rol',
+  'fase',
+  'dominio',
+  'criterio',
+  'funcion',
+  'accion',
+  'riesgo',
+  'weakness',
+]);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function normalizeTable(table: any): { headers: string[]; rows: string[][] } | undefined {
+  const headers = table?.headers ?? table?.encabezados ?? table?.columnas;
+  const rows = table?.rows ?? table?.filas;
+  if (!Array.isArray(headers) || !Array.isArray(rows)) return undefined;
+  return {
+    headers: headers.map(String),
+    rows: rows.map((row: any) => Array.isArray(row) ? row.map(String) : []),
+  };
+}
+
+function parseJsonIfString(raw: any): any {
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+function pickFirst(...values: any[]) {
+  return values.find(value => value !== undefined && value !== null);
+}
+
+function isPlainObject(value: any) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isScalar(value: any) {
+  return value === null || value === undefined || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function isTechnicalKey(key: string) {
+  return TECHNICAL_KEYS.has(key) || key.startsWith('_');
+}
+
+function meaningfulEntries(value: Record<string, any>) {
+  return Object.entries(value).filter(([key, val]) => {
+    if (isTechnicalKey(key)) return false;
+    if (val === null || val === undefined || val === '') return false;
+    if (Array.isArray(val) && val.length === 0) return false;
+    return true;
+  });
+}
+
+function asArray(value: any): any[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return Object.values(value);
+  return [];
+}
+
+function titleFromObject(value: Record<string, any>, fallback: string) {
+  for (const key of TITLE_KEYS) {
+    if (value[key]) return String(value[key]);
+  }
+  return fallback;
+}
+
+function stringifyDeep(value: any): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => {
+        if (isScalar(item)) return String(item);
+        if (isPlainObject(item)) return `${titleFromObject(item, `Elemento ${index + 1}`)}: ${stringifyDeepObject(item)}`;
+        return stringifyDeep(item);
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (isPlainObject(value)) return stringifyDeepObject(value);
+  return String(value);
+}
+
+function stringifyDeepObject(value: Record<string, any>) {
+  return meaningfulEntries(value)
+    .map(([key, val]) => `${formatFieldKey(key)}: ${stringifyDeep(val)}`)
+    .join('\n');
+}
+
+function stringifyContent(value: any): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  return stringifyDeep(value);
+}
+
+function normalizeSection(section: any, index: number) {
+  const items = pickFirst(section?.items, section?.lista, section?.puntos, section?.actividades, section?.recomendaciones);
+  return {
+    title: String(pickFirst(section?.titulo, section?.title, section?.nombre, `Seccion ${index + 1}`)),
+    content: stringifyContent(pickFirst(section?.contenido, section?.content, section?.descripcion, section?.detalle, section?.texto)),
+    items: Array.isArray(items) ? items.map(stringifyDeep).filter(Boolean) : undefined,
+    table: normalizeTable(pickFirst(section?.tabla, section?.table)),
+  };
+}
+
+/** Format a snake_case/camelCase key into a human-readable title */
+function formatFieldKey(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function tableFromObjectArray(values: any[]): GuideSubsection['table'] | undefined {
+  if (!values.length || !values.every(isPlainObject)) return undefined;
+  const scalarKeys = Array.from(new Set(
+    values.flatMap(value =>
+      meaningfulEntries(value)
+        .filter(([_, val]) => isScalar(val))
+        .map(([key]) => key)
+    )
+  ));
+  if (scalarKeys.length < 2) return undefined;
+
+  return {
+    headers: scalarKeys.map(formatFieldKey),
+    rows: values.map(value => scalarKeys.map(key => stringifyDeep(value[key]))),
+  };
+}
+
+function objectArrayToItems(values: any[]) {
+  return values
+    .map((item, index) => {
+      if (!isPlainObject(item)) return stringifyDeep(item);
+      const title = titleFromObject(item, `Elemento ${index + 1}`);
+      const details = meaningfulEntries(item)
+        .filter(([key]) => !TITLE_KEYS.has(key))
+        .map(([key, val]) => `${formatFieldKey(key)}: ${stringifyDeep(val)}`)
+        .join('\n');
+      return details ? `${title}\n${details}` : title;
+    })
+    .filter(Boolean);
+}
+
+function objectToNestedSubsections(value: Record<string, any>, titlePrefix = ''): GuideSubsection[] {
+  return meaningfulEntries(value).flatMap(([key, val]) => {
+    const title = titlePrefix ? `${titlePrefix} - ${formatFieldKey(key)}` : formatFieldKey(key);
+
+    if (Array.isArray(val)) {
+      if (val.length === 0) return [];
+      if (val.every(isPlainObject)) {
+        return [{
+          title,
+          content: '',
+          items: objectArrayToItems(val),
+          table: tableFromObjectArray(val),
+        }];
+      }
+      return [{ title, content: '', items: val.map(stringifyDeep).filter(Boolean) }];
+    }
+
+    if (isPlainObject(val)) {
+      const scalarContent = meaningfulEntries(val)
+        .filter(([_, nestedVal]) => isScalar(nestedVal))
+        .map(([nestedKey, nestedVal]) => `${formatFieldKey(nestedKey)}: ${stringifyDeep(nestedVal)}`)
+        .join('\n');
+      const nestedObject = Object.fromEntries(meaningfulEntries(val).filter(([_, nestedVal]) => !isScalar(nestedVal)));
+      return [
+        ...(scalarContent ? [{ title, content: scalarContent }] : []),
+        ...objectToNestedSubsections(nestedObject, title),
+      ];
+    }
+
+    return [{ title, content: stringifyDeep(val) }];
+  });
+}
+
+/**
+ * Converts a guide_content item's "contenido" object into flat subsections.
+ * Handles strings, arrays of strings, arrays of objects, and nested objects.
+ */
+function contenidoToSubsections(contenido: any): GuideChapter['subsections'] {
+  if (!contenido || typeof contenido !== 'object') return [];
+
+  return meaningfulEntries(contenido)
+    .map(([key, val]: [string, any]) => {
+      const title = formatFieldKey(key);
+
+      if (Array.isArray(val)) {
+        if (val.length === 0) return null;
+        // Array of primitives
+        if (!isPlainObject(val[0])) {
+          return { title, content: '', items: val.map(stringifyDeep).filter(Boolean) };
+        }
+        // Array of objects — extract most descriptive field per item
+        return {
+          title,
+          content: '',
+          items: objectArrayToItems(val),
+          table: tableFromObjectArray(val),
+        };
+      }
+
+      if (isPlainObject(val)) {
+        const nested = objectToNestedSubsections(val, title);
+        return nested.length > 0 ? nested : { title, content: stringifyContent(val) };
+      }
+
+      return { title, content: String(val) };
+    })
+    .flat()
+    .filter(Boolean) as GuideChapter['subsections'];
+}
+
+/**
+ * Normalizes the Gemini Agent 7 guide_content format (sections S01-S16)
+ * into GuideChapter objects for the DocumentRenderer.
+ */
+function normalizeGuideContent(guideContent: any[]): GuideChapter[] {
+  // Skip S01 (Portada) — it's just document metadata, not a renderable chapter
+  const sections = guideContent.filter((s: any) => s.section_id !== 'S01');
+  if (sections.length === 0) return [];
+
+  return sections.map((section: any, index: number) => {
+    const contenido = section.contenido ?? {};
+    const subsections = contenidoToSubsections(contenido);
+
+    // Extract a meaningful intro from common summary fields
+    const intro = stringifyContent(
+      contenido?.descripcion_general ??
+      contenido?.contexto_organizacional ??
+      contenido?.descripcion_entorno ??
+      contenido?.enfoque_propuesto ??
+      contenido?.enfoque_adoptado ??
+      contenido?.descripcion_del_modelo ??
+      contenido?.analisis_integrado?.coherencia_entre_fuentes ??
+      ''
+    );
+
+    return {
+      number: index + 1,
+      icon: CHAPTER_ICONS[index % CHAPTER_ICONS.length],
+      title: String(section.section_title ?? `Sección ${index + 1}`),
+      intro,
+      subsections: subsections.length > 0
+        ? subsections
+        : [{ title: 'Contenido', content: 'Contenido procesado por el Agente 7.' }],
+    };
+  });
+}
+
+
+
+function normalizeChapters(raw: any): GuideChapter[] {
+  const parsed = parseJsonIfString(raw);
+
+  // ── Priority 1: Gemini Agent 7 native format: guide_content sections array ──
+  const guideContent =
+    parsed?.diagnosis?.guide_content ??
+    parsed?.guide_content ??
+    parsed?.diagnosis?.guideContent ??
+    parsed?.guideContent;
+  if (Array.isArray(guideContent) && guideContent.length > 0) {
+    return normalizeGuideContent(guideContent);
+  }
+
+  // ── Priority 2: Classic chapters/capitulos format ──────────────────────────
+  const deepSearch = (obj: any) => pickFirst(
+    obj?.capitulos,
+    obj?.chapters,
+    obj?.guia?.capitulos,
+    obj?.guia_metodologica?.capitulos,
+    obj?.guiaMetodologica?.capitulos,
+    obj?.documento?.capitulos,
+    obj?.contenido?.capitulos,
+    obj?.estructura?.capitulos,
+    obj?.guia_metodologica?.chapters,
+    obj?.guia?.chapters,
+    obj?.documento?.chapters,
+  );
+  const candidateKeys = ['guia_metodologica', 'guia', 'documento', 'resultado', 'result', 'data'];
+  const source = deepSearch(parsed)
+    ?? candidateKeys.reduce((found: any, key: string) => found ?? deepSearch(parsed?.[key]), undefined);
+  const chapterList = asArray(source);
+
+  if (chapterList.length === 0) {
+    // Fallback: treat secciones as a single chapter
+    const sectionList = asArray(pickFirst(parsed?.secciones, parsed?.sections, parsed?.apartados, parsed?.contenido?.secciones));
+    if (sectionList.length > 0) {
+      return [{
+        number: 1,
+        icon: CHAPTER_ICONS[0],
+        title: String(pickFirst(parsed?.titulo, parsed?.title, 'Guia metodologica')),
+        intro: stringifyContent(pickFirst(parsed?.resumen_ejecutivo, parsed?.resumen, parsed?.introduccion, parsed?.intro)),
+        subsections: sectionList.map(normalizeSection).filter(section => section.title || section.content || section.items?.length),
+      }];
+    }
+
+    // Last resort: build chapter from top-level fields
+    const derivedSections = [
+      { titulo: 'Resumen ejecutivo', contenido: pickFirst(parsed?.resumen_ejecutivo, parsed?.resumen, parsed?.sintesis) },
+      { titulo: 'Criterios de implementacion', items: pickFirst(parsed?.criterios_implementacion, parsed?.criterios, parsed?.implementation_criteria) },
+      { titulo: 'Artefactos recomendados', items: pickFirst(parsed?.artefactos_recomendados, parsed?.artefactos, parsed?.artifacts) },
+      { titulo: 'Riesgos de adopcion', items: pickFirst(parsed?.riesgos_adopcion, parsed?.riesgos, parsed?.adoption_risks) },
+      { titulo: 'Metricas de seguimiento', items: pickFirst(parsed?.metricas_seguimiento, parsed?.metricas, parsed?.metrics) },
+    ].filter(section => section.contenido || (Array.isArray(section.items) && section.items.length > 0));
+
+    if (derivedSections.length > 0) {
+      return [{
+        number: 1,
+        icon: CHAPTER_ICONS[0],
+        title: String(pickFirst(parsed?.titulo, parsed?.title, 'Guia metodologica')),
+        intro: stringifyContent(pickFirst(parsed?.introduccion, parsed?.intro, parsed?.tipo_pmo)),
+        subsections: derivedSections.map(normalizeSection),
+      }];
+    }
+
+    return [];
+  }
+
+  return chapterList.map((chapter: any, index: number) => {
+    const sections = pickFirst(chapter.secciones, chapter.subsections, chapter.apartados, chapter.sections, chapter.contenidos, []);
+    const normalizedSections = asArray(sections).map(normalizeSection).filter(section => section.title || section.content || section.items?.length);
+    if (normalizedSections.length === 0) {
+      const chapterContent = pickFirst(chapter.contenido, chapter.content, chapter.descripcion, chapter.detalle, chapter.texto);
+      if (chapterContent) {
+        normalizedSections.push(normalizeSection({ titulo: 'Contenido', contenido: chapterContent }, 0));
+      }
+    }
+    return {
+      number: Number(chapter.numero ?? chapter.number ?? index + 1),
+      icon: CHAPTER_ICONS[index % CHAPTER_ICONS.length],
+      title: String(pickFirst(chapter.titulo, chapter.title, chapter.nombre, `Capitulo ${index + 1}`)),
+      intro: stringifyContent(pickFirst(chapter.introduccion, chapter.intro, chapter.resumen, chapter.descripcion)),
+      subsections: normalizedSections,
+    };
+  });
+}
+
+
+function unwrapGuidePayload(raw: any) {
+  const parsed = parseJsonIfString(raw);
+  // Return _current if wrapped by the edge function versioning logic.
+  // We intentionally keep the full Gemini response (including 'diagnosis' key)
+  // so that normalizeChapters can find diagnosis.guide_content.
+  return parsed?._current ?? parsed;
+}
+
+function versionsFromPayload(raw: any): DocVersion[] {
+  if (Array.isArray(raw?._versions) && raw._versions.length > 0) {
+    return raw._versions.map((version: any, index: number) => ({
+      number: Number(version.number ?? index + 1),
+      generatedAt: String(version.generatedAt ?? version.generated_at ?? raw?._generated_at ?? new Date().toISOString()),
+      comment: version.comment ?? undefined,
+      status: version.status === 'revisado' ? 'revisado' : 'generado',
+      data: version.data,
+    }));
+  }
+
+  if (!raw) return [];
+  return [{
+    number: Number(raw?._latest_version ?? 1),
+    generatedAt: String(raw?._generated_at ?? new Date().toISOString()),
+    comment: raw?._last_comment ?? undefined,
+    status: Number(raw?._latest_version ?? 1) > 1 ? 'revisado' : 'generado',
+    data: unwrapGuidePayload(raw),
+  }];
+}
+
 // ---------------------------------------------------------------------------
 // Main module
 // ---------------------------------------------------------------------------
 export default function GuiaMetodologicaView() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
   const phase    = project?.phases.find(p => p.number === 7);
   const phase4   = project?.phases.find(p => p.number === 4);
-  const phase5   = project?.phases.find(p => p.number === 5);
-  const phase6   = project?.phases.find(p => p.number === 6);
 
   const pmoType      = parsePmoType(phase4?.agentDiagnosis);
-  const maturityLevel = parseMaturityLevel(phase5?.agentDiagnosis);
-
-  // Build chapters once
-  const chapters = useRef<GuideChapter[]>([]);
-  if (chapters.current.length === 0 && project) {
-    chapters.current = buildChapters(pmoType, project.companyName);
-  }
 
   const deriveView = (): ModuleView => {
-    if (!phase) return 'auto-trigger';
+    if (!project || !phase) return 'processing';
     if (phase.status === 'completado') return 'approved';
     if (phase.status === 'procesando') return 'processing';
+    if (phase.agentData && normalizeChapters(unwrapGuidePayload(phase.agentData)).length > 0) return 'results';
     return 'auto-trigger';
   };
 
   const [view, setView]                     = useState<ModuleView>(deriveView);
-  const [processingStep, setProcessingStep] = useState(0);
+  const [processingStep, setProcessingStep] = useState(1);
   const [isAdjustment, setIsAdjustment]     = useState(false);
-  const [versions, setVersions]             = useState<DocVersion[]>(() =>
-    phase?.status === 'completado'
-      ? [{ number: 1, generatedAt: new Date().toISOString(), status: 'generado' }]
-      : []
-  );
+  const [chapters, setChapters]             = useState<GuideChapter[]>(() => normalizeChapters(unwrapGuidePayload(phase?.agentData)));
+  const [versions, setVersions]             = useState<DocVersion[]>(() => versionsFromPayload(phase?.agentData));
   const [currentVersionIdx, setCurrentVersionIdx] = useState(0);
   const [adjustText, setAdjustText]         = useState('');
   const [isAdjusting, setIsAdjusting]       = useState(false);
   const [showApprove, setShowApprove]       = useState(false);
   const [isApproving, setIsApproving]       = useState(false);
   const autoTriggered = useRef(false);
+  const hasFailed = useRef(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef(0);
+  const pollTimeoutStartRef = useRef(0);
 
   const currentVersion = versions[currentVersionIdx] ?? null;
+
+  const applyGuidePayload = useCallback((raw: any) => {
+    const current = unwrapGuidePayload(raw);
+    const nextChapters = normalizeChapters(current);
+    if (nextChapters.length === 0) {
+      toast.error('El Agente 7 devolvio una guia sin capitulos renderizables.');
+      return false;
+    }
+    const nextVersions = versionsFromPayload(raw);
+    setChapters(nextChapters);
+    setVersions(nextVersions);
+    setCurrentVersionIdx(Math.max(0, nextVersions.length - 1));
+    return true;
+  }, []);
 
   // ── Handlers (declared before early returns to respect Rules of Hooks) ────
   // useCallback must be called unconditionally on every render
   const handleDownload = useCallback(() => {
-    if (!currentVersion || !project) return;
-    const html = generateDownloadHTML(chapters.current, project.companyName, pmoType, currentVersion);
+    if (!currentVersion || !project || chapters.length === 0) return;
+    const html = generateDownloadHTML(chapters, project.companyName, pmoType, currentVersion);
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -799,57 +1229,210 @@ export default function GuiaMetodologicaView() {
       description: 'Abra el archivo .html en su navegador y use "Imprimir → Guardar como PDF" para generar el PDF.',
     });
     // TODO: En producción → descargar PDF desde Supabase Storage signedUrl
-  }, [currentVersion, project, pmoType]);
+  }, [chapters, currentVersion, project, pmoType]);
 
   // ── RF-F7-01: Auto-trigger on mount ──────────────────────────────────────
-  useEffect(() => {
-    if (autoTriggered.current || view !== 'auto-trigger') return;
-    autoTriggered.current = true;
-    const t = setTimeout(() => {
-      updatePhaseStatus(projectId!, 7, 'procesando');
-      setView('processing');
-    }, 2600);
-    return () => clearTimeout(t);
-  }, [view]);
+  const startPolling = useCallback((startedAt = Date.now(), forceRestart = false) => {
+    if (!projectId) return;
+    if (pollRef.current && !forceRestart) return;
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollStartRef.current = startedAt;
+    pollTimeoutStartRef.current = Date.now();
+
+    const poll = async () => {
+      if (Date.now() - pollTimeoutStartRef.current > 180000) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setIsAdjusting(false);
+        setView(chapters.length > 0 ? 'results' : 'auto-trigger');
+        updatePhaseStatus(projectId, 7, 'disponible');
+        toast.error('El Agente 7 tardo demasiado en responder.', {
+          description: 'La fase quedo disponible para reintentar la generacion.',
+          duration: 9000,
+        });
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados, estado_visual, updated_at')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 7)
+        .single();
+
+      if (error) return;
+      if (data?.updated_at && new Date(data.updated_at).getTime() < pollStartRef.current) return;
+
+      const lastUpdatedAt = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
+      const staleProcessingMs = Date.now() - lastUpdatedAt;
+      if (
+        data?.estado_visual === 'procesando' &&
+        !data?.datos_consolidados &&
+        lastUpdatedAt > 0 &&
+        staleProcessingMs > 10 * 60 * 1000
+      ) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setIsAdjusting(false);
+        setView('auto-trigger');
+        updatePhaseStatus(projectId, 7, 'disponible');
+        toast.error('La ejecucion anterior del Agente 7 quedo sin actividad.', {
+          description: 'La fase quedo disponible para intentar generar la guia nuevamente.',
+          duration: 9000,
+        });
+        return;
+      }
+
+      if (data?.datos_consolidados && (data.estado_visual === 'disponible' || data.estado_visual === 'completado')) {
+        if ((data.datos_consolidados as any)?._error) {
+          const message = (data.datos_consolidados as any)?.message || 'Revise el prompt del Agente 7 e intente nuevamente.';
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setIsAdjusting(false);
+          setView(chapters.length > 0 ? 'results' : 'auto-trigger');
+          updatePhaseStatus(projectId, 7, 'disponible');
+          toast.error('El Agente 7 encontro un error.', { description: message, duration: 9000 });
+          return;
+        }
+        const ok = applyGuidePayload(data.datos_consolidados);
+        if (!ok) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setIsAdjusting(false);
+          hasFailed.current = true; // Prevent auto-retrigger loop
+          setView(chapters.length > 0 ? 'results' : 'auto-trigger');
+          updatePhaseStatus(projectId, 7, 'disponible');
+          return;
+        }
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setIsAdjusting(false);
+        setView(data.estado_visual === 'completado' ? 'approved' : 'results');
+        playAgentSuccess();
+        toast.success('Agente 7 genero la guia metodologica', {
+          description: 'El documento quedo listo para revision.',
+        });
+        return;
+      }
+
+      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setIsAdjusting(false);
+        setView('auto-trigger');
+        toast.error('El Agente 7 no genero datos. Revisa el prompt o intenta nuevamente.');
+      }
+
+      if (data?.estado_visual === 'error') {
+        const message = (data?.datos_consolidados as any)?.message || 'Revise el prompt del Agente 7 e intente nuevamente.';
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setIsAdjusting(false);
+        setView(chapters.length > 0 ? 'results' : 'auto-trigger');
+        updatePhaseStatus(projectId, 7, 'disponible');
+        toast.error('El Agente 7 encontro un error.', { description: message, duration: 9000 });
+      }
+    };
+
+    poll();
+    pollRef.current = setInterval(poll, 4000);
+  }, [applyGuidePayload, chapters.length, playAgentSuccess, projectId, updatePhaseStatus]);
+
+  const invokeAgent7 = useCallback(async (iteration = 1, comments: string | null = null) => {
+    if (!projectId) return;
+    const startedAt = Date.now();
+    pollStartRef.current = startedAt;
+
+    // CRITICAL: Update DB directly BEFORE invoking the edge function.
+    // The edge function checks DB estado_visual === 'procesando' before saving results.
+    // updatePhaseStatus only updates React context; if the DB still says 'bloqueado',
+    // the agent will silently discard its result.
+    await supabase
+      .from('fases_estado')
+      .update({ estado_visual: 'procesando', updated_at: new Date().toISOString() })
+      .eq('proyecto_id', projectId)
+      .eq('numero_fase', 7);
+
+    updatePhaseStatus(projectId, 7, 'procesando');
+    setView('processing');
+    setProcessingStep(1);
+    try {
+      const { error } = await supabase.functions.invoke('pmo-agent', {
+        body: { projectId, phaseNumber: 7, iteration, comments },
+      });
+      if (error) throw new Error(error.message);
+      startPolling(startedAt, true);
+    } catch (err: any) {
+      setIsAdjusting(false);
+      setView(versions.length > 0 ? 'results' : 'auto-trigger');
+      updatePhaseStatus(projectId, 7, 'disponible');
+      toast.error('Error iniciando Agente 7', { description: err.message });
+    }
+  }, [projectId, startPolling, updatePhaseStatus, versions.length]);
 
   // ── Processing: advance steps then show results ───────────────────────────
   useEffect(() => {
     if (view !== 'processing') return;
-    setProcessingStep(0);
-
-    let step = 0;
-    const advanceStep = () => {
-      step += 1;
-      setProcessingStep(step);
-      if (step < PROCESSING_STEPS.length) {
-        timer = setTimeout(advanceStep, PROCESSING_STEPS[step]?.durationMs ?? 1000);
-      }
-    };
-
-    let timer = setTimeout(advanceStep, PROCESSING_STEPS[0].durationMs);
-
-    // Show results after total duration
-    const done = setTimeout(() => {
-      const newVersion: DocVersion = {
-        number: isAdjustment ? (versions.length + 1) : 1,
-        generatedAt: new Date().toISOString(),
-        status: isAdjustment ? 'revisado' : 'generado',
-        comment: isAdjustment ? adjustText : undefined,
-      };
-      setVersions(prev => isAdjustment ? [...prev, newVersion] : [newVersion]);
-      setCurrentVersionIdx(isAdjustment ? versions.length : 0);
-      setAdjustText('');
-      setIsAdjusting(false);
-      setView('results');
-      playAgentSuccess(); // Agent_Success: guía lista para revisión
-      toast.success(
-        isAdjustment ? `Versión ${newVersion.number} generada` : 'Guía metodológica lista',
-        { description: isAdjustment ? 'El Agente 7 incorporó los ajustes del consultor.' : `${chapters.current.length} capítulos generados para PMO ${pmoType}.` }
-      );
-    }, TOTAL_PROCESSING_MS + (isAdjustment ? -3000 : 0));
-
-    return () => { clearTimeout(timer); clearTimeout(done); };
+    const interval = setInterval(() => {
+      setProcessingStep(prev => Math.min(PROCESSING_STEPS.length, prev + 1));
+    }, 3500);
+    return () => clearInterval(interval);
   }, [view]);
+
+  useEffect(() => {
+    if (phase?.agentData && chapters.length === 0) applyGuidePayload(phase.agentData);
+  }, [phase?.agentData, chapters.length, applyGuidePayload]);
+
+  useEffect(() => {
+    if (!project || !phase) return;
+
+    if (phase.status === 'procesando') {
+      setView('processing');
+      startPolling(0);
+      return;
+    }
+
+    if (phase.status === 'completado') {
+      if (phase.agentData) applyGuidePayload(phase.agentData);
+      setView('approved');
+      return;
+    }
+
+    if (phase.agentData && normalizeChapters(unwrapGuidePayload(phase.agentData)).length > 0) {
+      applyGuidePayload(phase.agentData);
+      setView('results');
+      return;
+    }
+
+    if (phase.status === 'disponible') {
+      setView('auto-trigger');
+    }
+  }, [applyGuidePayload, phase, project, startPolling]);
+
+  // hasFailed prevents re-triggering after a parse failure (would cause infinite loop)
+  useEffect(() => {
+    if (!project || !phase || isLoading) return;
+    if (phase.status !== 'disponible') return;
+    if (autoTriggered.current || hasFailed.current || view !== 'auto-trigger' || chapters.length > 0) return;
+    if (phase.agentData && Object.keys(phase.agentData).length > 0) return;
+    autoTriggered.current = true;
+    invokeAgent7(1, null);
+  }, [chapters.length, invokeAgent7, isLoading, phase, project, view]);
+
+  useEffect(() => {
+    if (phase?.status === 'procesando') {
+      setView('processing');
+      startPolling(0);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
 
   if (!project || !phase) return null;
 
@@ -858,79 +1441,121 @@ export default function GuiaMetodologicaView() {
     if (!adjustText.trim()) { toast.error('Escriba las instrucciones de ajuste antes de enviar.'); return; }
     setIsAdjusting(true);
     setIsAdjustment(true);
-    // TODO: axios.post(N8N_WEBHOOK_AGENTE_7, { ultima_version: currentVersion, comentario: adjustText })
-    setTimeout(() => setView('processing'), 400);
+    const nextIteration = (currentVersion?.number ?? versions.length) + 1;
+    const comment = adjustText;
+    setAdjustText('');
+    await invokeAgent7(nextIteration, comment);
+  };
+
+  const handleReprocess = async () => {
+    if (!adjustText.trim()) { toast.error('Escriba un comentario para reprocesar.'); return; }
+    const nextIteration = (currentVersion?.number ?? versions.length) + 1;
+    const comment = adjustText;
+    setAdjustText('');
+    setIsAdjustment(true);
+
+    try {
+      // 1. Bloquear fases posteriores en AppContext + Supabase (igual que Fase 4)
+      await reprocessPhase(projectId!, 7);
+
+      // 2. Update DB to 'procesando' BEFORE invoking so cancellation check passes
+      await supabase
+        .from('fases_estado')
+        .update({ estado_visual: 'procesando', updated_at: new Date().toISOString() })
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 7);
+
+      updatePhaseStatus(projectId!, 7, 'procesando');
+      hasFailed.current = false;
+      autoTriggered.current = true; // prevent auto-trigger loop during reprocess
+      setView('processing');
+      setProcessingStep(1);
+
+      // 3. Fire-and-forget: polling will detect completion
+      supabase.functions.invoke('pmo-agent', {
+        body: { projectId, phaseNumber: 7, iteration: nextIteration, comments: comment },
+      }).catch(e => console.error('[Phase7] Reprocess invoke failed:', e));
+
+      const startedAt = Date.now();
+      pollStartRef.current = startedAt;
+      startPolling(startedAt, true);
+
+      toast.info('Reprocesando guía metodológica…', {
+        description: 'El Agente 7 está incorporando las instrucciones del consultor.',
+      });
+    } catch (e) {
+      console.error('[Phase7] Reprocess error:', e);
+      toast.error('Error al reprocesar');
+      setIsAdjusting(false);
+      setView('results');
+    }
   };
 
   const handleApprove = async () => {
     setIsApproving(true);
-    await new Promise(r => setTimeout(r, 700));
-    setIsApproving(false);
-    setShowApprove(false);
-    // RF-F7-06: marca Fase 7 completada + desbloquea Fase 8
-    updatePhaseStatus(
-      projectId!, 7, 'completado',
-      `Guía Metodológica aprobada · Versión ${currentVersion?.number} · PMO ${pmoType} · ${chapters.current.length} capítulos.`
-    );
-    playPhaseComplete(); // Phase_Complete: consultor aprobó definitivamente
-    setView('approved');
-    toast.success('¡Fase 7 aprobada!', { description: 'La Guía Metodológica ha sido completada. La Fase 8 está desbloqueada.' });
+    
+    try {
+      // Invocamos el Agente 8 para que empiece a procesar los artefactos en background
+      updatePhaseStatus(projectId!, 8, 'procesando');
+      supabase.functions.invoke('pmo-agent-artefactos', {
+        body: { projectId }
+      }).catch(e => console.error('[Phase7] Agent 8 trigger failed:', e));
+
+      await new Promise(r => setTimeout(r, 700));
+      
+      setIsApproving(false);
+      setShowApprove(false);
+
+      // RF-F7-06: marca Fase 7 completada + desbloquea Fase 8
+      updatePhaseStatus(
+        projectId!, 7, 'completado',
+        `Guía Metodológica aprobada · Versión ${currentVersion?.number} · PMO ${pmoType} · ${chapters.length} capítulos.`
+      );
+      
+      playPhaseComplete(); // Phase_Complete: consultor aprobó definitivamente
+      setView('approved');
+      toast.success('¡Fase 7 aprobada!', { 
+        description: 'La Guía Metodológica ha sido completada. El Agente 8 está generando las recomendaciones de artefactos.' 
+      });
+    } catch (e) {
+      console.error('[Phase7] Approval error:', e);
+      toast.error('Error al procesar la aprobación');
+      setIsApproving(false);
+    }
   };
 
   const isCompleted = view === 'approved';
 
-  // ── Render: auto-trigger ─────────────────────────────────────────────────
+  // ── Render: auto-trigger → skip straight to processing ───────────────────
+  // There is no separate "sending" screen. The moment the component mounts
+  // with no data it immediately invokes the agent and shows the processing overlay.
   if (view === 'auto-trigger') {
     return (
-      <div className="min-h-screen bg-[#fafaf9] flex flex-col">
-        <Header project={project} projectId={projectId!} onClose={() => navigate(`/dashboard/project/${projectId}`)} />
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-8 py-12">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 7 · Guía metodológica</p>
-          <motion.div
-            animate={{ scale: [1, 1.04, 1] }}
-            transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
-            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-            style={{ background: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 12px 32px -12px rgba(0,0,0,0.25)' }}
-          >
-            <Send size={22} className="text-white" strokeWidth={1.75} />
-          </motion.div>
-          <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
-            Enviando al Agente 7
-          </h2>
-          <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed mb-7">
-            La Fase 6 está aprobada. El sistema enviará el JSON con el enfoque metodológico al Agente 7 para generar el documento de guía metodológica para <span className="text-neutral-900" style={{ fontWeight: 500 }}>{project.companyName}</span>.
-          </p>
-          <div className="flex items-center gap-2 mb-8 flex-wrap justify-center">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-[12px]"
-              style={{ background: '#0a0a0a', fontWeight: 500 }}>
-              <CheckCircle2 size={11} strokeWidth={1.75} /> JSON Fase 6 aprobado
-            </motion.div>
-            <ChevronRight size={13} className="text-neutral-300" strokeWidth={1.75} />
-            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.6 }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] border border-dashed border-neutral-900 text-neutral-900"
-              style={{ fontWeight: 500 }}>
-              <Brain size={11} strokeWidth={1.75} /> Agente 7
-            </motion.div>
-            <ChevronRight size={13} className="text-neutral-300" strokeWidth={1.75} />
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-neutral-400 text-[12px] border border-neutral-200/80">
-              <FileText size={11} strokeWidth={1.75} /> Guía metodológica
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-neutral-400 text-[12px]">
-            <Loader2 size={12} className="animate-spin" strokeWidth={1.75} />Preparando generación del documento…
-          </div>
-        </div>
+      <div className="h-screen bg-[#fafaf9] flex flex-col overflow-hidden">
+        <PhaseHeader
+          projectId={projectId!}
+          companyName={project.companyName}
+          phaseNumber={7}
+          phaseName="Guía Metodológica"
+        />
+        <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={false} />
       </div>
     );
   }
 
+
+
   // ── Render: processing ────────────────────────────────────────────────────
   if (view === 'processing') {
     return (
-      <div className="min-h-screen bg-[#fafaf9] flex flex-col">
-        <Header project={project} projectId={projectId!} onClose={() => navigate(`/dashboard/project/${projectId}`)} />
-        <div className="flex-1 overflow-y-auto py-12">
+      <div className="h-screen bg-[#fafaf9] flex flex-col overflow-hidden">
+        <PhaseHeader
+          projectId={projectId!}
+          companyName={project.companyName}
+          phaseNumber={7}
+          phaseName="Guía Metodológica"
+        />
+        <div className="flex-1 min-h-0 overflow-hidden">
           <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={isAdjustment} />
         </div>
       </div>
@@ -939,20 +1564,19 @@ export default function GuiaMetodologicaView() {
 
   // ── Render: results & approved (split layout) ─────────────────────────────
   return (
-    <div className="min-h-screen bg-[#fafaf9] flex flex-col">
-      <Header
-        project={project}
+    <div className="h-screen bg-[#fafaf9] flex flex-col overflow-hidden">
+      <PhaseHeader
         projectId={projectId!}
-        onClose={() => navigate(`/dashboard/project/${projectId}`)}
-        isCompleted={isCompleted}
-        onDownload={handleDownload}
-        currentVersion={currentVersion}
+        companyName={project.companyName}
+        phaseNumber={7}
+        phaseName="Guía Metodológica"
+        eyebrow={isCompleted ? 'Completada' : undefined}
       />
 
-      <div className="flex-1 grid grid-cols-12 overflow-hidden" style={{ height: 'calc(100vh - 65px)' }}>
+      <div className="flex-1 min-h-0 grid grid-cols-12 overflow-hidden">
 
         {/* ── Left: Document Viewer 70% ── */}
-        <div className="col-span-8 flex flex-col border-r border-gray-200 overflow-hidden">
+        <div className="col-span-8 min-h-0 flex flex-col border-r border-gray-200 overflow-hidden">
 
           <div className="bg-white border-b border-neutral-200/60 px-5 py-3 flex items-center justify-between flex-shrink-0">
             <div className="min-w-0">
@@ -977,7 +1601,7 @@ export default function GuiaMetodologicaView() {
                 onClick={() => {
                   const win = window.open('', '_blank');
                   if (!win || !currentVersion) return;
-                  win.document.write(generateDownloadHTML(chapters.current, project.companyName, pmoType, currentVersion));
+                  win.document.write(generateDownloadHTML(chapters, project.companyName, pmoType, currentVersion));
                   win.document.close();
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[12px] hover:bg-neutral-50 transition-colors"
@@ -989,7 +1613,7 @@ export default function GuiaMetodologicaView() {
 
           {/* Document canvas */}
           {/* RF-F7-03: Integrar iframe apuntando a la signedUrl de Supabase Storage (PDF real del Agente 7) */}
-          <div className="flex-1 bg-neutral-100 overflow-y-auto p-6 relative">
+          <div className="flex-1 min-h-0 bg-neutral-100 overflow-y-auto overscroll-contain p-6 relative">
 
             {/* Adjustment overlay */}
             <AnimatePresence>
@@ -1006,7 +1630,7 @@ export default function GuiaMetodologicaView() {
             {currentVersion && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
                 <DocumentRenderer
-                  chapters={chapters.current}
+                  chapters={chapters}
                   org={project.companyName}
                   pmoType={pmoType}
                   version={currentVersion}
@@ -1017,7 +1641,7 @@ export default function GuiaMetodologicaView() {
         </div>
 
         {/* ── Right: Control panel 30% — fully static, no internal scroll ── */}
-        <div className="col-span-4 flex flex-col bg-white overflow-hidden">
+        <div className="col-span-4 min-h-0 flex flex-col bg-white overflow-hidden">
 
           <div className="px-5 pt-5 pb-3 flex-shrink-0">
             <div className="flex items-center gap-2 mb-3">
@@ -1029,7 +1653,10 @@ export default function GuiaMetodologicaView() {
               {versions.map((v, idx) => (
                 <button
                   key={v.number}
-                  onClick={() => setCurrentVersionIdx(idx)}
+                  onClick={() => {
+                    setCurrentVersionIdx(idx);
+                    if (v.data) setChapters(normalizeChapters(v.data));
+                  }}
                   className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
                     currentVersionIdx === idx
                       ? 'border-neutral-300 bg-neutral-50'
@@ -1086,17 +1713,29 @@ export default function GuiaMetodologicaView() {
                   className="flex-1 min-h-0 w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400"
                 />
                 <p className="text-neutral-400 text-[11px] text-right mt-1 mb-3 flex-shrink-0 tabular-nums">{adjustText.length} caracteres</p>
-                <motion.button
-                  whileHover={{ y: -1 }} whileTap={{ y: 0 }}
-                  onClick={handleRequestAdjustments}
-                  disabled={isAdjusting || !adjustText.trim()}
-                  className="w-full py-2.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[13px] flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-neutral-50 transition-all flex-shrink-0"
-                  style={{ fontWeight: 500 }}
-                >
-                  {isAdjusting
-                    ? <><Loader2 size={13} className="animate-spin" strokeWidth={1.75} />Enviando al Agente 7…</>
-                    : <><RotateCcw size={13} strokeWidth={1.75} />Solicitar ajustes</>}
-                </motion.button>
+                <div className="flex gap-2 flex-shrink-0">
+                  <motion.button
+                    whileHover={{ y: -1 }} whileTap={{ y: 0 }}
+                    onClick={handleRequestAdjustments}
+                    disabled={isAdjusting || !adjustText.trim()}
+                    className="flex-1 py-2.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-neutral-50 transition-all"
+                    style={{ fontWeight: 500 }}
+                  >
+                    {isAdjusting
+                      ? <><Loader2 size={12} className="animate-spin" strokeWidth={1.75} />Enviando…</>
+                      : <><Send size={12} strokeWidth={1.75} />Solicitar ajuste</>}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ y: -1 }} whileTap={{ y: 0 }}
+                    onClick={handleReprocess}
+                    disabled={isAdjusting || !adjustText.trim()}
+                    className="flex-1 py-2.5 rounded-full border border-neutral-900 text-neutral-900 text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-neutral-50 transition-all"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <RotateCcw size={12} strokeWidth={1.75} />
+                    Reprocesar
+                  </motion.button>
+                </div>
               </>
             ) : (
               <div className="rounded-2xl border border-neutral-200/70 bg-white p-5">
@@ -1112,6 +1751,26 @@ export default function GuiaMetodologicaView() {
                 {phase.completedAt && (
                   <p className="text-neutral-400 text-[11px] mt-3 tabular-nums">Aprobado el {phase.completedAt}</p>
                 )}
+                <div className="mt-4 pt-4 border-t border-neutral-100">
+                  <p className="text-neutral-400 text-[11px] mb-2 leading-relaxed">¿Necesitas generar una nueva versión? Escribe instrucciones y reprocesa.</p>
+                  <textarea
+                    value={adjustText}
+                    onChange={e => setAdjustText(e.target.value)}
+                    placeholder="Ej: Ajusta el capítulo de implementación para un plazo de 90 días…"
+                    rows={3}
+                    className="w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[12px] outline-none focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400 mb-2"
+                  />
+                  <motion.button
+                    whileHover={{ y: -1 }} whileTap={{ y: 0 }}
+                    onClick={handleReprocess}
+                    disabled={isAdjusting || !adjustText.trim()}
+                    className="w-full py-2 rounded-full border border-neutral-900 text-neutral-900 text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-neutral-50 transition-all"
+                    style={{ fontWeight: 500 }}
+                  >
+                    <RotateCcw size={12} strokeWidth={1.75} />
+                    Reprocesar guía metodológica
+                  </motion.button>
+                </div>
               </div>
             )}
           </div>
@@ -1132,6 +1791,28 @@ export default function GuiaMetodologicaView() {
               </motion.button>
             </div>
           )}
+
+          {/* Navegación entre fases (flechas) */}
+          {isCompleted && (
+            <div className="px-4 pb-4 pt-3 border-t border-neutral-200/60 bg-white flex-shrink-0">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => navigate(`/dashboard/project/${projectId}/phase/6`)}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-neutral-700 text-[12px] bg-white border border-neutral-200/80 hover:bg-neutral-50 transition-all"
+                  style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+                >
+                  ← Fase 6
+                </button>
+                <button
+                  onClick={() => navigate(`/dashboard/project/${projectId}/phase/8`)}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-white text-[12px] transition-all"
+                  style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+                >
+                  Fase 8 →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1143,46 +1824,7 @@ export default function GuiaMetodologicaView() {
         versionNum={currentVersion?.number ?? 1}
       />
 
-      <NextPhaseButton projectId={projectId!} nextPhase={8} prevPhase={6} show={isCompleted} />
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Shared header
-// ---------------------------------------------------------------------------
-function Header({ project, projectId, onClose, isCompleted, onDownload, currentVersion }: {
-  project: { companyName: string };
-  projectId: string;
-  onClose: () => void;
-  isCompleted?: boolean;
-  onDownload?: () => void;
-  currentVersion?: DocVersion | null;
-}) {
-  return (
-    <div className="sticky top-0 z-20 bg-[#fafaf9]/85 backdrop-blur-md border-b border-neutral-200/60 flex-shrink-0">
-      <div className="px-6 py-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onClose} className="group inline-flex items-center gap-1.5 text-neutral-500 hover:text-neutral-900 text-[13px] transition-colors">
-            <ArrowLeft size={14} strokeWidth={1.75} className="transition-transform group-hover:-translate-x-0.5" />
-            <span className="truncate">{project.companyName}</span>
-          </button>
-          <span className="text-neutral-300">/</span>
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-neutral-900 text-white text-[10px] tabular-nums" style={{ fontWeight: 600 }}>7</span>
-            <span className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>Guía Metodológica</span>
-            {isCompleted && (
-              <>
-                <span className="text-neutral-300">·</span>
-                <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Completada</span>
-              </>
-            )}
-          </div>
-        </div>
-        <button onClick={onClose} className="w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-700 transition-colors flex-shrink-0">
-          <X size={14} strokeWidth={1.75} />
-        </button>
-      </div>
     </div>
   );
 }

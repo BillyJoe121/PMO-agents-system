@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -46,6 +46,344 @@ function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const EMPTY_VALUE = 'N/A';
+
+function valueOrEmpty(value: unknown) {
+  if (value === null || value === undefined || value === '') return EMPTY_VALUE;
+  if (typeof value === 'boolean') return value ? 'Si' : 'No';
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  return String(value);
+}
+
+function normalizeList(items?: unknown[]) {
+  return Array.isArray(items) && items.length > 0 ? items.map(valueOrEmpty) : [EMPTY_VALUE];
+}
+
+function DiagnosisCard({ title, children, muted = false }: { title: string; children: ReactNode; muted?: boolean }) {
+  return (
+    <div className={`rounded-2xl border border-neutral-200/70 ${muted ? 'bg-neutral-50' : 'bg-white'} p-6`} style={{ boxShadow: muted ? undefined : '0 1px 2px rgba(0,0,0,0.02)' }}>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function EmptyAwareList({ items }: { items?: unknown[] }) {
+  return (
+    <ul className="space-y-2">
+      {normalizeList(items).map((item, i) => (
+        <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
+          <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function KeyValueGrid({ rows }: { rows: { label: string; value: unknown }[] }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {rows.map((row) => (
+        <div key={row.label} className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>{row.label}</p>
+          <p className="text-neutral-800 text-[13px] leading-relaxed">{valueOrEmpty(row.value)}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BadgeList({ items }: { items?: unknown[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {normalizeList(items).map((item, i) => (
+        <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-neutral-700 text-[11px]" style={{ fontWeight: 500 }}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DocumentDiagnosisView({ diagnosis }: { diagnosis: AgentDiagnosis }) {
+  const d = diagnosis;
+  const dimensiones = [
+    ['inicio', 'Inicio'],
+    ['planeacion', 'Planeacion'],
+    ['ejecucion', 'Ejecucion'],
+    ['monitoreo_control', 'Monitoreo y control'],
+    ['cierre', 'Cierre'],
+  ] as const;
+
+  return (
+    <div className="space-y-5">
+      <DiagnosisCard title="Diagnostico - Agente 3 · Documental">
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+            <Sparkles size={13} strokeWidth={1.75} />
+          </div>
+          <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Respuesta consolidada</span>
+        </div>
+        <p className="text-neutral-700 text-[14px] leading-relaxed">{valueOrEmpty(d.summary)}</p>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Cobertura documental">
+        <KeyValueGrid rows={[
+          { label: 'Total esperado', value: d.cobertura_documental?.total_esperado },
+          { label: 'Recibidos completos', value: d.cobertura_documental?.recibidos_completos },
+          { label: 'Recibidos referenciados', value: d.cobertura_documental?.recibidos_referenciados },
+          { label: 'Faltantes', value: d.cobertura_documental?.faltantes },
+          { label: 'Documentos vencidos', value: d.cobertura_documental?.documentos_vencidos },
+        ]} />
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Calidad documental">
+        <div className="space-y-4">
+          <KeyValueGrid rows={[
+            { label: 'Resultado consolidado', value: d.calidad_documental?.resultado_consolidado },
+            { label: 'Actualizacion', value: d.calidad_documental?.actualizacion },
+            { label: 'Aplicabilidad', value: d.calidad_documental?.aplicabilidad },
+            { label: 'Nivel detalle', value: d.calidad_documental?.nivel_detalle },
+            { label: 'Coherencia entre documentos', value: d.calidad_documental?.coherencia_entre_documentos },
+          ]} />
+          <p className="text-neutral-700 text-[13px] leading-relaxed">{valueOrEmpty(d.calidad_documental?.justificacion)}</p>
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Cobertura ciclo de vida">
+        <div className="space-y-4">
+          <KeyValueGrid rows={[
+            { label: 'Completitud', value: d.cobertura_ciclo_vida?.completitud },
+            { label: 'Continuidad documental', value: d.cobertura_ciclo_vida?.continuidad_documental },
+            { label: 'Desbalance identificado', value: d.cobertura_ciclo_vida?.desbalance_identificado },
+          ]} />
+          <BadgeList items={d.cobertura_ciclo_vida?.fases_faltantes} />
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Inventario y cobertura documental">
+        {(() => {
+          const estadoMap: Record<string, any> = {};
+          for (const doc of d.estado_documentos ?? []) {
+            const code = doc.codigo_catalogo?.trim().toUpperCase();
+            if (code) estadoMap[code] = doc;
+          }
+
+          const missingSet = new Set((d.missing_documents ?? []).map((code) => code.trim().toUpperCase()));
+          const catalog = CATEGORIES.filter((cat) => cat.value !== 'D11');
+
+          const stateLabel: Record<string, string> = {
+            util_para_analisis: 'Util para analisis',
+            critico_para_gp: 'Critico',
+            incompleto: 'Incompleto',
+            no_legible: 'No legible',
+            parcialmente_interpretable: 'Parcial',
+            insuficiente_para_concluir: 'Insuficiente',
+            desactualizado: 'Desactualizado',
+            solo_referenciado: 'Solo referenciado',
+            no_entregado: 'No entregado',
+          };
+
+          return (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border border-neutral-100">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-neutral-100 bg-neutral-50">
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Codigo</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Documento esperado</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Archivo recibido</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold text-center">Disponible</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold text-center">Faltante</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Estado</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-50 bg-white">
+                    {catalog.map((cat) => {
+                      const entry = estadoMap[cat.value];
+                      const isMissing = missingSet.has(cat.value) || !entry || entry.estado === 'no_entregado';
+                      return (
+                        <tr key={cat.value} className="hover:bg-neutral-50/60 transition-colors">
+                          <td className="px-4 py-3.5">
+                            <span className="text-[10px] font-bold tabular-nums text-neutral-400">{cat.value}</span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="text-neutral-700 text-[13px]" style={{ fontWeight: 500 }}>{cat.label}</span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="text-neutral-500 text-[12px] leading-relaxed">{valueOrEmpty(entry?.nombre)}</span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            {!isMissing ? (
+                              <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-900 text-white">
+                                <Check size={12} strokeWidth={3} />
+                              </div>
+                            ) : (
+                              <span className="text-neutral-200 text-[10px]">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            {isMissing ? (
+                              <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 text-neutral-400 border border-neutral-200">
+                                <X size={12} strokeWidth={3} />
+                              </div>
+                            ) : (
+                              <span className="text-neutral-200 text-[10px]">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] border ${
+                              isMissing
+                                ? 'bg-neutral-50 text-neutral-400 border-neutral-200'
+                                : 'bg-neutral-100 text-neutral-800 border-neutral-200'
+                            }`} style={{ fontWeight: 500 }}>
+                              {entry?.estado ? stateLabel[entry.estado] ?? entry.estado : 'No entregado'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="text-neutral-500 text-[12px]">{valueOrEmpty(entry?.valor_analitico)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Codigos faltantes reportados por el agente</p>
+                <BadgeList items={d.missing_documents} />
+              </div>
+            </div>
+          );
+        })()}
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Insights clave"><EmptyAwareList items={d.key_insights} /></DiagnosisCard>
+
+      <DiagnosisCard title="Hallazgos documentales">
+        <div className="space-y-3">
+          {(d.hallazgos_documentales?.length ? d.hallazgos_documentales : [{ tipo: EMPTY_VALUE, nombre: EMPTY_VALUE, descripcion: EMPTY_VALUE, documentos_fuente: [] }]).map((hallazgo, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <KeyValueGrid rows={[
+                { label: 'Tipo', value: hallazgo.tipo },
+                { label: 'Nombre', value: hallazgo.nombre },
+                { label: 'Descripcion', value: hallazgo.descripcion },
+              ]} />
+              <div className="mt-3"><BadgeList items={hallazgo.documentos_fuente} /></div>
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Brechas documentales">
+        <div className="space-y-3">
+          {(d.brechas_documentales?.length ? d.brechas_documentales : [{ id: EMPTY_VALUE, impacto: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimension_o_area: EMPTY_VALUE, evidencia_o_ausencia: EMPTY_VALUE, documentos_fuente_o_ausentes: [] }]).map((brecha, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <KeyValueGrid rows={[
+                { label: 'ID', value: brecha.id },
+                { label: 'Impacto', value: brecha.impacto },
+                { label: 'Dimension o area', value: brecha.dimension_o_area },
+                { label: 'Descripcion', value: brecha.descripcion },
+                { label: 'Evidencia o ausencia', value: brecha.evidencia_o_ausencia },
+              ]} />
+              <div className="mt-3"><BadgeList items={brecha.documentos_fuente_o_ausentes} /></div>
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Dimensiones gestion de proyectos">
+        <div className="space-y-4">
+          {dimensiones.map(([key, label]) => {
+            const dim = d.dimensiones_gestion_proyectos?.[key];
+            return (
+              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-5">
+                <p className="text-neutral-900 text-[13px] mb-4" style={{ fontWeight: 600 }}>{label}</p>
+                <KeyValueGrid rows={[
+                  { label: 'Confianza', value: dim?.confianza },
+                  { label: 'Nivel formalidad', value: dim?.nivel_formalidad },
+                ]} />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Artefactos</p><EmptyAwareList items={dim?.artefactos} /></div>
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Herramientas</p><EmptyAwareList items={dim?.herramientas} /></div>
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Roles documentados</p><EmptyAwareList items={dim?.roles_documentados} /></div>
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Fuentes documentales</p><EmptyAwareList items={dim?.fuentes_documentales} /></div>
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesos documentados</p><EmptyAwareList items={dim?.procesos_documentados} /></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Limitaciones" muted>
+        <div className="space-y-3">
+          {(d.limitaciones?.length ? d.limitaciones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, impacto_confiabilidad: EMPTY_VALUE, dimensiones_afectadas: [] }]).map((lim, i) => (
+            <div key={i} className="rounded-xl border border-neutral-200 bg-white p-4">
+              <KeyValueGrid rows={[
+                { label: 'Tipo', value: lim.tipo },
+                { label: 'Descripcion', value: lim.descripcion },
+                { label: 'Impacto confiabilidad', value: lim.impacto_confiabilidad },
+              ]} />
+              <div className="mt-3"><BadgeList items={lim.dimensiones_afectadas} /></div>
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Recomendaciones" muted><EmptyAwareList items={d.recommendations} /></DiagnosisCard>
+
+      <DiagnosisCard title="Insumos para agente 4">
+        <div className="space-y-5">
+          <KeyValueGrid rows={[
+            { label: 'Nivel estandarizacion', value: d.insumos_para_agente_4?.nivel_estandarizacion },
+            { label: 'Nivel calidad documental', value: d.insumos_para_agente_4?.nivel_calidad_documental },
+          ]} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Hallazgos clave resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.hallazgos_clave_resumen} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Brechas criticas resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.brechas_criticas_resumen} /></div>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Metodologias mencionadas</p>
+            <div className="space-y-3">
+              {(d.insumos_para_agente_4?.metodologias_mencionadas?.length ? d.insumos_para_agente_4.metodologias_mencionadas : [{ nombre: EMPTY_VALUE, documento_fuente: EMPTY_VALUE, nivel_adopcion_visible: EMPTY_VALUE }]).map((met, i) => (
+                <KeyValueGrid key={i} rows={[
+                  { label: 'Nombre', value: met.nombre },
+                  { label: 'Documento fuente', value: met.documento_fuente },
+                  { label: 'Nivel adopcion visible', value: met.nivel_adopcion_visible },
+                ]} />
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Senales flexibilidad agil</p>
+              {(d.insumos_para_agente_4?.senales_flexibilidad_agil?.length ? d.insumos_para_agente_4.senales_flexibilidad_agil : [{ descripcion: EMPTY_VALUE, nivel_evidencia: EMPTY_VALUE, documentos_fuente: [] }]).map((senal, i) => (
+                <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 mb-3">
+                  <KeyValueGrid rows={[{ label: 'Descripcion', value: senal.descripcion }, { label: 'Nivel evidencia', value: senal.nivel_evidencia }]} />
+                  <div className="mt-3"><BadgeList items={senal.documentos_fuente} /></div>
+                </div>
+              ))}
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Senales estructuracion formal</p>
+              {(d.insumos_para_agente_4?.senales_estructuracion_formal?.length ? d.insumos_para_agente_4.senales_estructuracion_formal : [{ descripcion: EMPTY_VALUE, nivel_evidencia: EMPTY_VALUE, documentos_fuente: [] }]).map((senal, i) => (
+                <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 mb-3">
+                  <KeyValueGrid rows={[{ label: 'Descripcion', value: senal.descripcion }, { label: 'Nivel evidencia', value: senal.nivel_evidencia }]} />
+                  <div className="mt-3"><BadgeList items={senal.documentos_fuente} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DiagnosisCard>
+    </div>
+  );
 }
 
 // ── Category dropdown ──────────────────────────────────────────────────────────
@@ -199,6 +537,7 @@ export default function DocumentacionModule() {
   const [agent9Status, setAgent9Status] = useState<'idle' | 'processing' | 'done' | 'error'>('idle');
   const [expandedDim, setExpandedDim] = useState<string | null>(null);
   const agent9PollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const agent9TriggerInFlightRef = useRef(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -214,22 +553,29 @@ export default function DocumentacionModule() {
   }, [isProcessing]);
 
   // Trigger Agent 9 manually (for existing projects or retry)
-  const triggerAgent9 = async () => {
+  const triggerAgent9 = useCallback(async () => {
     if (!projectId) return;
+    if (agent9TriggerInFlightRef.current) return;
+    agent9TriggerInFlightRef.current = true;
     setAgent9Status('processing');
     try {
       await supabase.from('fases_estado').upsert(
-        { proyecto_id: projectId, numero_fase: 9, estado_visual: 'procesando', updated_at: new Date().toISOString() },
+        { proyecto_id: projectId, numero_fase: 9, estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() },
         { onConflict: 'proyecto_id,numero_fase' }
       );
       supabase.functions.invoke('pmo-agent', {
         body: { projectId, phaseNumber: 9, iteration: 1 }
-      }).catch(e => console.error('[Agent9] invoke error:', e));
+      }).catch(e => {
+        agent9TriggerInFlightRef.current = false;
+        console.error('[Agent9] invoke error:', e);
+        setAgent9Status('error');
+      });
     } catch (e) {
+      agent9TriggerInFlightRef.current = false;
       console.error('[Agent9] trigger error:', e);
       setAgent9Status('error');
     }
-  };
+  }, [projectId]);
 
   // Poll for Agent 9 results (question bank)
   useEffect(() => {
@@ -252,8 +598,15 @@ export default function DocumentacionModule() {
       // Si ya hay datos consolidados, los cargamos directamente sin importar el estado_visual
       if (data?.datos_consolidados) {
         const dc = data.datos_consolidados as any;
+        if (dc?._error) {
+          agent9TriggerInFlightRef.current = false;
+          setAgent9Status('error');
+          if (agent9PollRef.current) clearInterval(agent9PollRef.current);
+          return;
+        }
         const parsed = dc?.diagnosis ?? dc;
         if (parsed?.preguntas_apertura || parsed?.preguntas_por_dimension) {
+          agent9TriggerInFlightRef.current = false;
           setAgent9Data(parsed);
           setAgent9Status('done');
           if (agent9PollRef.current) clearInterval(agent9PollRef.current);
@@ -262,15 +615,15 @@ export default function DocumentacionModule() {
       }
 
       // Lógica de auto-trigger o actualización de estado
-      if (data?.estado_visual === 'procesando') {
-        setAgent9Status('processing');
-      } else if (!data || (data?.estado_visual === 'disponible' && !data?.datos_consolidados)) {
-        // No hay registro o está disponible sin datos -> Disparar Agente 9
-        if (agent9PollRef.current) clearInterval(agent9PollRef.current);
-        triggerAgent9();
-      } else if (data?.estado_visual === 'disponible' && agent9Status === 'processing') {
+      if (data?.estado_visual === 'error') {
+        agent9TriggerInFlightRef.current = false;
         setAgent9Status('error');
         if (agent9PollRef.current) clearInterval(agent9PollRef.current);
+      } else if (data?.estado_visual === 'procesando') {
+        setAgent9Status('processing');
+      } else if (!data || !data?.datos_consolidados) {
+        // No hay registro o está disponible sin datos -> Disparar Agente 9
+        triggerAgent9();
       }
     };
 
@@ -278,7 +631,7 @@ export default function DocumentacionModule() {
     agent9PollRef.current = setInterval(pollAgent9, 4000);
 
     return () => { if (agent9PollRef.current) clearInterval(agent9PollRef.current); };
-  }, [projectId, isCompleted, diagnosis]); // Añadido diagnosis como dependencia
+  }, [projectId, isCompleted, diagnosis, triggerAgent9]); // Añadido diagnosis como dependencia
 
   // Cleanup on unmount
   useEffect(() => {
@@ -666,6 +1019,8 @@ export default function DocumentacionModule() {
           return (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-5">
+              <DocumentDiagnosisView diagnosis={d} />
+              <div className="hidden">
 
               {/* Header */}
               <div className="rounded-2xl border border-neutral-200/70 bg-white p-7"
@@ -928,6 +1283,7 @@ export default function DocumentacionModule() {
                 </div>
               )}
 
+              </div>
 
               {/* ── Agente 9: Banco de Preguntas de Entrevista ── */}
               <div className="mt-2">
@@ -1024,6 +1380,130 @@ export default function DocumentacionModule() {
                             <MessageSquare size={13} strokeWidth={1.75} />
                           </div>
                           <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Recomendaciones para las entrevistas</span>
+                          <div className="flex-1" />
+                          <button
+                            title="Ver respuesta raw del Agente 9 en JSON"
+                            onClick={() => {
+                              const json = JSON.stringify(a9, null, 2);
+                              const win = window.open('', '_blank');
+                              if (!win) return;
+                              win.document.write(`<!DOCTYPE html><html lang="es"><head>
+                                <meta charset="UTF-8"/>
+                                <title>Agente 9 \u00b7 JSON raw</title>
+                                <style>
+                                  *{box-sizing:border-box;margin:0;padding:0}
+                                  body{background:#0d1117;color:#e6edf3;font-family:'SF Mono','Fira Code',monospace;font-size:13px;line-height:1.65;padding:32px}
+                                  h1{font-size:11px;font-weight:600;color:#7d8590;text-transform:uppercase;letter-spacing:.12em;margin-bottom:20px}
+                                  pre{white-space:pre-wrap;word-break:break-word}
+                                  .k{color:#79c0ff}.s{color:#a5d6ff}.n{color:#f2cc60}.b{color:#ff7b72}
+                                </style>
+                              </head><body>
+                                <h1>Agente 9 &mdash; Recomendaciones para entrevistas &mdash; Respuesta JSON</h1>
+                                <pre>${json
+                                  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                                  .replace(/"([^"]+)":/g,'<span class="k">"$1"</span>:')
+                                  .replace(/: "([^"]*)"/g,': <span class="s">"$1"</span>')
+                                  .replace(/: (-?\\d+\\.?\\d*)/g,': <span class="n">$1</span>')
+                                  .replace(/: (true|false|null)/g,': <span class="b">$1</span>')
+                                }</pre>
+                              </body></html>`);
+                              win.document.close();
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-200/80 rounded-full text-neutral-500 text-[11px] hover:bg-neutral-50 hover:text-neutral-800 transition-colors font-mono"
+                            style={{ fontWeight: 600, letterSpacing: '-0.02em' }}
+                          >
+                            {'{ }'}
+                          </button>
+                          <button
+                            title="Descargar preguntas como PDF"
+                            onClick={() => {
+                              const dims = [
+                                { key: 'inicio', label: 'Inicio' },
+                                { key: 'planeacion', label: 'Planeación' },
+                                { key: 'ejecucion', label: 'Ejecución' },
+                                { key: 'monitoreo_control', label: 'Monitoreo y Control' },
+                                { key: 'cierre', label: 'Cierre' },
+                              ];
+                              const renderQ = (p: any) => `
+                                <div class="q">
+                                  <div class="q-head">
+                                    <span class="qid">${p.pregunta_id}</span>
+                                    <span class="qtxt">${p.pregunta_principal}</span>
+                                  </div>
+                                  <div class="q-meta">
+                                    <span class="badge prio-${(p.prioridad||'').toLowerCase()}">${p.prioridad}</span>
+                                  </div>
+                                  ${(p.preguntas_de_profundizacion?.length > 0) ? `<ul class="sub">${p.preguntas_de_profundizacion.map((s:string) => `<li>${s}</li>`).join('')}</ul>` : ''}
+                                  ${p.contexto_para_el_consultor ? `<p class="ctx">${p.contexto_para_el_consultor}</p>` : ''}
+                                </div>`;
+                              const sections: string[] = [];
+                              if (a9.preguntas_apertura?.length > 0) {
+                                sections.push(`<h2>Preguntas de Apertura <span class="count">${a9.preguntas_apertura.length}</span></h2>${a9.preguntas_apertura.map(renderQ).join('')}`);
+                              }
+                              for (const d of dims) {
+                                const preg = a9.preguntas_por_dimension?.[d.key] ?? [];
+                                if (preg.length > 0) {
+                                  sections.push(`<h2>${d.label} <span class="count">${preg.length}</span></h2>${preg.map(renderQ).join('')}`);
+                                }
+                              }
+                              if (a9.preguntas_senales_metodologicas?.length > 0) {
+                                sections.push(`<h2>Señales Metodológicas <span class="count">${a9.preguntas_senales_metodologicas.length}</span></h2>${a9.preguntas_senales_metodologicas.map(renderQ).join('')}`);
+                              }
+                              if (a9.instrucciones_para_el_consultor?.advertencias?.length > 0) {
+                                sections.push(`<h2>Advertencias</h2><ul class="adv">${a9.instrucciones_para_el_consultor.advertencias.map((a:string) => `<li>${a}</li>`).join('')}</ul>`);
+                              }
+                              const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
+                                <title>Banco de Preguntas — Entrevistas</title>
+                                <style>
+                                  @page { margin: 20mm 15mm; }
+                                  * { box-sizing: border-box; margin: 0; padding: 0; }
+                                  body { font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12px; color: #1a1a1a; line-height: 1.6; padding: 40px; max-width: 800px; margin: 0 auto; }
+                                  h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.02em; }
+                                  .subtitle { font-size: 12px; color: #737373; margin-bottom: 6px; }
+                                  .stats { display: flex; gap: 24px; margin-bottom: 28px; padding: 12px 16px; background: #fafafa; border-radius: 10px; border: 1px solid #e5e5e5; }
+                                  .stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: #a3a3a3; font-weight: 500; }
+                                  .stat-value { font-size: 18px; font-weight: 700; color: #171717; }
+                                  h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #525252; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #e5e5e5; }
+                                  .count { font-weight: 400; color: #a3a3a3; font-size: 11px; }
+                                  .q { padding: 10px 14px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #f0f0f0; background: #fafafa; page-break-inside: avoid; }
+                                  .q-head { display: flex; gap: 8px; align-items: flex-start; }
+                                  .qid { font-size: 9px; color: #a3a3a3; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
+                                  .qtxt { font-size: 12px; font-weight: 500; color: #262626; }
+                                  .q-meta { margin: 4px 0 0 20px; }
+                                  .badge { display: inline-block; font-size: 9px; padding: 1px 8px; border-radius: 10px; font-weight: 600; }
+                                  .prio-alta { background: #171717; color: #fff; }
+                                  .prio-media { background: #e5e5e5; color: #404040; }
+                                  .prio-baja { background: #fafafa; color: #737373; border: 1px solid #e5e5e5; }
+                                  .sub { margin: 6px 0 0 20px; list-style: none; }
+                                  .sub li { font-size: 11px; color: #525252; padding: 2px 0; padding-left: 12px; position: relative; }
+                                  .sub li::before { content: '›'; position: absolute; left: 0; color: #a3a3a3; }
+                                  .ctx { margin: 4px 0 0 20px; font-size: 10px; color: #737373; font-style: italic; }
+                                  .adv li { font-size: 12px; color: #525252; margin-bottom: 4px; }
+                                  @media print { body { padding: 0; } }
+                                </style>
+                              </head><body>
+                                <h1>Banco de Preguntas para Entrevistas</h1>
+                                <p class="subtitle">Generado por Agente 9 — ${a9.total_preguntas} preguntas · ${a9.instrucciones_para_el_consultor?.tiempo_estimado_por_entrevista_minutos ?? '—'} min estimados</p>
+                                <p class="subtitle">${a9.instrucciones_para_el_consultor?.orden_recomendado ?? ''}</p>
+                                <div class="stats">
+                                  <div><div class="stat-label">Total</div><div class="stat-value">${a9.total_preguntas}</div></div>
+                                  <div><div class="stat-label">Tiempo est.</div><div class="stat-value">${a9.instrucciones_para_el_consultor?.tiempo_estimado_por_entrevista_minutos ?? '—'} min</div></div>
+                                  <div><div class="stat-label">Mín. por sesión</div><div class="stat-value">${a9.instrucciones_para_el_consultor?.preguntas_minimas_recomendadas_por_entrevista ?? '—'}</div></div>
+                                </div>
+                                ${sections.join('')}
+                              </body></html>`;
+                              const win = window.open('', '_blank');
+                              if (!win) return;
+                              win.document.write(html);
+                              win.document.close();
+                              setTimeout(() => win.print(), 400);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-900 bg-neutral-900 rounded-full text-white text-[11px] hover:bg-neutral-800 transition-colors"
+                            style={{ fontWeight: 500 }}
+                          >
+                            <Download size={11} strokeWidth={1.75} />
+                            PDF
+                          </button>
                         </div>
                         <p className="text-neutral-700 text-[14px] leading-relaxed mb-5">{a9.summary}</p>
 

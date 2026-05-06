@@ -76,6 +76,14 @@ export interface EntrevistasDiagnosis {
     dimensiones_afectadas: string[];
   }[];
   recommendations?: string[];
+  insumos_para_agente_4?: {
+    patrones_clave_resumen?: string[];
+    brechas_criticas_resumen?: string[];
+    indicadores_predictivos?: string[];
+    indicadores_agilidad?: string[];
+    indicadores_hibridos?: string[];
+    nivel_general_formalizacion?: string;
+  };
 }
 
 export function useEntrevistas(projectId: string) {
@@ -132,14 +140,39 @@ export function useEntrevistas(projectId: string) {
 
   const saveEntrevista = async (entrevista: EntrevistaLocal) => {
     try {
-      let finalStoragePath = entrevista.storagePath;
-      let finalFileName = entrevista.fileName;
+      let finalStoragePath = entrevista.storagePath || null;
+      let finalFileName = entrevista.fileName || null;
 
-      // Upload file if attached and not yet uploaded
-      if (entrevista.file && !entrevista.storagePath) {
-        const filePath = `entrevistas/${projectId}/${Date.now()}_${entrevista.file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      // Handle explicit file removal
+      if (entrevista.file === null) {
+        if (finalStoragePath) {
+          const pathMatch = finalStoragePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+          const rawPath = pathMatch ? decodeURIComponent(pathMatch[1]) : finalStoragePath;
+          await supabase.storage.from('documentos-pmo').remove([rawPath]).catch(e => console.error(e));
+        }
+        finalStoragePath = null;
+        finalFileName = null;
+      }
+      // Upload file if attached (it's a new file selected by the user)
+      else if (entrevista.file) {
+        // Delete previous file if replacing
+        if (finalStoragePath) {
+          const pathMatch = finalStoragePath.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
+          const rawPath = pathMatch ? decodeURIComponent(pathMatch[1]) : finalStoragePath;
+          await supabase.storage.from('documentos-pmo').remove([rawPath]).catch(e => console.error(e));
+        }
+
+        const normalizePath = (str: string) => {
+          return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // Quitar tildes
+            .replace(/[^a-zA-Z0-9._-]/g, "_") // Reemplazar caracteres especiales por guiones bajos
+            .replace(/_{2,}/g, "_"); // Evitar guiones bajos duplicados
+        };
+        const safeName = normalizePath(entrevista.file.name);
+        const filePath = `entrevistas/${projectId}/${Date.now()}_${safeName}`;
         const { error: uploadError } = await supabase.storage
-          .from('documentos-pmo') // Reusing the same bucket
+          .from('documentos-pmo')
           .upload(filePath, entrevista.file, { cacheControl: '3600', upsert: false });
         
         if (uploadError) throw uploadError;

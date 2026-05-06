@@ -6,9 +6,8 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
   const [activeLink, setActiveLink] = useState<string | null>(null);
   const [responses, setResponses] = useState<EncuestaResponse[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [externalFile, setExternalFile] = useState<File | null>(null);
-  const [existingFileName, setExistingFileName] = useState<string | null>(null);
-  const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null);
+  const [externalFiles, setExternalFiles] = useState<File[]>([]);
+  const [existingFiles, setExistingFiles] = useState<{name: string, url: string}[]>([]);
   const deletedFilesRef = useRef<Set<string>>(new Set());
 
   const fetchInitialData = useCallback(async (isSilent = false) => {
@@ -42,18 +41,14 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
       const f5Files = files?.filter(f => f.name.startsWith(prefix)) || [];
       if (f5Files.length > 0) {
         f5Files.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const latestFile = f5Files[0];
-        if (deletedFilesRef.current.has(latestFile.name)) {
-          setExistingFileName(null);
-          setExistingFileUrl(null);
-        } else {
-          setExistingFileName(latestFile.name);
-          const { data: signedData } = await supabase.storage.from('documentos-pmo').createSignedUrl(`proyectos/${projectId}/${latestFile.name}`, 3600);
-          setExistingFileUrl(signedData?.signedUrl || null);
-        }
+        const validFiles = f5Files.filter(f => !deletedFilesRef.current.has(f.name));
+        const fileObjects = await Promise.all(validFiles.map(async (file) => {
+          const { data: signedData } = await supabase.storage.from('documentos-pmo').createSignedUrl(`proyectos/${projectId}/${file.name}`, 3600);
+          return { name: file.name, url: signedData?.signedUrl || '' };
+        }));
+        setExistingFiles(fileObjects);
       } else {
-        setExistingFileName(null);
-        setExistingFileUrl(null);
+        setExistingFiles([]);
       }
     } catch (err) {
       console.error(`Error fetching madurez ${tipoEncuesta} data:`, err);
@@ -84,27 +79,43 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
     return data.token;
   };
 
-  const deleteFile = async () => {
-    if (!projectId || !existingFileName) return;
-    const path = `proyectos/${projectId}/${existingFileName}`;
-    deletedFilesRef.current.add(existingFileName);
-    setExistingFileName(null);
-    setExistingFileUrl(null);
-    const { error } = await supabase.storage.from('documentos-pmo').remove([path]);
-    if (error) { deletedFilesRef.current.delete(existingFileName); throw error; }
+  const deleteExistingFile = async (fileName: string) => {
+    if (!projectId) return;
+    deletedFilesRef.current.add(fileName);
+    setExistingFiles(prev => prev.filter(f => f.name !== fileName));
+    const { error } = await supabase.storage.from('documentos-pmo').remove([`proyectos/${projectId}/${fileName}`]);
+    if (error) console.error("Error deleting file:", error);
   };
 
   const uploadFileIfAny = async () => {
-    if (!projectId || !externalFile) return existingFileUrl;
-    const path = `proyectos/${projectId}/f5_${tipoEncuesta}_${Date.now()}_${externalFile.name}`;
-    const { error } = await supabase.storage.from('documentos-pmo').upload(path, externalFile);
-    if (error) throw error;
-    const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(path, 3600);
-    return data?.signedUrl || null;
+    if (!projectId || externalFiles.length === 0) return existingFiles.map(f => f.url);
+    
+    const uploadedUrls: string[] = [...existingFiles.map(f => f.url)];
+    
+    for (const file of externalFiles) {
+      const safeFileName = file.name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      const path = `proyectos/${projectId}/f5_${tipoEncuesta}_${Date.now()}_${safeFileName || 'encuesta.csv'}`;
+      const { error } = await supabase.storage.from('documentos-pmo').upload(path, file);
+      if (error) throw error;
+      const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(path, 3600);
+      if (data?.signedUrl) {
+         uploadedUrls.push(data.signedUrl);
+      }
+    }
+    return uploadedUrls.length > 0 ? uploadedUrls[0] : null; // Keep returning one or adapt if needed elsewhere
   };
 
-  const clearExternalFile = () => {
-    setExternalFile(null);
+  const addExternalFile = (file: File) => {
+    setExternalFiles(prev => [...prev, file]);
+  };
+
+  const removeExternalFile = (fileName: string) => {
+    setExternalFiles(prev => prev.filter(f => f.name !== fileName));
   };
 
   const downloadCSV = () => {
@@ -171,5 +182,5 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
     URL.revokeObjectURL(url);
   };
 
-  return { activeLink, responses, isLoadingData, externalFile, setExternalFile, clearExternalFile, existingFileName, existingFileUrl, fetchInitialData, generateLink, deleteFile, uploadFileIfAny, downloadCSV };
+  return { activeLink, responses, isLoadingData, externalFiles, addExternalFile, removeExternalFile, existingFiles, fetchInitialData, generateLink, deleteExistingFile, uploadFileIfAny, downloadCSV };
 }

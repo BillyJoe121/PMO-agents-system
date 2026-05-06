@@ -159,7 +159,13 @@ export function useIdoneidad(projectId: string | undefined) {
 
       let finalFileUrl = existingFileUrl;
       if (externalFile) {
-        const path = `proyectos/${projectId}/f3_${Date.now()}_${externalFile.name}`;
+        const safeFileName = externalFile.name
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_+|_+$/g, '');
+        const path = `proyectos/${projectId}/f3_${Date.now()}_${safeFileName}`;
         const { error: uploadError } = await supabase.storage.from('documentos-pmo').upload(path, externalFile);
         if (uploadError) throw new Error(`Error subiendo archivo: ${uploadError.message}`);
         

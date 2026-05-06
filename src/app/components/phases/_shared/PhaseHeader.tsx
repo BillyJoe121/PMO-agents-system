@@ -101,9 +101,53 @@ export default function PhaseHeader({
           <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
             {rightSlot}
 
+            {/* ── Botón Ver JSON (automático si hay agentData) ── */}
+            <AnimatePresence>
+              {phase?.agentData && Object.keys(phase.agentData).length > 0 && (
+                <motion.button
+                  key="json-btn"
+                  initial={{ opacity: 0, scale: 0.9, width: 0 }}
+                  animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                  exit={{ opacity: 0, scale: 0.9, width: 0 }}
+                  transition={{ duration: 0.18 }}
+                  onClick={() => {
+                    const json = JSON.stringify(phase.agentData, null, 2);
+                    const win = window.open('', '_blank');
+                    if (!win) return;
+                    win.document.write(`<!DOCTYPE html><html lang="es"><head>
+                      <meta charset="UTF-8"/>
+                      <title>Agente ${phaseNumber} \u00b7 JSON raw</title>
+                      <style>
+                        *{box-sizing:border-box;margin:0;padding:0}
+                        body{background:#0d1117;color:#e6edf3;font-family:'SF Mono','Fira Code',monospace;font-size:13px;line-height:1.65;padding:32px}
+                        h1{font-size:11px;font-weight:600;color:#7d8590;text-transform:uppercase;letter-spacing:.12em;margin-bottom:20px}
+                        pre{white-space:pre-wrap;word-break:break-word}
+                        .k{color:#79c0ff}.s{color:#a5d6ff}.n{color:#f2cc60}.b{color:#ff7b72}
+                      </style>
+                    </head><body>
+                      <h1>Agente ${phaseNumber} &mdash; ${phaseName} &mdash; Respuesta JSON</h1>
+                      <pre>${json
+                        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"([^"]+)":/g,'<span class="k">"$1"</span>:')
+                        .replace(/: "([^"]*)"/g,': <span class="s">"$1"</span>')
+                        .replace(/: (-?\\d+\\.?\\d*)/g,': <span class="n">$1</span>')
+                        .replace(/: (true|false|null)/g,': <span class="b">$1</span>')
+                      }</pre>
+                    </body></html>`);
+                    win.document.close();
+                  }}
+                  title="Ver respuesta raw del agente en JSON"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] border bg-white border-neutral-200 hover:border-neutral-300 text-neutral-600 hover:text-neutral-900 transition-all flex-shrink-0 overflow-hidden font-mono"
+                  style={{ fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}
+                >
+                  {'{ }'}
+                </motion.button>
+              )}
+            </AnimatePresence>
+
             {/* ── Botón Descargar PDF ── */}
             <AnimatePresence>
-              {phase?.status === 'completado' && (
+              {(phase?.status === 'completado' || (phase?.agentData && Object.keys(phase.agentData).length > 0)) && (
                 <motion.button
                   key="download-btn"
                   initial={{ opacity: 0, scale: 0.9, width: 0 }}
@@ -120,9 +164,9 @@ export default function PhaseHeader({
               )}
             </AnimatePresence>
 
-            {/* ── Botón reprocesar agente (solo visible cuando está completado o error) ── */}
+            {/* ── Botón reprocesar agente (solo visible cuando está completado o error o si se provee callback) ── */}
             <AnimatePresence>
-              {(phase?.status === 'completado' || phase?.status === 'error') && (
+              {(phase?.status === 'completado' || phase?.status === 'error' || onReprocessed) && phase?.status !== 'procesando' && (
                 <motion.button
                   key="reprocess-btn"
                   initial={{ opacity: 0, scale: 0.9, width: 0 }}

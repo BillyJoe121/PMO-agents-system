@@ -110,56 +110,7 @@ const MATURITY_LEVELS = [
   { level: 5, name: 'Optimizado',     color: '#0a0a0a', bg: '#f5f5f5', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
 ];
 
-// Constants eliminated in favor of database integration
-
-const MOCK_RESULTS_PREDICTIVA: MaturityResult = {
-  level: 3, score: 67,
-  gaps: [
-    'El control de cambios no está implementado de forma uniforme en todas las unidades.',
-    'La gestión de riesgos se realiza de manera informal y sin registros actualizados.',
-    'Las métricas de desempeño (EVM/CPI) son conocidas pero no aplicadas sistemáticamente.',
-    'Las lecciones aprendidas se documentan ocasionalmente y no se reutilizan.',
-  ],
-  recommendations: [
-    'Estandarizar la plantilla de acta de constitución y hacerla obligatoria para todos los proyectos.',
-    'Implementar un registro centralizado de riesgos con revisión quincenal.',
-    'Capacitar a los gerentes de proyecto en métricas de valor ganado (EVM).',
-  ],
-};
-
-const MOCK_RESULTS_AGIL: MaturityResult = {
-  level: 2, score: 44,
-  gaps: [
-    'Las retrospectivas son esporádicas y sus compromisos de mejora no tienen seguimiento.',
-    'El backlog carece de priorización formal; los ítems no tienen criterios de aceptación.',
-    'Los equipos dependen de la aprobación gerencial para decisiones operativas simples.',
-    'No se mide la velocidad del equipo ni se usa para estimar futuros sprints.',
-  ],
-  recommendations: [
-    'Institucionalizar retrospectivas al cierre de cada sprint con tablero de compromisos.',
-    'Designar un Product Owner con dedicación real y capacitar en refinamiento de backlog.',
-    'Definir un sistema de métricas ágiles: velocity, burn-down y lead time.',
-  ],
-};
-
-function buildMockResults(pmoType: PmoType, comment?: string): FullResults {
-  const hasAgil = pmoType === 'Ágil' || pmoType === 'Híbrida';
-  const hasPredictiva = pmoType === 'Predictiva' || pmoType === 'Híbrida';
-  const agil = hasAgil ? { ...MOCK_RESULTS_AGIL, score: comment ? 51 : 44 } : undefined;
-  const predictiva = hasPredictiva ? { ...MOCK_RESULTS_PREDICTIVA, score: comment ? 72 : 67 } : undefined;
-  const scores = [agil?.score, predictiva?.score].filter(Boolean) as number[];
-  const overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-  const overallLevel = overallScore >= 80 ? 4 : overallScore >= 60 ? 3 : overallScore >= 40 ? 2 : 1;
-
-  return {
-    agil, predictiva, overallLevel, overallScore,
-    summary: comment
-      ? `[Diagnóstico reprocesado] Tras incorporar el comentario del consultor ("${comment.slice(0, 60)}..."), el Agente 5 recalibró los pesos de las dimensiones evaluadas, reflejando un incremento marginal en las puntuaciones.`
-      : `El diagnóstico de madurez revela que la organización se encuentra en una etapa ${pmoType === 'Híbrida' ? 'de transición entre los niveles 2 y 3' : `Nivel ${overallLevel}`}. Se identificaron brechas críticas en la sistematización de procesos y en la medición del desempeño. Se recomienda un plan de mejora focalizado en las dimensiones con mayor brecha antes de avanzar al siguiente nivel de madurez.`,
-    timestamp: new Date().toISOString(),
-    version: comment ? 'reprocesado' : 'original',
-  };
-}
+// No local mock results are used in this module; all diagnostics come from fases_estado.
 
 // ---------------------------------------------------------------------------
 // PMO type config
@@ -413,15 +364,46 @@ function parseAgentResults(datos: any): FullResults | null {
   const d = obj.diagnosis ?? obj.data?.diagnosis ?? obj.data ?? obj;
   if (!d) return null;
 
+  const pickFirst = (...values: any[]) => values.find(v => v !== undefined && v !== null);
+  const asArray = (value: any): any[] => Array.isArray(value) ? value : [];
+  const hasAnyKey = (src: any, keys: string[]) => keys.some(key => src?.[key] !== undefined && src?.[key] !== null);
+
+  const predictiveSource = pickFirst(
+    d.predictive_maturity,
+    d.predictiva,
+    d.madurez_predictiva,
+    d.predictive,
+    d.predictivo,
+    d.madurezPredictiva,
+    d.predictiva_maturity,
+    d.maturity_surveys?.predictive,
+    d.maturity_surveys?.predictiva,
+    d.resultados?.predictiva,
+    d.resultados_madurez?.predictiva
+  );
+  const agileSource = pickFirst(
+    d.agile_maturity,
+    d.agil,
+    d.madurez_agil,
+    d.agile,
+    d.madurezAgil,
+    d.agil_maturity,
+    d.maturity_surveys?.agile,
+    d.maturity_surveys?.agil,
+    d.resultados?.agil,
+    d.resultados_madurez?.agil
+  );
+
   const hasMeaningfulData =
-    d.overall_maturity_score != null || d.overallScore != null ||
-    d.overall_maturity_level != null || d.predictive_maturity != null ||
-    d.predictiva != null || d.madurez_predictiva != null ||
-    d.agile_maturity != null || d.agil != null || d.madurez_agil != null;
+    hasAnyKey(d, ['overall_maturity_score', 'overallScore', 'overall_score', 'score_global', 'overall_maturity_level', 'nivel_global']) ||
+    predictiveSource != null ||
+    agileSource != null;
   if (!hasMeaningfulData) return null;
 
   const labelToLevel = (label: string | number | undefined): number => {
     if (typeof label === 'number') return Math.max(1, Math.min(5, Math.round(label)));
+    const numeric = String(label ?? '').match(/[1-5]/)?.[0];
+    if (numeric) return Number(numeric);
     const map: Record<string, number> = {
       'informal': 1, 'básico': 2, 'basico': 2, 'inicial': 1,
       'estándar': 3, 'estandar': 3, 'definido': 3,
@@ -430,64 +412,86 @@ function parseAgentResults(datos: any): FullResults | null {
     return map[String(label ?? '').toLowerCase().trim()] ?? 1;
   };
   const ns = (raw: number) => raw <= 5 ? Math.round(raw * 20) : Math.round(raw);
-  const globalRecs: string[] = Array.isArray(d.recommendations) ? d.recommendations : [];
+  const globalRecs: string[] = asArray(pickFirst(d.recommendations, d.recomendaciones, d.insumos_para_agente_6?.recomendaciones_generales)).map(String);
 
   const parseDomainMap = (map: any): Record<string, DomainScore> | undefined => {
     if (!map || typeof map !== 'object') return undefined;
     const result: Record<string, DomainScore> = {};
     for (const [k, v] of Object.entries(map)) {
       const val = v as any;
-      result[k] = { score: ns(Number(val?.score ?? 0)), nivel: String(val?.nivel ?? '') };
+      const rawScore = typeof val === 'number' ? val : pickFirst(val?.score, val?.puntuacion, val?.valor, val?.score_global, 0);
+      result[k] = { score: ns(Number(rawScore)), nivel: String(pickFirst(val?.nivel, val?.level, val?.etiqueta, '')) };
     }
     return result;
   };
 
   const parseGaps = (src: any[]): MaturityGap[] =>
-    (src ?? []).map((b: any) => typeof b === 'string'
+    asArray(src).map((b: any) => typeof b === 'string'
       ? { nombre: b, tipo: '', score: 0, nivel: '', impacto_potencial: b }
-      : { nombre: b.nombre || '', tipo: b.tipo || '', score: ns(Number(b.score ?? 0)), nivel: b.nivel || '', impacto_potencial: b.impacto_potencial || '' }
+      : {
+        nombre: pickFirst(b.nombre, b.area, b.factor, b.dominio, b.descripcion, ''),
+        tipo: pickFirst(b.tipo, b.categoria, ''),
+        score: ns(Number(pickFirst(b.score, b.puntuacion, b.valor, 0))),
+        nivel: pickFirst(b.nivel, b.level, ''),
+        impacto_potencial: pickFirst(b.impacto_potencial, b.impacto, b.descripcion, b.recomendacion, ''),
+      }
     ).filter(g => g.nombre || g.impacto_potencial);
 
   const parseStrengths = (src: any[]): MaturityStrength[] =>
-    (src ?? []).map((f: any) => typeof f === 'string'
+    asArray(src).map((f: any) => typeof f === 'string'
       ? { nombre: f, tipo: '', score: 0, nivel: '' }
-      : { nombre: f.nombre || '', tipo: f.tipo || '', score: ns(Number(f.score ?? 0)), nivel: f.nivel || '' }
+      : {
+        nombre: pickFirst(f.nombre, f.area, f.factor, f.dominio, f.descripcion, ''),
+        tipo: pickFirst(f.tipo, f.categoria, ''),
+        score: ns(Number(pickFirst(f.score, f.puntuacion, f.valor, 0))),
+        nivel: pickFirst(f.nivel, f.level, ''),
+      }
     ).filter(f => f.nombre);
 
   const toMaturity = (src: any): MaturityResult | undefined => {
     if (!src || src.aplica === false) return undefined;
-    const score = ns(Number(src.score_global ?? src.score ?? 0));
-    const level = labelToLevel(src.nivel_global ?? src.overall_level ?? src.level ?? src.nivel);
+    const rawScore = pickFirst(src.score_global, src.overall_score, src.score, src.puntuacion, src.puntuacion_global, src.maturity_score);
+    const score = ns(Number(rawScore ?? 0));
+    const level = labelToLevel(pickFirst(src.nivel_global, src.overall_level, src.level, src.nivel, src.maturity_level));
+    const gaps = parseGaps(pickFirst(src.brechas, src.gaps, src.brechas_identificadas, src.brechas_criticas, []));
+    const fortalezas = parseStrengths(pickFirst(src.fortalezas, src.strengths, src.puntos_fuertes, []));
+    const recommendations = asArray(pickFirst(src.recommendations, src.recomendaciones, src.acciones_recomendadas, globalRecs)).map(String);
+    const por_dominio = parseDomainMap(pickFirst(src.por_dominio, src.dominios, src.domain_scores));
+    const por_fase = parseDomainMap(pickFirst(src.por_fase, src.fases, src.phase_scores));
+    const por_factor = parseDomainMap(pickFirst(src.por_factor, src.factores, src.factor_scores));
+    const hasSignal = rawScore != null || gaps.length > 0 || fortalezas.length > 0 || recommendations.length > 0 || !!por_dominio || !!por_fase || !!por_factor;
+    if (!hasSignal) return undefined;
     return {
       level, score,
-      gaps: parseGaps(src.brechas ?? src.gaps ?? []),
-      fortalezas: parseStrengths(src.fortalezas ?? []),
-      recommendations: src.recommendations ?? src.recomendaciones ?? globalRecs,
-      por_dominio: parseDomainMap(src.por_dominio),
-      por_fase: parseDomainMap(src.por_fase),
-      por_factor: parseDomainMap(src.por_factor),
-      patrones_estructurales: src.patrones_estructurales,
+      gaps,
+      fortalezas,
+      recommendations,
+      por_dominio,
+      por_fase,
+      por_factor,
+      patrones_estructurales: pickFirst(src.patrones_estructurales, src.patrones, src.observaciones),
     };
   };
 
-  const predictiva = toMaturity(d.predictive_maturity ?? d.predictiva ?? d.madurez_predictiva);
-  const agil = toMaturity(d.agile_maturity ?? d.agil ?? d.madurez_agil);
+  const predictiva = toMaturity(predictiveSource);
+  const agil = toMaturity(agileSource);
 
-  let overallScore = ns(Number(d.overall_maturity_score ?? d.overallScore ?? 0));
+  let overallScore = ns(Number(pickFirst(d.overall_maturity_score, d.overallScore, d.overall_score, d.score_global, d.puntuacion_global, 0)));
   if (overallScore === 0) {
     const scores = [predictiva?.score, agil?.score].filter(Boolean) as number[];
     if (scores.length > 0) overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
   }
-  let overallLevel = d.overall_maturity_level
-    ? labelToLevel(d.overall_maturity_level)
+  const rawOverallLevel = pickFirst(d.overall_maturity_level, d.overallLevel, d.overall_level, d.nivel_global, d.level);
+  let overallLevel = rawOverallLevel
+    ? labelToLevel(rawOverallLevel)
     : (overallScore >= 80 ? 5 : overallScore >= 65 ? 4 : overallScore >= 50 ? 3 : overallScore >= 35 ? 2 : 1);
   if (overallLevel === 1 && overallScore > 20)
     overallLevel = overallScore >= 80 ? 5 : overallScore >= 65 ? 4 : overallScore >= 50 ? 3 : overallScore >= 35 ? 2 : 1;
   overallLevel = Math.max(1, Math.min(5, overallLevel));
 
-  const overallLabel = d.overall_maturity_label ?? MATURITY_LEVELS[overallLevel - 1]?.name ?? '';
+  const overallLabel = pickFirst(d.overall_maturity_label, d.overallLabel, d.etiqueta_global, MATURITY_LEVELS[overallLevel - 1]?.name, '');
   const insumos = d.insumos_para_agente_6;
-  const summary = (Array.isArray(insumos?.recomendaciones_generales) ? insumos.recomendaciones_generales.join(' ') : null) ?? d.summary ?? d.resumen ?? '';
+  const summary = String(pickFirst(d.summary, d.resumen, d.sintesis, d.conclusion, Array.isArray(insumos?.recomendaciones_generales) ? insumos.recomendaciones_generales.join(' ') : ''));
   const iteration = obj.metadata?.iteration ?? 1;
 
   const analisis_cruzado = d.analisis_cruzado ? {
@@ -507,8 +511,12 @@ function parseAgentResults(datos: any): FullResults | null {
     timestamp: obj.metadata?.timestamp ?? new Date().toISOString(),
     version: iteration > 1 ? 'reprocesado' : 'original',
     advertencias_de_entrada: (d.advertencias_de_entrada ?? []).map(String),
-    top_gaps: (d.top_gaps ?? []).map((g: any) => ({ area: g.area ?? '', severity: g.severity ?? 'medium' })),
-    recommendations: Array.isArray(d.recommendations) ? d.recommendations : (Array.isArray(insumos?.recomendaciones_generales) ? insumos.recomendaciones_generales : []),
+    top_gaps: asArray(pickFirst(d.top_gaps, d.brechas_criticas, d.principales_brechas, [])).map((g: any) => (
+      typeof g === 'string'
+        ? { area: g, severity: 'medium' as const }
+        : { area: pickFirst(g.area, g.nombre, g.factor, g.descripcion, ''), severity: pickFirst(g.severity, g.criticidad, g.prioridad, 'medium') }
+    )),
+    recommendations: globalRecs,
     analisis_cruzado,
     analisis_cualitativo,
   };
@@ -640,6 +648,30 @@ export default function MadurezModule() {
   const [isApproving, setIsApproving] = useState(false);
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
+  const processingGuardUntilRef = useRef(0);
+
+  const keepProcessingAfterInvokeError = useCallback(async () => {
+    if (!projectId) return false;
+
+    const { data } = await supabase
+      .from('fases_estado')
+      .select('estado_visual, datos_consolidados')
+      .eq('proyecto_id', projectId)
+      .eq('numero_fase', 5)
+      .single();
+
+    if (data?.estado_visual === 'procesando') {
+      setView('processing');
+      return true;
+    }
+
+    if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+      setView('processing');
+      return true;
+    }
+
+    return false;
+  }, [projectId]);
 
   // ── Sync with context — only when we have real results and aren't actively processing ──
   useEffect(() => {
@@ -676,6 +708,11 @@ export default function MadurezModule() {
 
       // Has data = show results or approved (same as Phase 4: disponible + data → diagnosis view)
       if (data.datos_consolidados) {
+        if ((data.datos_consolidados as any)?._error) {
+          setResults(null);
+          setView('overview');
+          return;
+        }
         const parsed = parseAgentResults(data.datos_consolidados);
         if (parsed) {
           setResults(parsed);
@@ -723,6 +760,14 @@ export default function MadurezModule() {
 
       // Agent finished successfully (completado OR disponible + data)
       if (data?.datos_consolidados && (data.estado_visual === 'completado' || data.estado_visual === 'disponible')) {
+        if ((data.datos_consolidados as any)?._error) {
+          const message = (data.datos_consolidados as any)?.message || 'Revise la configuración del agente e intente nuevamente.';
+          setIsReprocessing(false);
+          updatePhaseStatus(projectId!, 5, 'disponible');
+          setView('overview');
+          toast.error('El Agente 5 encontró un error.', { description: message, duration: 9000 });
+          return;
+        }
         const parsed = parseAgentResults(data.datos_consolidados);
         if (parsed) {
           setResults(parsed);
@@ -736,8 +781,18 @@ export default function MadurezModule() {
         }
       }
 
+      if (data?.estado_visual === 'error') {
+        const message = (data?.datos_consolidados as any)?.message || 'Revise la configuración del agente e intente nuevamente.';
+        setIsReprocessing(false);
+        updatePhaseStatus(projectId!, 5, 'disponible');
+        setView('overview');
+        toast.error('El Agente 5 encontró un error.', { description: message, duration: 9000 });
+        return;
+      }
+
       // Agent failed (reverted to disponible with no data)
       if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+        if (Date.now() < processingGuardUntilRef.current) return;
         setIsReprocessing(false);
         updatePhaseStatus(projectId!, 5, 'disponible');
         setView('overview');
@@ -756,8 +811,8 @@ export default function MadurezModule() {
   if (!project || !phase) return null;
 
   // Survey completion check
-  const hasPredictivaData = predictivaManager.responses.length > 0 || predictivaManager.existingFileName || predictivaManager.externalFile;
-  const hasAgilData = agilManager.responses.length > 0 || agilManager.existingFileName || agilManager.externalFile;
+  const hasPredictivaData = predictivaManager.responses.length > 0 || predictivaManager.existingFiles.length > 0 || predictivaManager.externalFiles.length > 0;
+  const hasAgilData = agilManager.responses.length > 0 || agilManager.existingFiles.length > 0 || agilManager.externalFiles.length > 0;
 
   const predictivaDone = !needsPredictiva || hasPredictivaData;
   const agilDone = !needsAgil || hasAgilData;
@@ -768,26 +823,18 @@ export default function MadurezModule() {
 
   // ── Handlers ──
   const handleSend = async () => {
-    updatePhaseStatus(projectId!, 5, 'procesando');
+    processingGuardUntilRef.current = Date.now() + 120000;
     setView('processing');
     setResults(null);
+    let didInvokeAgent = false;
     
     try {
-      await supabase
-        .from('fases_estado')
-        .update({
-          estado_visual: 'procesando',
-          datos_consolidados: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('proyecto_id', projectId)
-        .eq('numero_fase', 5);
-
       let predictivaFileUrl: string | null = null;
       let agilFileUrl: string | null = null;
       if (needsPredictiva) predictivaFileUrl = await predictivaManager.uploadFileIfAny() || null;
       if (needsAgil) agilFileUrl = await agilManager.uploadFileIfAny() || null;
 
+      didInvokeAgent = true;
       const response = await supabase.functions.invoke('pmo-agent', {
         body: {
           projectId,
@@ -801,6 +848,12 @@ export default function MadurezModule() {
       if (response.error) throw new Error(response.error.message);
       // Polling is now driven by the useEffect(view==='processing') — nothing else needed
     } catch (err: any) {
+      if (didInvokeAgent && await keepProcessingAfterInvokeError()) {
+        toast.info('El Agente 5 ya quedÃ³ en ejecuciÃ³n.', {
+          description: 'Seguiremos monitoreando el resultado en esta pantalla.',
+        });
+        return;
+      }
       toast.error('Error enviando datos al Agente 5', { description: err.message });
       updatePhaseStatus(projectId!, 5, 'disponible');
       setView('overview');
@@ -820,25 +873,17 @@ export default function MadurezModule() {
     if (!comment.trim()) { toast.error('Escriba un comentario para re-procesar.'); return; }
     setIsReprocessing(true);
     setResults(null);
+    processingGuardUntilRef.current = Date.now() + 120000;
+    let didInvokeAgent = false;
 
     try {
       // Bloquear fases posteriores y limpiar datos
       await reprocessPhase(projectId!, 5);
 
-      await supabase
-        .from('fases_estado')
-        .update({
-          estado_visual: 'procesando',
-          datos_consolidados: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('proyecto_id', projectId)
-        .eq('numero_fase', 5);
-
-      updatePhaseStatus(projectId!, 5, 'procesando');
       // Set view to processing AFTER supabase update so the polling useEffect picks it up
       setView('processing');
 
+      didInvokeAgent = true;
       const response = await supabase.functions.invoke('pmo-agent', {
         body: {
           projectId,
@@ -852,9 +897,15 @@ export default function MadurezModule() {
       setSavedComment(comment);
       setComment('');
     } catch (err: any) {
+      if (didInvokeAgent && await keepProcessingAfterInvokeError()) {
+        toast.info('El Agente 5 ya quedÃ³ en ejecuciÃ³n.', {
+          description: 'Seguiremos monitoreando el resultado en esta pantalla.',
+        });
+        return;
+      }
       toast.error('Error re-procesando', { description: err.message });
       setIsReprocessing(false);
-      setView('results');
+      setView('overview');
     }
   };
 
@@ -874,6 +925,13 @@ export default function MadurezModule() {
   // ── PMO type config ──
   const pmoCfg = PMO_CONFIG[pmoType];
   const { Icon: PmoIcon } = pmoCfg;
+  const summaryText = results?.summary?.trim()
+    || results?.recommendations?.slice(0, 2).join(' ')
+    || results?.analisis_cualitativo?.temas_recurrentes?.[0]?.sintesis
+    || 'Diagnostico generado por el Agente 5 con los insumos disponibles.';
+  const maturityCardGridClass = results?.predictiva && results?.agil
+    ? 'grid-cols-1 lg:grid-cols-2'
+    : 'grid-cols-1 max-w-[680px]';
 
   // ── Render ──
   return (
@@ -1037,7 +1095,7 @@ export default function MadurezModule() {
 
               {/* Overall score hero */}
               <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-                <div className="flex items-center gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-[150px_minmax(280px,1fr)_minmax(260px,360px)] items-center gap-6">
                   <div className="flex-shrink-0 text-center px-4">
                     <p className="text-xs text-gray-400 mb-1">Nivel general</p>
                     <div className="flex items-baseline gap-1.5">
@@ -1062,13 +1120,14 @@ export default function MadurezModule() {
                     </div>
                     <MaturityLevelBar level={results.overallLevel} />
                   </div>
-                  <div className="flex-shrink-0 max-w-xs">
-                    <p className="text-gray-600 text-sm leading-relaxed">{results.summary}</p>
+                  <div className="min-w-0 border-t border-neutral-100 pt-4 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
+                    <p className="text-[11px] uppercase tracking-wider text-neutral-400 mb-2" style={{ fontWeight: 700 }}>Sintesis del diagnostico</p>
+                    <p className="text-gray-600 text-sm leading-relaxed">{summaryText}</p>
                   </div>
                 </div>
               </div>
 
-              <div className={`grid gap-5 mb-5 ${pmoType === 'Híbrida' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <div className={`grid gap-5 mb-5 ${maturityCardGridClass}`}>
                 {results.predictiva && (
                   <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} manager={predictivaManager} />
                 )}
@@ -1177,7 +1236,7 @@ export default function MadurezModule() {
                 </div>
               </div>
 
-              <div className={`grid gap-5 mb-5 ${pmoType === 'Híbrida' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <div className={`grid gap-5 mb-5 ${maturityCardGridClass}`}>
                 {results.predictiva && <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} manager={predictivaManager} />}
                 {results.agil && <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} manager={agilManager} />}
               </div>

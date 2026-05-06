@@ -16,6 +16,107 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Responsi
 type EntryMethod = null | 'survey' | 'manual';
 type ModuleState = 'selection' | 'data-entry' | 'processing' | 'completed';
 
+export function getIdoneidadItemCode(value: any, fallback = 'Item') {
+  const raw = String(value?.item ?? value?.codigo ?? value?.question_code ?? value?.factor ?? value?.id ?? fallback);
+  const match = raw.match(/^([CEP]\d{1,2})/i);
+  return match ? match[1].toUpperCase() : raw;
+}
+
+export function getIdoneidadItemScore(value: any) {
+  const score = value?.promedio ?? value?.puntaje ?? value?.score ?? value?.valor ?? value?.answer_score;
+  const numeric = typeof score === 'number' ? score : Number(score);
+  return Number.isFinite(numeric) ? Number(numeric.toFixed(1)) : null;
+}
+
+export function inferIdoneidadDimension(codeOrDimension: string) {
+  const value = String(codeOrDimension || '').toUpperCase();
+  if (value.startsWith('C') || value.includes('CULTURA')) return 'CULTURA';
+  if (value.startsWith('E') || value.includes('EQUIPO')) return 'EQUIPO';
+  if (value.startsWith('P') || value.includes('PROYECTO')) return 'PROYECTO';
+  return value || 'N/A';
+}
+
+export function normalizeIdoneidadItems(source: any): any[] {
+  const found: any[] = [];
+
+  const visit = (node: any, fallbackKey?: string) => {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      node.forEach((item) => visit(item));
+      return;
+    }
+    if (typeof node !== 'object') {
+      if (fallbackKey && /^[CEP]\d{1,2}/i.test(fallbackKey)) {
+        const numeric = Number(node);
+        if (Number.isFinite(numeric)) {
+          const match = fallbackKey.match(/^([CEP]\d{1,2})/i);
+          const code = match ? match[1].toUpperCase() : fallbackKey.toUpperCase();
+          found.push({
+            item: code,
+            dimension: inferIdoneidadDimension(code),
+            promedio: Number(numeric.toFixed(1)),
+          });
+        }
+      }
+      return;
+    }
+
+    const code = getIdoneidadItemCode(node, fallbackKey ?? '');
+    const score = getIdoneidadItemScore(node);
+    if (score !== null && /^[CEP]\d{1,2}/i.test(code)) {
+      const match = code.match(/^([CEP]\d{1,2})/i);
+      const cleanCode = match ? match[1].toUpperCase() : code.toUpperCase();
+      found.push({
+        ...node,
+        item: cleanCode,
+        dimension: node.dimension ?? inferIdoneidadDimension(cleanCode),
+        promedio: score,
+      });
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === 'number' || typeof value === 'string') {
+        if (/^[CEP]\d{1,2}/i.test(key)) {
+          const numeric = Number(value);
+          if (Number.isFinite(numeric)) {
+            const match = key.match(/^([CEP]\d{1,2})/i);
+            const codeFromKey = match ? match[1].toUpperCase() : key.toUpperCase();
+            found.push({
+              item: codeFromKey,
+              dimension: inferIdoneidadDimension(codeFromKey),
+              promedio: Number(numeric.toFixed(1)),
+            });
+          }
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        visit(value, key);
+      }
+    }
+  };
+
+  visit(source);
+
+  const byCode = new Map<string, any>();
+  for (const item of found) {
+    byCode.set(item.item, item);
+  }
+
+  const orderGroup: Record<string, number> = { C: 0, E: 1, P: 2 };
+  return [...byCode.values()].sort((a, b) => {
+    const ac = a.item;
+    const bc = b.item;
+    const ag = orderGroup[ac[0]] ?? 9;
+    const bg = orderGroup[bc[0]] ?? 9;
+    if (ag !== bg) return ag - bg;
+    return (Number(ac.slice(1)) || 0) - (Number(bc.slice(1)) || 0);
+  });
+}
+
+export function normalizeIdoneidadDiagnosisItems(diagnosis: any): any[] {
+  // Pass the entire diagnosis object to ensure we find all items regardless of where the agent placed them
+  return normalizeIdoneidadItems(diagnosis);
+}
+
 function ConfirmModal({ open, onCancel, onConfirm, isLoading }: {
   open: boolean; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
 }) {
@@ -74,11 +175,11 @@ export default function IdoneidadModule() {
     // Debug para ver qué está llegando del agente
     console.log("PMO Agent Diagnosis Data:", diagnosis);
 
-    const items = diagnosis.resultados_por_item || [];
+    const items = normalizeIdoneidadDiagnosisItems(diagnosis);
     
     // Fallback: Si no hay ítems detallados o vienen solo las 3 dimensiones generales
-    if ((items.length === 0 || items.length === 3) && diagnosis.indicadores) {
-      return Object.entries(diagnosis.indicadores).map(([key, data]: [string, any]) => {
+    if (items.length === 0 && diagnosis.indicadores) {
+      return Object.entries(diagnosis.indicadores).filter(([key]) => key !== 'general').map(([key, data]: [string, any]) => {
         const label = key === 'cultura' ? 'CULTURA (Promedio)' : 
                       key === 'equipo' ? 'EQUIPO (Promedio)' : 
                       key === 'proyecto' ? 'PROYECTO (Promedio)' : key.toUpperCase();
@@ -96,14 +197,14 @@ export default function IdoneidadModule() {
 
     // Mapeo detallado de los 21 ítems
     return items.map((res: any) => {
-      const codeMatch = res.item.match(/^([A-Z]\d+)/i);
-      const shortName = codeMatch ? codeMatch[1].toUpperCase() : res.item.substring(0, 10);
+      const itemLabel = getIdoneidadItemCode(res);
+      const score = getIdoneidadItemScore(res) ?? 0;
 
       return {
-        subject: shortName,
-        fullLabel: res.item,
-        dimension: res.dimension,
-        Puntaje: typeof res.promedio === 'number' ? Number(res.promedio.toFixed(1)) : 0,
+        subject: itemLabel,
+        fullLabel: itemLabel,
+        dimension: res.dimension ?? inferIdoneidadDimension(itemLabel),
+        Puntaje: score,
         // Thresholds for background zones
         AgileZone: 4,
         HybridZone: 8,
@@ -111,6 +212,88 @@ export default function IdoneidadModule() {
       };
     });
   }, [diagnosis]);
+
+  const emptyValue = 'N/A';
+  const valueOrEmpty = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return emptyValue;
+    if (typeof value === 'boolean') return value ? 'Si' : 'No';
+    if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+    return String(value);
+  };
+  const listOrEmpty = (items?: unknown[]) => Array.isArray(items) && items.length > 0 ? items.map(valueOrEmpty) : [emptyValue];
+
+  const KeyValueGrid = ({ rows }: { rows: { label: string; value: unknown }[] }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {rows.map((row) => (
+        <div key={row.label} className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>{row.label}</p>
+          <p className="text-neutral-800 text-[13px] leading-relaxed">{valueOrEmpty(row.value)}</p>
+        </div>
+      ))}
+    </div>
+  );
+
+  const EmptyAwareList = ({ items }: { items?: unknown[] }) => (
+    <ul className="space-y-2">
+      {listOrEmpty(items).map((item, i) => (
+        <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
+          <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const BadgeList = ({ items }: { items?: unknown[] }) => (
+    <div className="flex flex-wrap gap-2">
+      {listOrEmpty(items).map((item, i) => (
+        <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-neutral-700 text-[11px]" style={{ fontWeight: 500 }}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+
+  const DiagnosisCard = ({ title, children, muted = false }: { title: string; children: React.ReactNode; muted?: boolean }) => (
+    <div className={`rounded-2xl border border-neutral-200/70 ${muted ? 'bg-neutral-50' : 'bg-white'} p-6`} style={{ boxShadow: muted ? undefined : '0 1px 2px rgba(0,0,0,0.02)' }}>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>{title}</p>
+      {children}
+    </div>
+  );
+
+  const diagnosisRespondentCount = Number(diagnosis?.numero_encuestados) || 0;
+  const externalRespondentCount = existingFileUrl && diagnosisRespondentCount > responses.length
+    ? diagnosisRespondentCount - responses.length
+    : 0;
+  const totalRespondentCount = responses.length + externalRespondentCount;
+
+  const csvEscape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+  const normalizeSurveyAnswersForCSV = (rawAnswers: any) => {
+    const answerMap: Record<string, string | number> = {};
+
+    if (Array.isArray(rawAnswers)) {
+      rawAnswers.forEach((answer, index) => {
+        if (!answer || typeof answer !== 'object') return;
+        const key = String(answer.codigo || answer.question_code || answer.pregunta_codigo || answer.pregunta_id || `respuesta_${index + 1}`);
+        answerMap[key] = answer.valor ?? answer.answer_score ?? answer.score ?? answer.respuesta ?? '';
+      });
+      return answerMap;
+    }
+
+    if (rawAnswers && typeof rawAnswers === 'object') {
+      Object.entries(rawAnswers).forEach(([key, value]) => {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const nested = value as Record<string, any>;
+          answerMap[key] = nested.valor ?? nested.answer_score ?? nested.score ?? nested.respuesta ?? '';
+        } else {
+          answerMap[key] = value as string | number;
+        }
+      });
+    }
+
+    return answerMap;
+  };
 
   // Custom tooltip for the Radar Chart
   const CustomRadarTooltip = ({ active, payload }: any) => {
@@ -234,27 +417,25 @@ export default function IdoneidadModule() {
     if (responses.length > 0) {
       const allKeys = new Set<string>();
       responses.forEach(r => {
-        if (r.respuestas && typeof r.respuestas === 'object' && !Array.isArray(r.respuestas)) {
-          Object.keys(r.respuestas).forEach(k => allKeys.add(k));
-        }
+        Object.keys(normalizeSurveyAnswersForCSV(r.respuestas)).forEach(k => allKeys.add(k));
       });
-      const questionKeys = Array.from(allKeys).sort();
+      const questionKeys = Array.from(allKeys).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
 
       const headers = ['Nombre_Encuestado', 'Cargo_Encuestado', 'Area_Encuestado', ...questionKeys, 'Fecha_Registro'];
 
       const rows = responses.map(r => {
         const row = [
-          `"${(r.nombre_encuestado || '').replace(/"/g, '""')}"`,
-          `"${(r.cargo_encuestado || '').replace(/"/g, '""')}"`,
-          `"${(r.area_encuestado || '').replace(/"/g, '""')}"`
+          csvEscape(r.nombre_encuestado),
+          csvEscape(r.cargo_encuestado),
+          csvEscape(r.area_encuestado)
         ];
 
-        const respObj: any = (r.respuestas && typeof r.respuestas === 'object' && !Array.isArray(r.respuestas)) ? r.respuestas : {};
+        const respObj = normalizeSurveyAnswersForCSV(r.respuestas);
         questionKeys.forEach(k => {
-          row.push(`"${(respObj[k] ?? '').toString().replace(/"/g, '""')}"`);
+          row.push(csvEscape(respObj[k]));
         });
 
-        row.push(`"${new Date(r.created_at).toLocaleString()}"`);
+        row.push(csvEscape(new Date(r.created_at).toLocaleString()));
         return row.join(',');
       });
 
@@ -494,7 +675,7 @@ export default function IdoneidadModule() {
                   <div className="bg-white px-5 py-4">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Respondieron</p>
                     <p className="mt-1.5 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.375rem', letterSpacing: '-0.02em' }}>
-                      {responses.length > 0 ? responses.length : (diagnosis?.numero_encuestados || 0)} <span className="text-[12px] text-neutral-400 ml-1">personas</span>
+                      {totalRespondentCount} <span className="text-[12px] text-neutral-400 ml-1">personas</span>
                     </p>
                   </div>
                   <div className="bg-white px-5 py-4">
@@ -626,12 +807,13 @@ export default function IdoneidadModule() {
                               <tbody className="divide-y divide-neutral-100/60">
                                 {(() => {
                                   const groups: Record<string, any[]> = { Cultura: [], Equipo: [], Proyecto: [], Otros: [] };
-                                  (diagnosis.resultados_por_item || []).forEach((res: any) => {
+                                  normalizeIdoneidadDiagnosisItems(diagnosis).forEach((res: any) => {
                                     let dim = res.dimension || '';
                                     if (!dim) {
-                                      if (res.item.match(/^C\d/i)) dim = 'Cultura';
-                                      else if (res.item.match(/^E\d/i)) dim = 'Equipo';
-                                      else if (res.item.match(/^P\d/i)) dim = 'Proyecto';
+                                      const code = getIdoneidadItemCode(res);
+                                      if (code.match(/^C\d/i)) dim = 'Cultura';
+                                      else if (code.match(/^E\d/i)) dim = 'Equipo';
+                                      else if (code.match(/^P\d/i)) dim = 'Proyecto';
                                       else dim = 'Otros';
                                     }
                                     const key = Object.keys(groups).find(k => k.toLowerCase() === dim.toLowerCase()) || 'Otros';
@@ -672,12 +854,12 @@ export default function IdoneidadModule() {
                                           <tr key={`${gIdx}-${idx}`} className="hover:bg-neutral-50/50 transition-colors">
                                             <td className="px-3 py-2 pl-5">
                                               <div className="flex flex-col">
-                                                <span className="text-neutral-800 font-medium leading-tight">{res.item}</span>
+                                                <span className="text-neutral-800 font-medium leading-tight">{getIdoneidadItemCode(res)}</span>
                                                 {res.interpretacion && <p className="text-[10px] text-neutral-400 mt-0.5 leading-snug line-clamp-1 hover:line-clamp-none print:line-clamp-none transition-all">{res.interpretacion}</p>}
                                               </div>
                                             </td>
                                             <td className="px-3 py-2 tabular-nums text-right font-bold text-neutral-900" style={{ fontSize: '13px' }}>
-                                              {typeof res.promedio === 'number' ? res.promedio.toFixed(1) : res.promedio}
+                                              {valueOrEmpty(getIdoneidadItemScore(res))}
                                             </td>
                                             <td className="px-3 py-2 text-center">
                                               <span className={`inline-block px-2 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-md border ${zoneColor}`}>
@@ -760,12 +942,177 @@ export default function IdoneidadModule() {
                   )}
                 </div>
 
+                {diagnosis && (
+                  <div className="flex flex-col gap-5">
+                    <DiagnosisCard title="Resumen del agente">
+                      <p className="text-neutral-700 text-[14px] leading-relaxed mb-4">{valueOrEmpty(diagnosis.summary)}</p>
+                      <KeyValueGrid rows={[
+                        { label: 'Nivel de idoneidad', value: diagnosis.suitability_level || diagnosis.nivel_idoneidad },
+                        { label: 'Puntaje de idoneidad', value: diagnosis.suitability_score || diagnosis.puntuacion_idoneidad },
+                        { label: 'Nivel confiabilidad', value: diagnosis.nivel_confiabilidad },
+                        { label: 'Justificacion confiabilidad', value: diagnosis.justificacion_confiabilidad },
+                        { label: 'Formato entrada detectado', value: diagnosis.formato_entrada_detectado },
+                        { label: 'Numero encuestados', value: diagnosis.numero_encuestados },
+                      ]} />
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Indicadores por dimension">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {['cultura', 'equipo', 'proyecto', 'general'].map((dim) => {
+                          const item = diagnosis.indicadores?.[dim];
+                          return (
+                            <div key={dim} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                              <p className="text-neutral-900 text-[13px] mb-3 capitalize" style={{ fontWeight: 600 }}>{dim}</p>
+                              <KeyValueGrid rows={[
+                                { label: 'Promedio', value: item?.promedio },
+                                { label: 'Desviacion estandar', value: item?.desviacion_estandar },
+                                { label: 'Coherencia interna', value: item?.coherencia_interna },
+                                { label: 'Item mas alto', value: item?.item_mas_alto },
+                                { label: 'Item mas bajo', value: item?.item_mas_bajo },
+                                { label: 'Comportamiento', value: item?.comportamiento },
+                                { label: 'Zona predominante', value: item?.zona_predominante },
+                              ]} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Distribucion por zona">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {['cultura', 'equipo', 'proyecto', 'general'].map((dim) => {
+                          const dist = diagnosis.distribucion?.[dim];
+                          return (
+                            <div key={dim} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                              <p className="text-neutral-900 text-[13px] mb-3 capitalize" style={{ fontWeight: 600 }}>{dim}</p>
+                              <KeyValueGrid rows={[
+                                { label: 'Porcentaje agil', value: dist?.porcentaje_agil },
+                                { label: 'Porcentaje transicion', value: dist?.porcentaje_transicion },
+                                { label: 'Porcentaje predictivo', value: dist?.porcentaje_predictivo },
+                              ]} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Alineacion y consenso">
+                      <div className="space-y-4">
+                        <KeyValueGrid rows={[
+                          { label: 'Disponible', value: diagnosis.alineacion?.disponible },
+                          { label: 'Consenso cultura', value: diagnosis.alineacion?.consenso_por_dimension?.cultura },
+                          { label: 'Consenso equipo', value: diagnosis.alineacion?.consenso_por_dimension?.equipo },
+                          { label: 'Consenso proyecto', value: diagnosis.alineacion?.consenso_por_dimension?.proyecto },
+                        ]} />
+                        <div className="space-y-3">
+                          {(diagnosis.alineacion?.conflictos_percepcion?.length ? diagnosis.alineacion.conflictos_percepcion : [{ item: emptyValue, diferencia: emptyValue, valor_minimo: emptyValue, valor_maximo: emptyValue, cargos_involucrados: [] }]).map((conf: any, i: number) => (
+                            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+                              <KeyValueGrid rows={[
+                                { label: 'Item', value: conf.item },
+                                { label: 'Diferencia', value: conf.diferencia },
+                                { label: 'Valor minimo', value: conf.valor_minimo },
+                                { label: 'Valor maximo', value: conf.valor_maximo },
+                              ]} />
+                              <div className="mt-3"><BadgeList items={conf.cargos_involucrados} /></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Calidad del input">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Items faltantes</p><EmptyAwareList items={diagnosis.calidad_input?.items_faltantes} /></div>
+                        <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Limitaciones por formato</p><EmptyAwareList items={diagnosis.calidad_input?.limitaciones_por_formato} /></div>
+                        <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Alertas respuesta invalida</p><EmptyAwareList items={diagnosis.calidad_input?.alertas_respuesta_invalida} /></div>
+                        <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Encuestados con datos incompletos</p><EmptyAwareList items={diagnosis.calidad_input?.encuestados_con_datos_incompletos} /></div>
+                      </div>
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Interpretacion por factores">
+                      <div className="flex flex-col gap-5">
+                        {['cultura', 'equipo', 'proyecto'].map((dim) => {
+                          const data = diagnosis.interpretacion_por_factores?.[dim] || {};
+                          return (
+                            <div key={dim} className="rounded-xl border border-neutral-100 bg-neutral-50 p-6 flex flex-col md:flex-row md:items-start gap-6">
+                              <div className="md:w-[200px] flex-shrink-0">
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-neutral-200/60 shadow-sm mb-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-neutral-900" />
+                                  <p className="text-neutral-900 text-[12px] uppercase tracking-wider" style={{ fontWeight: 700 }}>{dim}</p>
+                                </div>
+                                <p className="text-neutral-400 text-[11px] leading-relaxed">
+                                  Análisis detallado de los factores clave que influyen en la dimensión de {dim}.
+                                </p>
+                              </div>
+                              <div className="flex-1">
+                                <KeyValueGrid rows={Object.entries(data).map(([label, value]) => ({
+                                  label: label.replace(/_/g, ' '),
+                                  value,
+                                }))} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Resultados por item completos">
+                      <div className="overflow-x-auto rounded-xl border border-neutral-100">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-neutral-100 bg-neutral-50">
+                              {['Item', 'Dimension', 'Promedio', 'Min', 'Max', 'Desv.', 'Zona', 'Critico'].map((h) => (
+                                <th key={h} className="px-3 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-50 bg-white">
+                            {((normalizeIdoneidadDiagnosisItems(diagnosis).length ? normalizeIdoneidadDiagnosisItems(diagnosis) : [{ item: emptyValue, dimension: emptyValue, promedio: emptyValue, minimo: emptyValue, maximo: emptyValue, desviacion_estandar: emptyValue, zona: emptyValue, factor_critico: emptyValue }]) as any[]).map((item, i) => (
+                              <tr key={i} className="hover:bg-neutral-50/60">
+                                <td className="px-3 py-3 text-[12px] text-neutral-800" style={{ fontWeight: 600 }}>{valueOrEmpty(getIdoneidadItemCode(item))}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.dimension)}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-900 tabular-nums">{valueOrEmpty(getIdoneidadItemScore(item))}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.minimo)}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.maximo)}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.desviacion_estandar)}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.zona)}</td>
+                                <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.factor_critico)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Cargos representados">
+                      <BadgeList items={diagnosis.cargos_representados} />
+                    </DiagnosisCard>
+
+                    <DiagnosisCard title="Insumos para agente 4" muted>
+                      <div className="space-y-5">
+                        <KeyValueGrid rows={[
+                          { label: 'Nivel confiabilidad', value: diagnosis.insumos_para_agente_4?.nivel_confiabilidad },
+                          { label: 'Comportamiento general', value: diagnosis.insumos_para_agente_4?.comportamiento_general },
+                          { label: 'Zona predominante general', value: diagnosis.insumos_para_agente_4?.zona_predominante_general },
+                        ]} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Tensiones criticas resumen</p><EmptyAwareList items={diagnosis.insumos_para_agente_4?.tensiones_criticas_resumen} /></div>
+                          <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Inconsistencias criticas resumen</p><EmptyAwareList items={diagnosis.insumos_para_agente_4?.inconsistencias_criticas_resumen} /></div>
+                          <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores agilidad</p><EmptyAwareList items={diagnosis.insumos_para_agente_4?.indicadores_agilidad} /></div>
+                          <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores hibridos</p><EmptyAwareList items={(diagnosis.insumos_para_agente_4?.indicadores_hibridos || []).map((x: any) => `${valueOrEmpty(x.item_o_dimension)}: ${valueOrEmpty(x.interpretacion_del_factor)} (${valueOrEmpty(x.promedio)})`)} /></div>
+                          <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores predictivos</p><EmptyAwareList items={(diagnosis.insumos_para_agente_4?.indicadores_predictivos || []).map((x: any) => `${valueOrEmpty(x.item || x.dimension)}: ${valueOrEmpty(x.interpretacion_del_factor)} (${valueOrEmpty(x.promedio)})`)} /></div>
+                        </div>
+                      </div>
+                    </DiagnosisCard>
+                  </div>
+                )}
+
                 {/* Data summary */}
                 <div className="bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Datos recopilados</h3>
-                      <span className="text-[11px] text-neutral-400 tabular-nums bg-neutral-100 px-1.5 py-0.5 rounded">{responses.length > 0 ? responses.length : (diagnosis?.numero_encuestados || 0)}</span>
+                      <span className="text-[11px] text-neutral-400 tabular-nums bg-neutral-100 px-1.5 py-0.5 rounded">{totalRespondentCount}</span>
                     </div>
                     <button
                       onClick={handleDownloadCSV}
@@ -782,7 +1129,7 @@ export default function IdoneidadModule() {
                       (diagnosis?.numero_encuestados || 0) > 0 ? (
                         <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200/50">
                           <p className="text-neutral-600 text-[12px] font-medium">Datos cargados mediante archivo externo (CSV/PDF)</p>
-                          <p className="text-neutral-400 text-[11px] mt-1">El archivo contenía {diagnosis.numero_encuestados} registros válidos.</p>
+                          <p className="text-neutral-400 text-[11px] mt-1">El archivo contenía {totalRespondentCount} registros válidos.</p>
                         </div>
                       ) : (
                         <p className="text-neutral-400 text-xs italic">No hay respuestas</p>
@@ -803,7 +1150,7 @@ export default function IdoneidadModule() {
                   <div className="mt-5 p-4 bg-neutral-50 rounded-xl border border-neutral-200/70">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Respuestas totales</p>
                     <p className="text-neutral-900 tabular-nums mt-1" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
-                      {responses.length > 0 ? responses.length : (diagnosis?.numero_encuestados || 0)}
+                      {totalRespondentCount}
                     </p>
                   </div>
                 </div>

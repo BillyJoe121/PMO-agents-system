@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -515,6 +515,256 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
   );
 }
 
+const EMPTY_VALUE = 'N/A';
+
+function valueOrEmpty(value: unknown) {
+  if (value === null || value === undefined || value === '') return EMPTY_VALUE;
+  if (typeof value === 'boolean') return value ? 'Si' : 'No';
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  return String(value);
+}
+
+function normalizeList(items?: unknown[]) {
+  return Array.isArray(items) && items.length > 0 ? items.map(valueOrEmpty) : [EMPTY_VALUE];
+}
+
+function DiagnosisCard({ title, children, muted = false }: { title: string; children: ReactNode; muted?: boolean }) {
+  return (
+    <div className={`rounded-2xl border border-neutral-200/70 ${muted ? 'bg-neutral-50' : 'bg-white'} p-6`} style={{ boxShadow: muted ? undefined : '0 1px 2px rgba(0,0,0,0.02)' }}>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function EmptyAwareList({ items }: { items?: unknown[] }) {
+  return (
+    <ul className="space-y-2">
+      {normalizeList(items).map((item, i) => (
+        <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
+          <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function KeyValueGrid({ rows }: { rows: { label: string; value: unknown }[] }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {rows.map((row) => (
+        <div key={row.label} className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>{row.label}</p>
+          <p className="text-neutral-800 text-[13px] leading-relaxed">{valueOrEmpty(row.value)}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BadgeList({ items }: { items?: unknown[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {normalizeList(items).map((item, i) => (
+        <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-neutral-700 text-[11px]" style={{ fontWeight: 500 }}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Agent2DiagnosisView({ diagnosis }: { diagnosis: EntrevistasDiagnosis }) {
+  const d = diagnosis;
+  const dimensiones = [
+    ['inicio', 'Inicio'],
+    ['planeacion', 'Planeacion'],
+    ['ejecucion', 'Ejecucion'],
+    ['monitoreo_control', 'Monitoreo y control'],
+    ['cierre', 'Cierre'],
+  ] as const;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <DiagnosisCard title="Diagnostico - Agente 2 · Entrevistas">
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+            <Sparkles size={13} strokeWidth={1.75} />
+          </div>
+          <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Respuesta consolidada</span>
+        </div>
+        <p className="text-neutral-700 text-[14px] leading-relaxed mb-6">{valueOrEmpty(d.summary)}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Entrevistados analizados</p>
+            <p className="text-neutral-900 text-xl" style={{ fontWeight: 500 }}>{valueOrEmpty(d.numero_entrevistados)}</p>
+          </div>
+          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Advertencia fuente unica</p>
+            <p className="text-neutral-900 text-xl" style={{ fontWeight: 500 }}>{valueOrEmpty(d.advertencia_fuente_unica)}</p>
+          </div>
+          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Nivel formalizacion</p>
+            <p className="text-neutral-900 text-[13px] leading-relaxed" style={{ fontWeight: 500 }}>{valueOrEmpty(d.insumos_para_agente_4?.nivel_general_formalizacion)}</p>
+          </div>
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Contexto organizacional">
+        <KeyValueGrid rows={[
+          { label: 'Sector', value: d.contexto_organizacional?.sector },
+          { label: 'Tamano aproximado', value: d.contexto_organizacional?.tamanio_aproximado },
+          { label: 'Cultura visible', value: d.contexto_organizacional?.cultura_visible },
+        ]} />
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Roles identificados">
+        <BadgeList items={d.roles_identificados} />
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Calidad del input">
+        <div className="space-y-5">
+          <KeyValueGrid rows={[{ label: 'Sesgo por rol', value: d.calidad_input?.sesgo_por_rol }]} />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Vacios tematicos</p><EmptyAwareList items={d.calidad_input?.vacios_tematicos} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Ambiguedades</p><EmptyAwareList items={d.calidad_input?.ambiguedades} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Superficialidad</p><EmptyAwareList items={d.calidad_input?.superficialidad} /></div>
+          </div>
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Hallazgos clave">
+        <EmptyAwareList items={d.key_findings} />
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Temas recurrentes">
+        <div className="space-y-3">
+          {(d.recurring_themes?.length ? d.recurring_themes : [{ theme: EMPTY_VALUE, frequency: EMPTY_VALUE, mentioned_by: [] }]).map((theme, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <p className="text-neutral-900 text-[13px] mb-2" style={{ fontWeight: 600 }}>{valueOrEmpty(theme.theme)}</p>
+              <KeyValueGrid rows={[
+                { label: 'Frecuencia', value: theme.frequency },
+                { label: 'Mencionado por', value: normalizeList(theme.mentioned_by).join(', ') },
+              ]} />
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Dimensiones base">
+        <div className="space-y-4">
+          {dimensiones.map(([key, label]) => {
+            const dim = d.dimensiones_base?.[key];
+            return (
+              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-5">
+                <p className="text-neutral-900 text-[13px] mb-4" style={{ fontWeight: 600 }}>{label}</p>
+                <KeyValueGrid rows={[
+                  { label: 'Nivel formalidad', value: dim?.nivel_formalidad },
+                  { label: 'Tipo gestion', value: dim?.tipo_gestion },
+                  { label: 'Confianza', value: dim?.confianza },
+                  { label: 'Recurrencia', value: dim?.recurrencia },
+                ]} />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Practicas reales</p><EmptyAwareList items={dim?.practicas_reales} /></div>
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Evidencias</p><EmptyAwareList items={dim?.evidencias} /></div>
+                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Herramientas</p><EmptyAwareList items={dim?.herramientas} /></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Voces criticas" muted>
+        <div className="space-y-3">
+          {(d.critical_voices?.length ? d.critical_voices : [{ interview_id: EMPTY_VALUE, interviewee_name: EMPTY_VALUE, relevance: EMPTY_VALUE, key_insight: EMPTY_VALUE }]).map((voice, i) => (
+            <div key={i} className="p-5 bg-white rounded-xl border border-neutral-200/70">
+              <p className="text-neutral-900 text-[13px] mb-1.5" style={{ fontWeight: 600 }}>{valueOrEmpty(voice.interviewee_name)}</p>
+              <p className="text-neutral-700 text-[13px] leading-relaxed mb-3">{valueOrEmpty(voice.key_insight)}</p>
+              <BadgeList items={[`ID: ${valueOrEmpty(voice.interview_id)}`, `Relevancia: ${valueOrEmpty(voice.relevance)}`]} />
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Patrones organizacionales">
+        <div className="space-y-3">
+          {(d.patrones_organizacionales?.length ? d.patrones_organizacionales : [{ nombre: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimensiones_donde_se_observa: [] }]).map((patron, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 600 }}>{valueOrEmpty(patron.nombre)}</p>
+              <p className="text-neutral-700 text-[13px] leading-relaxed mb-3">{valueOrEmpty(patron.descripcion)}</p>
+              <BadgeList items={patron.dimensiones_donde_se_observa} />
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Tensiones">
+        <div className="space-y-3">
+          {(d.tensiones?.length ? d.tensiones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, evidencia: EMPTY_VALUE, intensidad: EMPTY_VALUE, roles_involucrados: [] }]).map((tension, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <KeyValueGrid rows={[
+                { label: 'Tipo', value: tension.tipo },
+                { label: 'Intensidad', value: tension.intensidad },
+                { label: 'Descripcion', value: tension.descripcion },
+                { label: 'Evidencia', value: tension.evidencia },
+              ]} />
+              <div className="mt-3"><BadgeList items={tension.roles_involucrados} /></div>
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Brechas">
+        <div className="space-y-3">
+          {(d.brechas?.length ? d.brechas : [{ dimension_o_fase: EMPTY_VALUE, descripcion: EMPTY_VALUE, evidencia_o_ausencia: EMPTY_VALUE, impacto_potencial: EMPTY_VALUE }]).map((brecha, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <KeyValueGrid rows={[
+                { label: 'Dimension o fase', value: brecha.dimension_o_fase },
+                { label: 'Descripcion', value: brecha.descripcion },
+                { label: 'Evidencia o ausencia', value: brecha.evidencia_o_ausencia },
+                { label: 'Impacto potencial', value: brecha.impacto_potencial },
+              ]} />
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Limitaciones">
+        <div className="space-y-3">
+          {(d.limitaciones?.length ? d.limitaciones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimensiones_afectadas: [] }]).map((limitacion, i) => (
+            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+              <KeyValueGrid rows={[
+                { label: 'Tipo', value: limitacion.tipo },
+                { label: 'Descripcion', value: limitacion.descripcion },
+              ]} />
+              <div className="mt-3"><BadgeList items={limitacion.dimensiones_afectadas} /></div>
+            </div>
+          ))}
+        </div>
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Recomendaciones" muted>
+        <EmptyAwareList items={d.recommendations} />
+      </DiagnosisCard>
+
+      <DiagnosisCard title="Insumos para agente 4">
+        <div className="space-y-5">
+          <KeyValueGrid rows={[{ label: 'Nivel general formalizacion', value: d.insumos_para_agente_4?.nivel_general_formalizacion }]} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Patrones clave resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.patrones_clave_resumen} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Brechas criticas resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.brechas_criticas_resumen} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores predictivos</p><EmptyAwareList items={d.insumos_para_agente_4?.indicadores_predictivos} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores agilidad</p><EmptyAwareList items={d.insumos_para_agente_4?.indicadores_agilidad} /></div>
+            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores hibridos</p><EmptyAwareList items={d.insumos_para_agente_4?.indicadores_hibridos} /></div>
+          </div>
+        </div>
+      </DiagnosisCard>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Mock agent diagnosis (used in completed view)
 // ---------------------------------------------------------------------------
@@ -570,6 +820,8 @@ export default function EntrevistasModule() {
   const [isSending, setIsSending]           = useState(false);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const bulkInputRef = useRef<HTMLInputElement>(null);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -768,6 +1020,58 @@ export default function EntrevistasModule() {
     }
   };
 
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsBulkUploading(true);
+    const toastId = toast.loading(`Subiendo ${files.length} entrevistas...`);
+    
+    let successCount = 0;
+    const newEntrevistas: Entrevista[] = [];
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        toast.loading(`Procesando (${i + 1}/${files.length}): ${file.name}`, { id: toastId });
+
+        const newE: Entrevista = {
+          id: `local_bulk_${Date.now()}_${i}`,
+          nombre: file.name.replace(/\.[^/.]+$/, "").replace(/_/g, ' '), // Nombre basado en archivo
+          cargo: 'Por definir',
+          area: 'Por definir',
+          notas: `Entrevista cargada mediante archivo: ${file.name}`,
+          file: file,
+          createdAt: new Date().toLocaleDateString('es-CO'),
+        };
+
+        try {
+          const result = await saveEntrevista(newE);
+          newE.id = result.dbId;
+          newE.dbId = result.dbId;
+          newE.storagePath = result.storagePath;
+          newE.fileName = result.fileName;
+          newEntrevistas.push(newE);
+          successCount++;
+        } catch (err) {
+          console.error(`Error subiendo ${file.name}:`, err);
+          toast.error(`Error con ${file.name}`, { description: 'Se omitió este archivo.' });
+        }
+      }
+
+      setEntrevistas(prev => [...prev, ...newEntrevistas]);
+      toast.success(`¡Carga masiva completada!`, { 
+        id: toastId, 
+        description: `Se agregaron ${successCount} entrevistas exitosamente.` 
+      });
+    } catch (error) {
+      toast.error('Error en la carga masiva', { id: toastId });
+    } finally {
+      setIsBulkUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleMarkComplete = () => {
     if (entrevistas.length === 0) {
       toast.error('Agregue al menos una entrevista antes de continuar.');
@@ -885,7 +1189,8 @@ export default function EntrevistasModule() {
             <div className="flex flex-col gap-5">
 
               {/* Agent diagnosis */}
-              {diagnosis && (
+              {diagnosis && <Agent2DiagnosisView diagnosis={diagnosis} />}
+              {false && diagnosis && (
                 <div className="flex flex-col gap-5">
 
                   {/* Top Summary Card */}
@@ -1058,6 +1363,26 @@ export default function EntrevistasModule() {
                 <Plus size={14} strokeWidth={1.75} />
                 Agregar nueva entrevista
               </motion.button>
+
+              <motion.button
+                whileHover={{ y: -1 }} whileTap={{ y: 0 }}
+                onClick={() => bulkInputRef.current?.click()}
+                disabled={isBulkUploading}
+                className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-neutral-300 text-neutral-700 text-[13px] mb-2 transition-all hover:bg-white hover:border-neutral-400 disabled:opacity-50"
+                style={{ fontWeight: 500 }}
+              >
+                {isBulkUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} strokeWidth={1.75} />}
+                Carga masiva de PDFs
+              </motion.button>
+
+              <input
+                ref={bulkInputRef}
+                type="file"
+                multiple
+                accept=".pdf"
+                className="hidden"
+                onChange={handleBulkUpload}
+              />
               
               <motion.button
                 whileHover={{ y: -1 }} whileTap={{ y: 0 }}

@@ -11,6 +11,165 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+function hasMeaningfulData(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value !== "object") return true;
+  if (Array.isArray(value)) return value.length > 0;
+  return Object.keys(value as Record<string, unknown>).length > 0;
+}
+
+const IDONEIDAD_ITEM_RE = /([CEP]\d{1,2})/i;
+
+function cleanIdoneidadItemCode(value: unknown) {
+  const match = String(value ?? "").match(IDONEIDAD_ITEM_RE);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function inferIdoneidadDimension(code: string) {
+  if (code.startsWith("C")) return "Cultura";
+  if (code.startsWith("E")) return "Equipo";
+  if (code.startsWith("P")) return "Proyecto";
+  return "N/A";
+}
+
+function normalizeIdoneidadScore(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  if (!normalized) return null;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function parseCsvRows(csvText: string) {
+  const rows: string[][] = [];
+  let current = "";
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i += 1) {
+    const char = csvText[i];
+    const next = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(current.trim());
+      if (row.some(cell => cell !== "")) rows.push(row);
+      row = [];
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  row.push(current.trim());
+  if (row.some(cell => cell !== "")) rows.push(row);
+  return rows;
+}
+
+function buildPhase3ItemResults(inputEnvelope: any, csvTexts: string[] = []) {
+  const scoreMap = new Map<string, number[]>();
+
+  const addScore = (codeValue: unknown, scoreValue: unknown) => {
+    const code = cleanIdoneidadItemCode(codeValue);
+    const score = normalizeIdoneidadScore(scoreValue);
+    if (!code || score === null) return;
+    const scores = scoreMap.get(code) ?? [];
+    scores.push(score);
+    scoreMap.set(code, scores);
+  };
+
+  const respondents = inputEnvelope?.payload?.respondents;
+  if (Array.isArray(respondents)) {
+    for (const respondent of respondents) {
+      const answers = Array.isArray(respondent?.answers) ? respondent.answers : [];
+      for (const answer of answers) {
+        addScore(answer?.question_code ?? answer?.codigo ?? answer?.item, answer?.answer_score ?? answer?.valor ?? answer?.score);
+      }
+    }
+  }
+
+  for (const csvText of csvTexts) {
+    const rows = parseCsvRows(csvText);
+    if (rows.length < 2) continue;
+    const headers = rows[0].map(cleanIdoneidadItemCode);
+
+    for (const row of rows.slice(1)) {
+      row.forEach((cell, index) => {
+        const code = headers[index];
+        if (code) addScore(code, cell);
+      });
+    }
+  }
+
+  const orderGroup: Record<string, number> = { C: 0, E: 1, P: 2 };
+  return [...scoreMap.entries()]
+    .map(([item, scores]) => {
+      const count = scores.length;
+      const sum = scores.reduce((acc, score) => acc + score, 0);
+      const promedio = count ? sum / count : 0;
+      const variance = count
+        ? scores.reduce((acc, score) => acc + Math.pow(score - promedio, 2), 0) / count
+        : 0;
+      const zona = promedio < 4 ? "agil" : promedio < 8 ? "hibrido" : "predictivo";
+
+      return {
+        item,
+        dimension: inferIdoneidadDimension(item),
+        promedio: Number(promedio.toFixed(1)),
+        minimo: Math.min(...scores),
+        maximo: Math.max(...scores),
+        desviacion_estandar: Number(Math.sqrt(variance).toFixed(1)),
+        zona,
+        factor_critico: promedio <= 3 || promedio >= 8,
+        numero_respuestas: count,
+      };
+    })
+    .sort((a, b) => {
+      const groupDelta = (orderGroup[a.item[0]] ?? 9) - (orderGroup[b.item[0]] ?? 9);
+      if (groupDelta !== 0) return groupDelta;
+      return (Number(a.item.slice(1)) || 0) - (Number(b.item.slice(1)) || 0);
+    });
+}
+
+function withCompletedPhase3Items(diagnosis: unknown, inputEnvelope: any, csvTexts: string[] = []) {
+  const deterministicItems = buildPhase3ItemResults(inputEnvelope, csvTexts);
+  if (deterministicItems.length === 0 || typeof diagnosis !== "object" || diagnosis === null) return diagnosis;
+
+  const wrapper = diagnosis as Record<string, any>;
+  const inner = typeof wrapper.diagnosis === "object" && wrapper.diagnosis !== null
+    ? wrapper.diagnosis
+    : wrapper;
+
+  const currentItems = Array.isArray(inner.resultados_por_item) ? inner.resultados_por_item : [];
+  if (currentItems.length >= deterministicItems.length) return diagnosis;
+
+  inner.resultados_por_item = deterministicItems;
+  inner._resultados_por_item_fuente = "calculado_en_edge_function";
+
+  if (typeof wrapper.metadata === "object" && wrapper.metadata !== null) {
+    wrapper.metadata.agent_id = "agente-3";
+  }
+
+  return diagnosis;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,7 +353,7 @@ async function getPayloadForPhase(
     }
 
     return {
-      metadata: { ...baseMetadata, agent_id: "agente-2" },
+      metadata: { ...baseMetadata, agent_id: "agente-3" },
       payload: {
         input_method: externalFileUrl ? "online_and_offline" : "online_survey",
         respondents: formattedRespondents,
@@ -392,6 +551,102 @@ async function getPayloadForPhase(
     };
   }
 
+  // Fase 7 — Guía metodológica: consume el enfoque aprobado de Fase 6
+  if (phaseNumber === 7) {
+    const { data: proyecto } = await supabase
+      .from("proyectos")
+      .select("id, nombre_proyecto, fecha_inicio, empresas(nombre)")
+      .eq("id", projectId)
+      .single();
+
+    const { data: prevFases } = await supabase
+      .from("fases_estado")
+      .select("numero_fase, datos_consolidados")
+      .eq("proyecto_id", projectId)
+      .in("numero_fase", [4, 5, 6]);
+
+    const faseMap: Record<number, any> = {};
+    for (const f of prevFases ?? []) {
+      const dc = f.datos_consolidados as any;
+      faseMap[f.numero_fase] = dc?._current ?? dc?.diagnosis ?? dc;
+    }
+
+    return {
+      metadata: { ...baseMetadata, agent_id: "agente-7" },
+      payload: {
+        project_context: {
+          project_id: projectId,
+          project_name: proyecto?.nombre_proyecto ?? null,
+          company_name: (proyecto?.empresas as any)?.nombre ?? null,
+          start_date: proyecto?.fecha_inicio ?? null,
+        },
+        approved_phase4_diagnosis: faseMap[4] ?? null,
+        approved_phase5_diagnosis: faseMap[5] ?? null,
+        approved_phase6_enfoque: faseMap[6] ?? null,
+        response_rules: [
+          "Devuelve exclusivamente JSON valido, sin Markdown ni texto adicional.",
+          "La guia debe incluir un arreglo capitulos no vacio.",
+          "Cada capitulo debe incluir titulo, introduccion y un arreglo secciones no vacio.",
+          "Cada seccion debe incluir titulo y contenido; items y tabla son opcionales.",
+          "El informe debe ser extenso, detallado y profesional; evita respuestas sinteticas, genericas o tipo checklist.",
+          "Cada parrafo de contenido, cada item y cada subitem debe tener mas de 40 palabras, con explicacion contextual, justificacion, implicaciones practicas y recomendaciones aplicables a la PMO.",
+          "Cuando incluyas listas, no uses frases cortas: cada elemento debe ser un parrafo completo y autosuficiente de mas de 40 palabras.",
+          "Cuando incluyas subitems o campos anidados dentro de objetos, cada descripcion debe explicar que es, por que importa, como se aplica y que riesgo evita.",
+          "El documento total debe tener una extension amplia, con profundidad consultiva, lenguaje ejecutivo y suficiente detalle para ser usado como guia metodologica corporativa.",
+          "Mantén el mismo nivel de profundidad desde el primer capitulo hasta el ultimo; no reduzcas la calidad ni la extension de las secciones finales.",
+          "Antes de responder, revisa mentalmente que ningun capitulo haya quedado como frase corta, placeholder o resumen superficial. Si necesitas priorizar, reduce la cantidad de items antes que reducir la profundidad de cada item."
+        ],
+        detail_requirements: {
+          minimum_words_per_paragraph: 40,
+          minimum_words_per_item: 40,
+          minimum_words_per_subitem: 40,
+          expected_depth: "profesional, consultiva, extensa y accionable",
+          must_include_for_each_item: [
+            "descripcion detallada",
+            "justificacion metodologica",
+            "aplicacion practica en la organizacion",
+            "implicaciones para roles, gobierno o procesos",
+            "riesgos que ayuda a mitigar"
+          ],
+          avoid: [
+            "bullets breves",
+            "definiciones superficiales",
+            "frases genericas",
+            "contenido que parezca resumen ejecutivo cuando se requiere desarrollo metodologico"
+          ]
+        },
+        expected_output_contract: {
+          titulo: "string",
+          resumen_ejecutivo: "string",
+          tipo_pmo: "string",
+          capitulos: [
+            {
+              numero: "number",
+              titulo: "string",
+              introduccion: "string",
+              secciones: [
+                {
+                  titulo: "string",
+                  contenido: "string",
+                  items: ["string"],
+                  tabla: {
+                    headers: ["string"],
+                    rows: [["string"]]
+                  }
+                }
+              ]
+            }
+          ],
+          artefactos_recomendados: ["string"],
+          criterios_implementacion: ["string"],
+          riesgos_adopcion: ["string"],
+          metricas_seguimiento: ["string"]
+        }
+      },
+      comments,
+    };
+  }
+
   // Fase 9 — Generador de preguntas de entrevista (Agente 3.1)
   // Recibe el diagnóstico del Agente 3 (fase 1 en fases_estado) + los documentos originales
   if (phaseNumber === 9) {
@@ -481,7 +736,8 @@ async function checkAndTriggerPhase4(
 }
 
 /**
- * Núcleo del orquestador: llama a LangChain + Gemini y guarda el resultado.
+ * Núcleo del orquestador: invoca la API de Gemini y guarda el resultado en Supabase.
+ * Usa fetch nativo para soportar contenido multimodal (PDF/CSV via inlineData).
  */
 async function runAgent(
   supabase: ReturnType<typeof createClient>,
@@ -507,6 +763,26 @@ async function runAgent(
     throw new Error(`La configuración para fase ${phaseNumber} existe pero prompt_sistema está vacío. Actualiza el prompt en la tabla configuracion_agentes.`);
   }
 
+  // ── Auto-gestión de estado: marcar 'procesando' en la BD ──────────────────
+  // La Edge Function gestiona su propio estado de forma autónoma.
+  // Esto garantiza que el check de cancelación posterior siempre encuentre
+  // el estado correcto, sin importar el estado previo de la fila en la BD.
+  // Fases 3 y 9 se auto-completan directamente y omiten este paso.
+  if (phaseNumber !== 3 && phaseNumber !== 9) {
+    await supabase
+      .from("fases_estado")
+      .upsert(
+        {
+          proyecto_id: projectId,
+          numero_fase: phaseNumber,
+          estado_visual: "procesando",
+          datos_consolidados: null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "proyecto_id,numero_fase" }
+      );
+  }
+
   // Construir payload específico de la fase
   const envelopeData = await getPayloadForPhase(
     supabase,
@@ -521,21 +797,38 @@ async function runAgent(
   const { __fileUrls, ...inputEnvelope } = envelopeData as any;
 
   // Ensamblar prompt completo
+  const phase3OutputInstruction = phaseNumber === 3 ? `
+
+REQUISITO ESTRICTO PARA FASE 3:
+El objeto diagnosis.resultados_por_item DEBE incluir un elemento por CADA pregunta de idoneidad encontrada en el JSON de entrada y/o CSV adjunto.
+No resumas esta lista. No incluyas solo ejemplos. Deben estar todos los codigos Cxx, Exx y Pxx con promedio numerico, minimo, maximo, desviacion_estandar, dimension y zona.
+Si existen 23 preguntas en los datos de entrada, resultados_por_item debe tener exactamente 23 objetos.` : "";
+
+  const phase7OutputInstruction = phaseNumber === 7 ? `
+
+REQUISITO ESTRICTO PARA FASE 7:
+Debes generar una guia metodologica extensa, detallada y profesional. No entregues un resumen ni una estructura ligera.
+Cada capitulo debe desarrollar el tema con profundidad consultiva y cada seccion debe contener explicaciones amplias, accionables y contextualizadas para la organizacion evaluada.
+Debes preservar y desarrollar toda la informacion relevante recibida en el JSON de entrada: hallazgos, brechas, riesgos, metricas, scores, dimensiones, fases, actividades, entradas, salidas, roles, responsabilidades, criterios, dependencias, artefactos, KPIs, formulas, umbrales, responsables, recomendaciones y acciones. No omitas datos utiles para el cliente ni los compactes en una frase general.
+Puedes excluir campos tecnicos, metadatos de ejecucion, identificadores internos, timestamps, nombres de llaves JSON, trazas de versionado y cualquier dato que solo sirva para procesamiento del sistema. Todo contenido de negocio, diagnostico, gestion, metodologia o implementacion debe quedar visible y organizado en el informe.
+Cada parrafo, item y subitem debe superar las 40 palabras. En cada uno explica que significa, por que es importante, como se aplica en la PMO, que decisiones habilita y que riesgos reduce.
+Si produces listas dentro de items, subitems, riesgos, artefactos, criterios, roles, procesos, metricas o recomendaciones, cada elemento de esa lista tambien debe superar las 40 palabras y debe leerse como un parrafo profesional completo.
+Evita frases genericas, definiciones cortas y bullets de una sola linea. El resultado total debe tener una extension grande y un nivel de detalle propio de una guia metodologica corporativa lista para revision ejecutiva.` : "";
+
   const enforceJsonInstruction = `
 
 IMPORTANTE: DEBES DEVOLVER ÚNICAMENTE UN OBJETO JSON VÁLIDO.
-RECORDATORIO CRÍTICO: El array 'resultados_por_item' DEBE contener exactamente 21 elementos (uno por cada factor individual: C01-C07, E01-E07, P01-P07). NO resumas los datos en solo 3 puntos de dimensiones generales. Queremos ver el desglose completo en el radar.
-
 Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto extra.`;
   const fullPrompt = `${agentConfig.prompt_sistema}\n\nJSON DE ENTRADA:\n${JSON.stringify(
     inputEnvelope,
     null,
     2
-  )}${enforceJsonInstruction}`;
+  )}${phase3OutputInstruction}${phase7OutputInstruction}${enforceJsonInstruction}`;
 
   // Preparar contenido multimodal
   let parts: any[] = [{ text: fullPrompt }];
   const hasFiles = __fileUrls && __fileUrls.length > 0;
+  const csvTextsForPhase3: string[] = [];
   
   if (hasFiles) {
     // Descargar y convertir archivos a base64
@@ -554,6 +847,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
         if (fileData.type === 'text/csv') {
           const decoder = new TextDecoder('utf-8');
           const textContent = decoder.decode(bytes);
+          if (phaseNumber === 3) csvTextsForPhase3.push(textContent);
           return {
             text: `\n\n--- INICIO CONTENIDO DE ARCHIVO CSV ADJUNTO ---\n${textContent}\n--- FIN CONTENIDO DE ARCHIVO CSV ADJUNTO ---\nPor favor, ten muy en cuenta los datos de este archivo CSV para tu análisis.\n`
           };
@@ -584,8 +878,8 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     parts.push(...fileParts);
   }
 
-  // IMPORTANTE: Usar siempre gemini-flash-lite-latest.
-  const modelName = "gemini-flash-lite-latest";
+  // Respetar el modelo configurado en la base de datos (configuracion_agentes)
+  const modelName = agentConfig.modelo || "gemini-3-flash-preview";
   const apiKey = Deno.env.get("GOOGLE_API_KEY") ?? "";
   
   // Invocar Gemini a través de API REST nativa (para soportar PDF inlineData sin problemas de LangChain)
@@ -599,6 +893,8 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
       contents: [{ role: "user", parts }],
       generationConfig: {
         temperature: agentConfig?.temperatura ?? 0.2,
+        maxOutputTokens: phaseNumber === 7 ? 32768 : undefined,
+        responseMimeType: "application/json",
       }
     })
   });
@@ -612,7 +908,15 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
 
   // Extraer y validar el JSON de la respuesta
   let diagnosis: unknown;
-  const rawContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const candidate = geminiData.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  const rawContent = candidate?.content?.parts?.[0]?.text || "";
+
+  if (finishReason === "MAX_TOKENS") {
+    throw new Error(
+      "Gemini corto la respuesta por limite de tokens antes de completar la guia metodologica. Aumenta maxOutputTokens o divide la Fase 7 en generacion por capitulos."
+    );
+  }
 
   // Limpiar posibles bloques de markdown y extraer solo el objeto JSON (desde { hasta })
   let cleaned = rawContent.trim();
@@ -655,6 +959,40 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     return { diagnosis: null, processingTime, cancelled: true };
   }
 
+  let diagnosisToSave = phaseNumber === 3
+    ? withCompletedPhase3Items(diagnosis, inputEnvelope, csvTextsForPhase3)
+    : diagnosis;
+
+  if (phaseNumber === 7) {
+    const { data: previousPhase7 } = await supabase
+      .from("fases_estado")
+      .select("datos_consolidados")
+      .eq("proyecto_id", projectId)
+      .eq("numero_fase", 7)
+      .maybeSingle();
+
+    const previous = previousPhase7?.datos_consolidados as any;
+    const previousVersions = Array.isArray(previous?._versions) ? previous._versions : [];
+    const versionNumber = previousVersions.length + 1;
+    const generatedAt = new Date().toISOString();
+
+    const versionEntry = {
+      number: versionNumber,
+      generatedAt,
+      status: versionNumber > 1 ? "revisado" : "generado",
+      comment: typeof comments === "string" ? comments : null,
+      data: diagnosis,
+    };
+
+    diagnosisToSave = {
+      _current: diagnosis,
+      _versions: [...previousVersions, versionEntry],
+      _latest_version: versionNumber,
+      _generated_at: generatedAt,
+      _last_comment: typeof comments === "string" ? comments : null,
+    };
+  }
+
   // Guardar en fases_estado
   const { error: saveError } = await supabase
     .from("fases_estado")
@@ -663,7 +1001,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
         proyecto_id: projectId,
         numero_fase: phaseNumber,
         estado_visual: (phaseNumber === 3 || phaseNumber === 9) ? "completado" : "disponible", // Phase 3 & 9 auto-complete
-        datos_consolidados: diagnosis,
+        datos_consolidados: diagnosisToSave,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "proyecto_id,numero_fase" }
@@ -671,7 +1009,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
 
   if (saveError) throw new Error(`Error guardando diagnóstico: ${saveError.message}`);
 
-  return { diagnosis, processingTime, cancelled: false };
+  return { diagnosis: diagnosisToSave, processingTime, cancelled: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -715,6 +1053,35 @@ serve(async (req) => {
 
     // El modelo se inicializa dentro de runAgent ahora para decidir si forzar multimodal.
 
+    if (phaseNumber === 7 && !resolvedComments) {
+      const { data: existingPhase7 } = await supabase
+        .from("fases_estado")
+        .select("estado_visual, datos_consolidados")
+        .eq("proyecto_id", projectId)
+        .eq("numero_fase", 7)
+        .maybeSingle();
+
+      const existingData = existingPhase7?.datos_consolidados as any;
+      const hasExistingGuide =
+        (existingPhase7?.estado_visual === "disponible" || existingPhase7?.estado_visual === "completado") &&
+        hasMeaningfulData(existingData) &&
+        !existingData?._error;
+
+      if (hasExistingGuide) {
+        console.log("[pmo-agent] Fase 7 ya tiene guia guardada; se omite reproceso sin comentarios.");
+        return new Response(
+          JSON.stringify({
+            success: true,
+            phaseNumber,
+            processingTime: "0.00",
+            data: existingData,
+            cached: true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Marcar fase como "procesando" en la UI
     await supabase
       .from("fases_estado")
@@ -723,6 +1090,7 @@ serve(async (req) => {
           proyecto_id: projectId,
           numero_fase: phaseNumber,
           estado_visual: "procesando",
+          datos_consolidados: null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "proyecto_id,numero_fase" }
@@ -743,10 +1111,21 @@ serve(async (req) => {
       diagnosis = result.diagnosis;
       processingTime = result.processingTime;
     } catch (agentError) {
-      // Revertir la fase a disponible en caso de error
+      const errorMessage = agentError instanceof Error ? agentError.message : "Error desconocido ejecutando el agente";
+
+      // Persistir el error para que el frontend no quede con un mensaje genérico.
       await supabase
         .from("fases_estado")
-        .update({ estado_visual: "disponible", updated_at: new Date().toISOString() })
+        .update({
+          estado_visual: "error",
+          datos_consolidados: {
+            _error: true,
+            message: errorMessage,
+            phaseNumber,
+            timestamp: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        })
         .eq("proyecto_id", projectId)
         .eq("numero_fase", phaseNumber);
         
@@ -761,21 +1140,37 @@ serve(async (req) => {
 
     // Si termina la fase 1 (Agente 3 — Documentación), disparar el Agente 9 en paralelo
     if (phaseNumber === 1) {
-      (async () => {
+      const agent9Job = (async () => {
         try {
           await supabase.from("fases_estado").upsert(
-            { proyecto_id: projectId, numero_fase: 9, estado_visual: "procesando", updated_at: new Date().toISOString() },
+            { proyecto_id: projectId, numero_fase: 9, estado_visual: "procesando", datos_consolidados: null, updated_at: new Date().toISOString() },
             { onConflict: "proyecto_id,numero_fase" }
           );
           await runAgent(supabase, projectId, 9, 1, null);
         } catch (e) {
           console.error("[pmo-agent] Error auto-trigger Agente 9:", e);
           await supabase.from("fases_estado")
-            .update({ estado_visual: "disponible", updated_at: new Date().toISOString() })
+            .update({
+              estado_visual: "error",
+              datos_consolidados: {
+                _error: true,
+                message: e instanceof Error ? e.message : "Error desconocido ejecutando Agente 9",
+                phaseNumber: 9,
+                timestamp: new Date().toISOString(),
+              },
+              updated_at: new Date().toISOString(),
+            })
             .eq("proyecto_id", projectId)
             .eq("numero_fase", 9);
         }
-      })().catch(e => console.error("Agente 9 background error:", e));
+      })();
+
+      const edgeRuntime = (globalThis as any).EdgeRuntime;
+      if (edgeRuntime?.waitUntil) {
+        edgeRuntime.waitUntil(agent9Job);
+      } else {
+        agent9Job.catch(e => console.error("Agente 9 background error:", e));
+      }
     }
 
     return new Response(

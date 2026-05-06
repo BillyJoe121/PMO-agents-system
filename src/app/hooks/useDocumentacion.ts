@@ -24,10 +24,16 @@ export interface AgentDiagnosis {
     total_esperado: number;
     recibidos_completos: number;
     faltantes: number;
+    recibidos_referenciados?: number;
+    documentos_vencidos?: number;
   };
   calidad_documental: {
     resultado_consolidado: string;
     justificacion: string;
+    actualizacion?: string;
+    aplicabilidad?: string;
+    nivel_detalle?: string;
+    coherencia_entre_documentos?: string;
   };
   key_insights: string[];
   missing_documents: string[];
@@ -37,16 +43,20 @@ export interface AgentDiagnosis {
     dimension_o_area: string;
     descripcion: string;
     impacto: string;
+    evidencia_o_ausencia?: string;
+    documentos_fuente_o_ausentes?: string[];
   }>;
   hallazgos_documentales: Array<{
     nombre: string;
     descripcion: string;
     tipo: string;
+    documentos_fuente?: string[];
   }>;
   limitaciones?: Array<{
     tipo: string;
     descripcion: string;
     impacto_confiabilidad: string;
+    dimensiones_afectadas?: string[];
   }>;
   estado_documentos?: Array<{
     document_id: string;
@@ -57,11 +67,33 @@ export interface AgentDiagnosis {
     valor_analitico: string;
     nivel_analisis: string;
   }>;
+  cobertura_ciclo_vida?: {
+    completitud?: string;
+    fases_faltantes?: string[];
+    continuidad_documental?: string;
+    desbalance_identificado?: string;
+  };
+  dimensiones_gestion_proyectos?: Record<string, {
+    confianza?: string;
+    nivel_formalidad?: string;
+    artefactos?: string[];
+    herramientas?: string[];
+    roles_documentados?: string[];
+    fuentes_documentales?: string[];
+    procesos_documentados?: string[];
+  }>;
   insumos_para_agente_4: {
     nivel_estandarizacion: string;
     nivel_calidad_documental: string;
-    senales_estructuracion_formal: Array<{ descripcion: string; nivel_evidencia: string }>;
-    senales_flexibilidad_agil: Array<{ descripcion: string; nivel_evidencia: string }>;
+    hallazgos_clave_resumen?: string[];
+    brechas_criticas_resumen?: string[];
+    metodologias_mencionadas?: Array<{
+      nombre?: string;
+      documento_fuente?: string;
+      nivel_adopcion_visible?: string;
+    }>;
+    senales_estructuracion_formal: Array<{ descripcion: string; nivel_evidencia: string; documentos_fuente?: string[] }>;
+    senales_flexibilidad_agil: Array<{ descripcion: string; nivel_evidencia: string; documentos_fuente?: string[] }>;
   };
 }
 
@@ -150,8 +182,15 @@ export function useDocumentacion(projectId: string) {
 
         setUploadProgress(prev => ({ ...prev, [doc.id]: 'uploading' }));
 
-        // Ruta única en el bucket: proyectos/{projectId}/{timestamp}_{filename}
-        const storagePath = `proyectos/${projectId}/${Date.now()}_${doc.name}`;
+        // Función para limpiar el nombre del archivo para la ruta del storage
+        const safeName = doc.name
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "") // Quitar tildes
+          .replace(/[^a-zA-Z0-9._-]/g, "_") // Reemplazar caracteres especiales por guiones bajos
+          .replace(/_+/g, "_") // Evitar guiones bajos duplicados
+          .replace(/^_+|_+$/g, ""); // Quitar guiones bajos al inicio/final
+
+        const storagePath = `proyectos/${projectId}/${Date.now()}_${safeName}`;
 
         // 1a. Subir el archivo al bucket de Supabase Storage
         const { error: uploadError } = await supabase.storage

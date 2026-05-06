@@ -35,6 +35,22 @@ type Criticidad = 'Alta' | 'Media' | 'Baja';
 type DiagnosisVersion = 'original' | 'reprocesado';
 type ModuleView = 'auto-trigger' | 'processing' | 'results' | 'approved';
 
+function formatJsonScalar(value: any): string {
+  if (value === null || value === undefined || value === '') return 'N/A';
+  if (typeof value === 'boolean') return value ? 'Si' : 'No';
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  if (Array.isArray(value)) return value.length ? `${value.length} elemento(s)` : 'Sin datos';
+  if (typeof value === 'object') return `${Object.keys(value).length} campo(s)`;
+  return String(value);
+}
+
+function labelFromKey(key: string) {
+  return key
+    .replace(/^subagente_(\d+)/, 'Subagente $1')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
 interface PuntoDebil {
   area: string;
   criticidad: Criticidad;
@@ -58,6 +74,7 @@ interface EnfoqueResult {
   instrucciones: InstruccionAgente7[];
   timestamp: string;
   version: DiagnosisVersion;
+  rawData?: any;
 }
 
 // ---------------------------------------------------------------------------
@@ -272,6 +289,7 @@ function buildResult(pmoType: PmoType, maturityLevel: number, comment?: string):
     instrucciones,
     timestamp: new Date().toISOString(),
     version: comment ? 'reprocesado' : 'original',
+    rawData: null,
   };
 }
 
@@ -371,6 +389,95 @@ function mapAgentResult(datos: any): EnfoqueResult | null {
   };
 }
 
+function mapAgentResultV2(datos: any): EnfoqueResult | null {
+  if (!datos) return null;
+  const d = datos.diagnosis ?? datos;
+  if (!d) return null;
+
+  const ga = d.guide_approach ?? {};
+  const pc = d.parametros_construccion ?? {};
+  const experto = d.diagnostico_experto ?? {};
+  const severityMap: Record<string, Criticidad> = {
+    critical: 'Alta', high: 'Alta', medium: 'Media', low: 'Baja',
+  };
+
+  const principios: { titulo: string; descripcion: string }[] = [
+    ga.type ? { titulo: 'Tipo de enfoque', descripcion: ga.type } : null,
+    ga.primary_framework ? { titulo: 'Marco primario', descripcion: ga.primary_framework } : null,
+    ga.secondary_framework ? { titulo: 'Marco secundario', descripcion: ga.secondary_framework } : null,
+    ga.framework_balance ? { titulo: 'Balance metodologico', descripcion: ga.framework_balance } : null,
+    ga.justification ? { titulo: 'Justificacion', descripcion: ga.justification } : null,
+    pc.tone ? { titulo: 'Tono de la guia', descripcion: `${pc.tone}. ${pc.tone_justification ?? ''}`.trim() } : null,
+    pc.recommended_length ? { titulo: 'Extension recomendada', descripcion: `${pc.recommended_length}. ${pc.length_justification ?? ''}`.trim() } : null,
+  ].filter(Boolean) as { titulo: string; descripcion: string }[];
+
+  const puntosDebilesSource = experto.brechas_priorizadas ?? d.critical_weaknesses ?? [];
+  const puntosDebiles: PuntoDebil[] = puntosDebilesSource.map((w: any) => ({
+    area: w.brecha ?? w.weakness ?? w.tipo ?? '',
+    criticidad: severityMap[w.severity] ?? 'Media',
+    descripcion: w.impacto_en_proyectos ?? w.content_type_needed ?? w.que_debe_hacer_la_guia ?? '',
+    impacto: [
+      w.que_debe_hacer_la_guia ? `Guia: ${w.que_debe_hacer_la_guia}` : '',
+      (w.secciones_que_la_abordan ?? w.guide_sections_recommended ?? []).length > 0
+        ? `Secciones: ${(w.secciones_que_la_abordan ?? w.guide_sections_recommended ?? []).join(', ')}`
+        : '',
+    ].filter(Boolean).join(' - '),
+  }));
+
+  const adicionales = (d.insumos_base_utilizados?.secciones_adicionales_activadas ?? []) as string[];
+  const subagents = d.insumos_por_subagente ?? {};
+  const instrucciones: InstruccionAgente7[] = [
+    {
+      categoria: 'Alcance y estructura de la guia',
+      icon: Target,
+      directrices: [
+        adicionales.length > 0
+          ? `Secciones adicionales activadas: ${adicionales.join(', ')}`
+          : 'No se activaron secciones adicionales.',
+        ...(d.secciones ?? []).map((s: any) => `${s.id ?? ''} - ${s.titulo ?? ''}: ${s.enfasis ?? s.condicion_inclusion ?? ''}`),
+      ].filter(Boolean),
+    },
+    {
+      categoria: 'Audiencia, tono y longitud',
+      icon: Lightbulb,
+      directrices: [
+        `Audiencia objetivo: ${(pc.target_audience ?? []).join(', ') || 'No especificada'}`,
+        pc.tone ? `Tono: ${pc.tone}` : null,
+        pc.tone_justification ?? null,
+        pc.recommended_length ? `Extension: ${pc.recommended_length}` : null,
+        pc.length_justification ?? null,
+      ].filter(Boolean) as string[],
+    },
+    {
+      categoria: 'Advertencias del diagnostico',
+      icon: ShieldAlert,
+      directrices: (d.advertencias_de_entrada ?? []).length > 0
+        ? d.advertencias_de_entrada
+        : ['No se detectaron advertencias en los datos de entrada.'],
+    },
+    ...Object.entries(subagents).map(([key, value]: [string, any]) => ({
+      categoria: `${labelFromKey(key)} - ${value?.descripcion_rol ?? 'Insumos especificos'}`,
+      icon: Brain,
+      directrices: Object.entries(value ?? {})
+        .filter(([field]) => field !== 'descripcion_rol')
+        .map(([field, fieldValue]) => `${labelFromKey(field)}: ${formatJsonScalar(fieldValue)}`),
+    })),
+  ].filter(instr => instr.directrices.length > 0);
+
+  return {
+    enfoque: {
+      tipo: ga.type ?? ga.primary_framework ?? 'Enfoque metodologico',
+      orientacion: ga.strategic_orientation ?? d.summary ?? experto.resumen_diagnostico ?? '',
+      principios,
+    },
+    puntosDebiles,
+    instrucciones,
+    timestamp: datos.metadata?.timestamp ?? new Date().toISOString(),
+    version: (datos.metadata?.iteration ?? 1) > 1 ? 'reprocesado' : 'original',
+    rawData: datos,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared: Version badge
 // ---------------------------------------------------------------------------
@@ -431,51 +538,6 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
   );
 }
 
-// ---------------------------------------------------------------------------
-// JSON preview modal (for the approved JSON export — RF-F6-04)
-// ---------------------------------------------------------------------------
-function JsonModal({ open, result, onClose }: { open: boolean; result: EnfoqueResult | null; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  if (!result) return null;
-  const snippet = JSON.stringify({
-    version: result.version,
-    timestamp: result.timestamp,
-    enfoque_tipo: result.enfoque.tipo,
-    puntos_debiles: result.puntosDebiles.map(p => ({ area: p.area, criticidad: p.criticidad })),
-    instrucciones_agente7: result.instrucciones.map(i => ({ categoria: i.categoria, num_directrices: i.directrices.length })),
-  }, null, 2);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(snippet).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); });
-  };
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onClose} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="relative bg-gray-950 rounded-2xl shadow-2xl w-full max-w-lg z-10 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800">
-              <div className="flex items-center gap-2">
-                <Code2 size={14} className="text-gray-400" />
-                <span className="text-gray-200 text-sm" style={{ fontWeight: 600 }}>JSON aprobado — Fase 6</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={handleCopy} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs transition-all" style={{ fontWeight: 500 }}>
-                  {copied ? <><Check size={11} className="text-green-400" />Copiado</> : <><Copy size={11} />Copiar</>}
-                </button>
-                <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-gray-800 flex items-center justify-center text-gray-500 transition-colors"><X size={14} /></button>
-              </div>
-            </div>
-            <pre className="p-5 text-xs text-green-400 overflow-auto max-h-96 leading-relaxed font-mono">{snippet}</pre>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Section: Definición de enfoque
@@ -517,17 +579,17 @@ function EnfoqueSection({ result, pmoType }: { result: EnfoqueResult; pmoType: P
         <p className="text-xs uppercase tracking-wide text-gray-400 mb-4" style={{ fontWeight: 700 }}>
           Principios rectores
         </p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-2.5">
           {result.enfoque.principios.map((p, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-              className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-neutral-50/30 hover:border-gray-200 transition-colors">
+              className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-neutral-50/30 hover:border-gray-200 transition-colors">
               <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 bg-neutral-900 text-white"
                 style={{ fontSize: '0.65rem', fontWeight: 800 }}>
                 {i + 1}
               </div>
-              <div>
-                <p className="text-neutral-800 text-xs mb-0.5" style={{ fontWeight: 600 }}>{p.titulo}</p>
-                <p className="text-neutral-500 text-xs leading-relaxed">{p.descripcion}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-neutral-800 text-sm mb-1" style={{ fontWeight: 600 }}>{p.titulo}</p>
+                <p className="text-neutral-500 text-sm leading-relaxed">{p.descripcion}</p>
               </div>
             </motion.div>
           ))}
@@ -668,6 +730,193 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
 }
 
 // ---------------------------------------------------------------------------
+// Section: Complete JSON detail
+// ---------------------------------------------------------------------------
+function JsonScalar({ value }: { value: any }) {
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-neutral-400">N/A</span>;
+  }
+  if (typeof value === 'boolean') {
+    return <span className="text-neutral-700">{value ? 'Si' : 'No'}</span>;
+  }
+  if (typeof value === 'number') {
+    return <span className="text-neutral-900 tabular-nums">{Number.isInteger(value) ? value : Number(value.toFixed(2))}</span>;
+  }
+  return <span className="text-neutral-700 break-words">{String(value)}</span>;
+}
+
+function JsonNode({ label, value, depth = 0 }: { label: string; value: any; depth?: number }) {
+  const isArray = Array.isArray(value);
+  const isObject = value && typeof value === 'object' && !isArray;
+  const title = labelFromKey(label);
+
+  if (!isArray && !isObject) {
+    return (
+      <div className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-1" style={{ fontWeight: 600 }}>{title}</p>
+        <p className="text-[13px] leading-relaxed"><JsonScalar value={value} /></p>
+      </div>
+    );
+  }
+
+  if (isArray) {
+    return (
+      <div className="rounded-xl border border-neutral-200/70 bg-white p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 700 }}>{title}</p>
+          <span className="text-[11px] text-neutral-400 tabular-nums">{value.length} elemento(s)</span>
+        </div>
+        {value.length === 0 ? (
+          <p className="text-neutral-400 text-[13px]">Sin datos</p>
+        ) : (
+          <div className="space-y-3">
+            {value.map((item: any, index: number) => (
+              <div key={`${label}-${index}`} className="rounded-xl border border-neutral-100 bg-neutral-50/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 700 }}>Item {index + 1}</p>
+                <JsonNode label={`${label}_${index + 1}`} value={item} depth={depth + 1} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const entries = Object.entries(value ?? {});
+  return (
+    <div className="rounded-xl border border-neutral-200/70 bg-white p-4">
+      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-3" style={{ fontWeight: 700 }}>{title}</p>
+      {entries.length === 0 ? (
+        <p className="text-neutral-400 text-[13px]">Sin datos</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {entries.map(([key, child]) => (
+            <JsonNode key={key} label={key} value={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagnosticSummarySection({ result }: { result: EnfoqueResult }) {
+  if (!result.rawData) return null;
+
+  const raw = result.rawData;
+
+  // 1. summary from diagnosis
+  const summary: string = raw?.diagnosis?.summary || raw?.summary || '';
+
+  // 2. roles pills from roles_identificados
+  const roles: { nombre_cargo?: string; cargo?: string; nombre?: string }[] =
+    Array.isArray(raw?.roles_identificados) ? raw.roles_identificados :
+    Array.isArray(raw?.diagnostico_experto?.roles_identificados) ? raw.diagnostico_experto.roles_identificados :
+    Array.isArray(raw?.estado_actual_gestion_proyectos?.roles_identificados) ? raw.estado_actual_gestion_proyectos.roles_identificados :
+    [];
+
+  // 3. guide_approach.type + guide_approach.justification
+  const ga = raw?.guide_approach ?? {};
+  const gaType: string = ga.type ?? ga.tipo ?? '';
+  const gaJustification: string = ga.justification ?? ga.justificacion ?? '';
+
+  // 4. resumen_diagnostico
+  const resumen: string =
+    raw?.resumen_diagnostico ||
+    raw?.diagnostico_experto?.resumen_diagnostico ||
+    raw?.estado_actual_gestion_proyectos?.resumen_diagnostico || '';
+
+  // 5. descripcion_general
+  const descripcion: string =
+    raw?.descripcion_general ||
+    raw?.diagnostico_experto?.descripcion_general ||
+    raw?.estado_actual_gestion_proyectos?.descripcion_general || '';
+
+  const hasContent = summary || roles.length > 0 || gaType || resumen || descripcion;
+  if (!hasContent) return null;
+
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-5 h-5 rounded flex items-center justify-center bg-neutral-100">
+          <BarChart2 size={11} className="text-neutral-600" />
+        </div>
+        <h2 className="text-gray-700 text-sm uppercase tracking-wide" style={{ fontWeight: 700 }}>
+          4 — Resumen diagnóstico
+        </h2>
+      </div>
+
+      <div className="space-y-3">
+        {/* Descripción general */}
+        {descripcion && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl border border-neutral-200/70 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mb-2" style={{ fontWeight: 700 }}>Descripción general</p>
+            <p className="text-neutral-700 text-sm leading-relaxed">{descripcion}</p>
+          </motion.div>
+        )}
+
+        {/* Summary */}
+        {summary && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+            className="bg-white rounded-2xl border border-neutral-200/70 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mb-2" style={{ fontWeight: 700 }}>Resumen ejecutivo</p>
+            <p className="text-neutral-700 text-sm leading-relaxed">{summary}</p>
+          </motion.div>
+        )}
+
+        {/* Resumen diagnóstico */}
+        {resumen && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+            className="bg-white rounded-2xl border border-neutral-200/70 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mb-2" style={{ fontWeight: 700 }}>Resumen de diagnóstico</p>
+            <p className="text-neutral-700 text-sm leading-relaxed">{resumen}</p>
+          </motion.div>
+        )}
+
+        {/* Guide Approach: type + justification */}
+        {(gaType || gaJustification) && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl border border-neutral-200/70 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mb-3" style={{ fontWeight: 700 }}>Enfoque de la guía</p>
+            {gaType && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-900 text-white text-xs mb-3" style={{ fontWeight: 600 }}>
+                <Zap size={11} />
+                {gaType}
+              </div>
+            )}
+            {gaJustification && (
+              <p className="text-neutral-600 text-sm leading-relaxed">{gaJustification}</p>
+            )}
+          </motion.div>
+        )}
+
+        {/* Roles pills */}
+        {roles.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+            className="bg-white rounded-2xl border border-neutral-200/70 p-5">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mb-3" style={{ fontWeight: 700 }}>
+              Roles identificados · {roles.length}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {roles.map((r, i) => {
+                const label = r.nombre_cargo || r.cargo || r.nombre || `Rol ${i + 1}`;
+                return (
+                  <span key={i}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200 bg-neutral-50 text-neutral-700 text-xs"
+                    style={{ fontWeight: 500 }}>
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Comments section (same pattern as RF-F4-05)
 // ---------------------------------------------------------------------------
 function CommentsSection({
@@ -747,14 +996,13 @@ export default function EnfoqueModule() {
 
   const [view, setView] = useState<ModuleView>(deriveView);
   const [result, setResult] = useState<EnfoqueResult | null>(
-    phase?.status === 'completado' ? buildResult(pmoType, maturityLevel) : null
+    phase?.agentData ? mapAgentResultV2(phase.agentData) : null
   );
   const [comment, setComment] = useState('');
   const [savedComment, setSavedComment] = useState('');
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
-  const [showJson, setShowJson] = useState(false);
   const autoTriggered = useRef(false);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartTimeRef = useRef<number>(0);
@@ -774,7 +1022,7 @@ export default function EnfoqueModule() {
       if (data?.datos_consolidados) {
         // Skip stale data from before this poll session started
         if (minTime > 0 && new Date(data.updated_at).getTime() < minTime) return;
-        const mapped = mapAgentResult(data.datos_consolidados);
+        const mapped = mapAgentResultV2(data.datos_consolidados);
         if (mapped) {
           clearInterval(pollIntervalRef.current!);
           pollIntervalRef.current = null;
@@ -798,7 +1046,7 @@ export default function EnfoqueModule() {
         .eq('numero_fase', 6)
         .single();
       if (data?.datos_consolidados) {
-        const mapped = mapAgentResult(data.datos_consolidados);
+        const mapped = mapAgentResultV2(data.datos_consolidados);
         if (mapped) setResult(mapped);
       }
     })();
@@ -887,6 +1135,7 @@ export default function EnfoqueModule() {
       <EnfoqueSection result={r} pmoType={pmoType} />
       <PuntosDebilesSection result={r} />
       <InstruccionesSection result={r} />
+      <DiagnosticSummarySection result={r} />
       {!readonly && (
         <CommentsSection
           comment={comment} savedComment={savedComment} pmoColor={pmoColor}
@@ -906,13 +1155,6 @@ export default function EnfoqueModule() {
         phaseNumber={6}
         phaseName="Enfoque para Guía Metodológica"
         eyebrow={view === 'approved' ? 'Aprobada' : 'Activa'}
-        rightSlot={view === 'approved' && result ? (
-          <button onClick={() => setShowJson(true)}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 text-neutral-600 hover:bg-neutral-50 text-[12px] transition-all"
-            style={{ fontWeight: 500 }}>
-            <Code2 size={11} /> Ver JSON
-          </button>
-        ) : undefined}
         onReprocessed={async () => {
           // 1. Block downstream phases (7, 8…)
           await reprocessPhase(projectId!, 6);
@@ -1038,11 +1280,6 @@ export default function EnfoqueModule() {
                     )}
                   </div>
                 </div>
-                <button onClick={() => setShowJson(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 text-neutral-600 hover:bg-neutral-50 text-[12px] transition-all"
-                  style={{ fontWeight: 500 }}>
-                  <Code2 size={11} strokeWidth={1.75} /> Ver JSON aprobado
-                </button>
               </div>
               {renderContent(result, true)}
             </motion.div>
@@ -1052,7 +1289,6 @@ export default function EnfoqueModule() {
       </div>
 
       <ApproveModal open={showApproveModal} onCancel={() => setShowApproveModal(false)} onConfirm={handleApprove} isLoading={isApproving} />
-      <JsonModal open={showJson} result={result} onClose={() => setShowJson(false)} />
 
       <NextPhaseButton projectId={projectId!} nextPhase={7} prevPhase={5} show={view === 'approved'} />
     </div>

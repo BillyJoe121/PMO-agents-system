@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from 'react-router';
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   LayoutDashboard,
@@ -7,10 +8,12 @@ import {
   ChevronRight,
   Shield,
   Trash2,
+  Copyright,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { SoundToggleButton } from '../ui/SoundToggleButton';
+import { CreditsModal } from '../ui/CreditsModal';
 
 interface NavItem {
   icon: React.ReactNode;
@@ -27,6 +30,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useApp();
+  const [showCredits, setShowCredits] = useState(false);
 
   const isActive = (path: string) => {
     if (path === '/dashboard') return location.pathname === '/dashboard';
@@ -108,6 +112,21 @@ export default function Sidebar() {
         {/* Sound toggle */}
         <SoundToggleButton variant="sidebar" className="w-full" />
 
+        {/* Credits button */}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowCredits(true)}
+          title="Créditos"
+          className="relative w-full h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all group"
+        >
+          <Copyright size={20} />
+          <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+            Créditos
+            <ChevronRight size={10} className="inline ml-1" />
+          </div>
+        </motion.button>
+
         <div
           className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
           style={{ background: currentUser.color, fontWeight: 600 }}
@@ -128,6 +147,8 @@ export default function Sidebar() {
           </div>
         </motion.button>
       </div>
+
+      <CreditsModal isOpen={showCredits} onClose={() => setShowCredits(false)} />
     </aside>
   );
 }

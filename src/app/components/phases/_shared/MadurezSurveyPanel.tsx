@@ -17,9 +17,9 @@ export default function MadurezSurveyPanel({
 }) {
   const {
     activeLink, responses, isLoadingData,
-    externalFile, setExternalFile, clearExternalFile,
-    existingFileName, existingFileUrl,
-    generateLink, deleteFile, downloadCSV
+    externalFiles, addExternalFile, removeExternalFile,
+    existingFiles, deleteExistingFile,
+    generateLink, downloadCSV
   } = manager;
 
   const [linkCopied, setLinkCopied] = useState(false);
@@ -46,20 +46,22 @@ export default function MadurezSurveyPanel({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-        toast.error('Por favor suba un archivo en formato CSV.');
-        return;
-      }
-      setExternalFile(file);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach(file => {
+        if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+          toast.error(`El archivo ${file.name} no es CSV.`);
+        } else {
+          addExternalFile(file);
+        }
+      });
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleDeleteExisting = async () => {
+  const handleDeleteExisting = async (fileName: string) => {
     try {
-      await deleteFile();
+      await deleteExistingFile(fileName);
       toast.success('Archivo eliminado correctamente');
     } catch (e: any) {
       toast.error(e.message || 'Error eliminando el archivo');
@@ -67,7 +69,7 @@ export default function MadurezSurveyPanel({
   };
 
   // El panel se considera completado (tiene datos) si hay al menos una respuesta online o un archivo
-  const hasData = responses.length > 0 || externalFile || existingFileName;
+  const hasData = responses.length > 0 || externalFiles.length > 0 || existingFiles.length > 0;
 
   return (
     <div className={`bg-white rounded-2xl border ${hasData ? 'border-neutral-900/20 shadow-sm' : 'border-neutral-200/80'} overflow-hidden`}>
@@ -150,46 +152,49 @@ export default function MadurezSurveyPanel({
               </div>
             </div>
 
-            <div className="mt-auto">
-              {!existingFileName && !externalFile ? (
-                <>
-                  <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-                  <button onClick={() => fileInputRef.current?.click()} disabled={disabled} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-neutral-200/80 text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
-                    <Paperclip size={14} /> Seleccionar archivo CSV
-                  </button>
-                </>
-              ) : existingFileName ? (
-                <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
-                    <Paperclip size={14} />
+            <div className="mt-auto flex flex-col gap-3">
+              <input ref={fileInputRef} type="file" accept=".csv" multiple className="hidden" onChange={handleFileChange} />
+              
+              <div className="space-y-2 mb-3">
+                {existingFiles.map((f, i) => (
+                  <div key={`exist-${i}`} className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
+                      <Paperclip size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-blue-900 font-medium truncate">{f.name}</p>
+                      <p className="text-[11px] text-blue-600/70">Archivo en base de datos</p>
+                    </div>
+                    <div className="flex items-center gap-1 border-l border-blue-200/50 pl-1">
+                      <button onClick={() => window.open(f.url, '_blank')} disabled={disabled} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-100/50 rounded-lg transition-colors" title="Descargar archivo">
+                        <Download size={14} />
+                      </button>
+                      <button onClick={() => handleDeleteExisting(f.name)} disabled={disabled} className="p-1.5 text-blue-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar archivo">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-blue-900 font-medium truncate">{existingFileName}</p>
-                    <p className="text-[11px] text-blue-600/70">Archivo actual en base de datos</p>
-                  </div>
-                  <div className="flex items-center gap-1 border-l border-blue-200/50 pl-1">
-                    <button onClick={() => window.open(existingFileUrl, '_blank')} disabled={disabled} className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-100/50 rounded-lg transition-colors" title="Descargar archivo">
-                      <Download size={14} />
-                    </button>
-                    <button onClick={handleDeleteExisting} disabled={disabled} className="p-1.5 text-blue-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar archivo">
+                ))}
+
+                {externalFiles.map((f, i) => (
+                  <div key={`ext-${i}`} className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center flex-shrink-0 text-neutral-600">
+                      <CheckCircle2 size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-neutral-900 font-medium truncate">{f.name}</p>
+                      <p className="text-[11px] text-neutral-500">Listo para subir</p>
+                    </div>
+                    <button onClick={() => removeExternalFile(f.name)} disabled={disabled} className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Quitar archivo">
                       <Trash2 size={14} />
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center flex-shrink-0 text-neutral-600">
-                    <CheckCircle2 size={14} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-neutral-900 font-medium truncate">{externalFile?.name}</p>
-                    <p className="text-[11px] text-neutral-500">Listo para subir</p>
-                  </div>
-                  <button onClick={clearExternalFile} disabled={disabled} className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Quitar archivo">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              )}
+                ))}
+              </div>
+
+              <button onClick={() => fileInputRef.current?.click()} disabled={disabled} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-neutral-200/80 text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
+                <Paperclip size={14} /> Cargar archivo CSV
+              </button>
             </div>
           </div>
 
@@ -201,7 +206,7 @@ export default function MadurezSurveyPanel({
             <Users size={14} className="text-neutral-400" />
             <span>
               {hasData ? (
-                <>Recolección activa: <strong>{responses.length} encuestas online</strong> {(existingFileName || externalFile) ? ' + archivo cargado' : ''}</>
+                <>Recolección activa: <strong>{responses.length} encuestas online</strong> {(existingFiles.length > 0 || externalFiles.length > 0) ? ` + ${existingFiles.length + externalFiles.length} archivo(s) cargado(s)` : ''}</>
               ) : (
                 <>Aún no se han recibido respuestas ni cargado archivos.</>
               )}

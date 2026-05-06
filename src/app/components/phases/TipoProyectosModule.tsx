@@ -14,7 +14,7 @@
  * TODO: RF-F4-05 → axios.post(N8N_WEBHOOK_AGENTE_4, { diagnostico_original, comentario_consultor })
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { supabase } from '../../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -28,6 +28,8 @@ import { useApp } from '../../context/AppContext';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import { useSoundManager } from '../../hooks/useSoundManager';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { normalizeIdoneidadDiagnosisItems, getIdoneidadItemCode, getIdoneidadItemScore, inferIdoneidadDimension } from './IdoneidadModule';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -251,6 +253,82 @@ export default function TipoProyectosModule() {
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 4);
+  const phase3 = project?.phases.find(p => p.number === 3);
+
+  const radarData = useMemo(() => {
+    const diagnosisFase3 = phase3?.agentData?.diagnosis || phase3?.agentData;
+    if (!diagnosisFase3) return [];
+    
+    const items = normalizeIdoneidadDiagnosisItems(diagnosisFase3);
+    
+    if (items.length === 0 && diagnosisFase3.indicadores) {
+      return Object.entries(diagnosisFase3.indicadores).filter(([key]) => key !== 'general').map(([key, data]: [string, any]) => {
+        const label = key === 'cultura' ? 'CULTURA (Promedio)' : 
+                      key === 'equipo' ? 'EQUIPO (Promedio)' : 
+                      key === 'proyecto' ? 'PROYECTO (Promedio)' : key.toUpperCase();
+        return {
+          subject: label,
+          fullLabel: `Dimensión General: ${key}`,
+          dimension: key,
+          Puntaje: typeof data.promedio === 'number' ? Number(data.promedio.toFixed(1)) : 0,
+          AgileZone: 4,
+          HybridZone: 8,
+          PredictiveZone: 10,
+        };
+      });
+    }
+
+    return items.map((res: any) => {
+      const itemLabel = getIdoneidadItemCode(res);
+      const score = getIdoneidadItemScore(res) ?? 0;
+
+      return {
+        subject: itemLabel,
+        fullLabel: itemLabel,
+        dimension: res.dimension ?? inferIdoneidadDimension(itemLabel),
+        Puntaje: score,
+        AgileZone: 4,
+        HybridZone: 8,
+        PredictiveZone: 10,
+      };
+    });
+  }, [phase3?.agentData]);
+
+  const emptyValue = 'N/A';
+  const valueOrEmpty = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return emptyValue;
+    if (typeof value === 'boolean') return value ? 'Si' : 'No';
+    if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+    return String(value);
+  };
+
+  const CustomRadarTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white border border-neutral-200/80 p-3.5 rounded-xl" style={{ boxShadow: '0 4px 24px -6px rgba(0,0,0,0.12)' }}>
+          <div className="mb-2.5 pb-2 border-b border-neutral-100">
+            <p className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold mb-0.5">{data.dimension}</p>
+            <p className="text-[12px] text-neutral-900 leading-tight" style={{ fontWeight: 600 }}>{data.fullLabel}</p>
+          </div>
+          <div className="space-y-1.5">
+            {payload.filter((p: any) => p.dataKey === 'Puntaje').map((entry: any, index: number) => (
+              <div key={index} className="flex items-center justify-between gap-6">
+                <span className="text-[12px] flex items-center gap-1.5 text-neutral-600 font-medium">
+                  <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
+                  {entry.name}
+                </span>
+                <span className="text-[13px] tabular-nums font-bold" style={{ color: entry.color }}>
+                  {entry.value.toFixed(1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   // Derive initial view from phase status
   const deriveInitialView = (): ModuleView => {
@@ -271,7 +349,7 @@ export default function TipoProyectosModule() {
   const [view, setView] = useState<ModuleView>(() => {
     const initialView = deriveInitialView();
     // If we have parsed diagnosis, force view to diagnosis or approved
-    if (phase?.agentData) {
+    if (phase?.agentData && Object.keys(phase.agentData).length > 0) {
       return phase.status === 'completado' ? 'approved' : 'diagnosis';
     }
     return initialView;
@@ -825,6 +903,8 @@ export default function TipoProyectosModule() {
           </div>
         )}
 
+        {renderPhase3Details()}
+
         {/* RF-F4-05: Consultant comments */}
         <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
           <div className="flex items-center gap-2 mb-1">
@@ -1061,6 +1141,8 @@ export default function TipoProyectosModule() {
             </ul>
           </div>
         )}
+
+        {renderPhase3Details()}
       </motion.div>
     );
   };
@@ -1092,6 +1174,79 @@ export default function TipoProyectosModule() {
       </button>
     </motion.div>
   );
+
+  const renderPhase3Details = () => {
+    if (!phase3?.agentData) return null;
+    const diagnosisFase3 = phase3.agentData.diagnosis || phase3.agentData;
+    
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-10 border-t border-neutral-200/70 pt-8">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center border border-neutral-200">
+            <BarChart2 size={15} className="text-neutral-600" />
+          </div>
+          <div>
+            <h2 className="text-neutral-900 text-[15px]" style={{ fontWeight: 600 }}>Anexo: Resultados de Idoneidad (Fase 3)</h2>
+            <p className="text-neutral-500 text-[12px] mt-0.5">Gráfica de radar y cuadro de detalles por factor generados en la fase anterior.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 shadow-sm">
+             <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Gráfica de radar de la organización</p>
+             <div className="h-[400px] w-full">
+               {radarData.length > 0 ? (
+                 <ResponsiveContainer width="100%" height="100%">
+                   <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                     <PolarGrid stroke="#e5e5e5" />
+                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#737373', fontSize: 10, fontWeight: 500 }} />
+                     <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: '#a3a3a3', fontSize: 10 }} axisLine={false} />
+                     <Radar name="Zona Predictiva (8-10)" dataKey="PredictiveZone" stroke="none" fill="#ef4444" fillOpacity={0.12} isAnimationActive={false} />
+                     <Radar name="Zona Híbrida (4-8)" dataKey="HybridZone" stroke="none" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
+                     <Radar name="Zona Ágil (0-4)" dataKey="AgileZone" stroke="none" fill="#10b981" fillOpacity={0.25} isAnimationActive={false} />
+                     <Radar name="Puntaje Real" dataKey="Puntaje" stroke="#171717" strokeWidth={3} fill="#171717" fillOpacity={0.45} />
+                     <Tooltip content={<CustomRadarTooltip />} />
+                   </RadarChart>
+                 </ResponsiveContainer>
+               ) : (
+                 <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400">
+                    <p className="text-[13px]">Gráfica no disponible para estos datos</p>
+                 </div>
+               )}
+             </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 flex flex-col shadow-sm overflow-hidden">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Detalle de factores evaluados</p>
+            <div className="rounded-xl border border-neutral-100">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-neutral-100 bg-neutral-50">
+                    {['Item', 'Dimensión', 'Prom', 'Min', 'Max', 'Zona', 'Crítico'].map((h) => (
+                      <th key={h} className="px-3 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-50 bg-white">
+                  {((normalizeIdoneidadDiagnosisItems(diagnosisFase3).length ? normalizeIdoneidadDiagnosisItems(diagnosisFase3) : [{ item: emptyValue, dimension: emptyValue, promedio: emptyValue, minimo: emptyValue, maximo: emptyValue, zona: emptyValue, factor_critico: emptyValue }]) as any[]).map((item, i) => (
+                    <tr key={i} className="hover:bg-neutral-50/60">
+                      <td className="px-3 py-3 text-[12px] text-neutral-800" style={{ fontWeight: 600 }}>{valueOrEmpty(getIdoneidadItemCode(item))}</td>
+                      <td className="px-3 py-3 text-[12px] text-neutral-600 truncate max-w-[90px]">{valueOrEmpty(item.dimension)}</td>
+                      <td className="px-3 py-3 text-[12px] text-neutral-900 tabular-nums font-semibold">{valueOrEmpty(getIdoneidadItemScore(item))}</td>
+                      <td className="px-3 py-3 text-[12px] text-neutral-500 tabular-nums">{valueOrEmpty(item.minimo)}</td>
+                      <td className="px-3 py-3 text-[12px] text-neutral-500 tabular-nums">{valueOrEmpty(item.maximo)}</td>
+                      <td className="px-3 py-3 text-[11px] text-neutral-600 truncate max-w-[80px]">{valueOrEmpty(item.zona)}</td>
+                      <td className="px-3 py-3 text-[11px] text-neutral-500 truncate max-w-[60px]">{valueOrEmpty(item.factor_critico)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
 
   // ── Layout ──
   return (
