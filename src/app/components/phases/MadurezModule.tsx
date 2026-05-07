@@ -31,6 +31,21 @@ import { useSoundManager } from '../../hooks/useSoundManager';
 import { useMadurez } from '../../hooks/useMadurez';
 import MadurezSurveyPanel from './_shared/MadurezSurveyPanel';
 import { supabase } from '../../lib/supabase';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,38 +151,6 @@ function parsePmoType(agentData?: any): PmoType {
   return 'Híbrida';
 }
 
-// ---------------------------------------------------------------------------
-// Maturity level bar
-// ---------------------------------------------------------------------------
-function MaturityLevelBar({ level }: { level: number }) {
-  return (
-    <div className="flex gap-1.5 items-center">
-      {MATURITY_LEVELS.map(ml => (
-        <div key={ml.level} className="flex-1 flex flex-col items-center gap-1">
-          <motion.div
-            initial={{ scaleY: 0 }}
-            animate={{ scaleY: 1 }}
-            transition={{ delay: ml.level * 0.08, duration: 0.3 }}
-            className="w-full rounded-md"
-            style={{
-              height: ml.level === level ? 28 : 16,
-              background: ml.level <= level ? ml.color : '#e5e7eb',
-              opacity: ml.level === level ? 1 : ml.level < level ? 0.5 : 0.25,
-              transformOrigin: 'bottom',
-            }}
-          />
-          <span className="text-xs" style={{
-            fontWeight: ml.level === level ? 700 : 400,
-            color: ml.level === level ? ml.color : '#9ca3af',
-          }}>
-            {ml.level}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // Legacy inline components removed
 
 // ---------------------------------------------------------------------------
@@ -226,128 +209,196 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Single maturity result card
-// ---------------------------------------------------------------------------
-function MaturityResultCard({ surveyKey, result, pmoType, manager }: { surveyKey: 'predictiva' | 'agil'; result: MaturityResult; pmoType: PmoType; manager: any }) {
-  const ml = MATURITY_LEVELS[result.level - 1];
-  const isAgil = surveyKey === 'agil';
-  const accent = '#0a0a0a';
-  const Icon = ClipboardList;
+type MaturityRow = {
+  key: string;
+  label: string;
+  value: number;
+  maturity: string;
+};
+
+const maturityLevelPrefixMap: Record<string, number> = {
+  informal: 1,
+  inicial: 1,
+  basico: 2,
+  'bÃ¡sico': 2,
+  'básico': 2,
+  'en desarrollo': 2,
+  estandar: 3,
+  'estÃ¡ndar': 3,
+  'estándar': 3,
+  definido: 3,
+  avanzada: 4,
+  avanzado: 4,
+  gestionado: 4,
+  excelencia: 5,
+  optimizado: 5,
+};
+
+const domainRows = [
+  { key: 'gobernanza', label: 'Gobernanza' },
+  { key: 'alcance', label: 'Alcance' },
+  { key: 'cronograma', label: 'Cronograma' },
+  { key: 'financiero', label: 'Finanzas' },
+  { key: 'interesados', label: 'Interesados' },
+  { key: 'recursos', label: 'Recursos' },
+  { key: 'riesgos', label: 'Riesgos' },
+];
+
+const focusAreaRows = [
+  { key: 'inicio', label: 'Inicio' },
+  { key: 'planeacion', label: 'Planeación' },
+  { key: 'ejecucion', label: 'Ejecución' },
+  { key: 'monitoreo_control', label: 'Monitoreo y Control' },
+  { key: 'cierre', label: 'Cierre' },
+];
+
+function normalizeKey(value: string) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, 'y')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function toFivePointScale(value: unknown) {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  const scaled = numeric > 5 ? numeric / 20 : numeric;
+  return Math.max(0, Math.min(5, Number(scaled.toFixed(1))));
+}
+
+function formatOneDecimal(value: unknown) {
+  return toFivePointScale(value).toFixed(1);
+}
+
+function formatMaturityLabel(label: string, fallbackScore: number) {
+  const raw = String(label || '').trim();
+  const withoutPrefix = raw.replace(/^\d+\.\s*/, '');
+  const normalized = normalizeKey(withoutPrefix).replace(/_/g, ' ');
+  const prefix = maturityLevelPrefixMap[normalized] ?? maturityLevelPrefixMap[normalizeKey(withoutPrefix)] ?? Math.max(1, Math.min(5, Math.round(toFivePointScale(fallbackScore))));
+  const display = withoutPrefix || MATURITY_LEVELS[prefix - 1]?.name || 'N/A';
+  return `${prefix}. ${display}`;
+}
+
+function findScore(map: Record<string, DomainScore> | undefined, key: string): DomainScore | undefined {
+  if (!map) return undefined;
+  const target = normalizeKey(key);
+  const aliases: Record<string, string[]> = {
+    financiero: ['finanzas', 'financiera', 'financiero', 'costos', 'presupuesto'],
+    planeacion: ['planeacion', 'planificacion', 'planificación'],
+    monitoreo_control: ['monitoreo_control', 'monitoreo_y_control', 'monitoreo', 'control', 'seguimiento_control'],
+  };
+
+  for (const [rawKey, value] of Object.entries(map)) {
+    const normalized = normalizeKey(rawKey);
+    if (normalized === target || aliases[target]?.includes(normalized)) return value;
+  }
+  return undefined;
+}
+
+function buildRows(definitions: { key: string; label: string }[], map: Record<string, DomainScore> | undefined): MaturityRow[] {
+  return definitions.map((row) => {
+    const data = findScore(map, row.key);
+    const value = toFivePointScale(data?.score ?? 0);
+    return {
+      ...row,
+      value,
+      maturity: formatMaturityLabel(data?.nivel || '', value),
+    };
+  });
+}
+
+function averageRows(rows: MaturityRow[]) {
+  if (!rows.length) return 0;
+  return Number((rows.reduce((sum, row) => sum + row.value, 0) / rows.length).toFixed(1));
+}
+
+function MaturityBISection({
+  title,
+  rows,
+  barColor,
+}: {
+  title: string;
+  rows: MaturityRow[];
+  barColor: string;
+}) {
+  const total = averageRows(rows);
+  const tableRows = [...rows, { key: 'total_general', label: 'Total general', value: total, maturity: formatMaturityLabel('', total) }];
+  const ticks = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
   return (
-    <div className="bg-white rounded-2xl border border-neutral-200/70 shadow-sm overflow-hidden">
-      {/* Level header */}
-      <div className="p-5 border-b border-gray-100">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${accent}18` }}>
-              <Icon size={16} style={{ color: accent }} />
-            </div>
-            <p className="text-gray-700 text-sm" style={{ fontWeight: 600 }}>
-              Madurez {isAgil ? 'Ágil' : 'Predictiva'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {manager.responses.length > 0 && (
-              <button onClick={manager.downloadCSV} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 rounded-lg text-[11px] text-neutral-700 transition-colors" title="Descargar respuestas online (CSV)">
-                <Download size={12} /> CSV
-              </button>
-            )}
-            {manager.existingFileUrl && (
-              <button onClick={() => window.open(manager.existingFileUrl, '_blank')} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-900 rounded-lg text-[11px] text-white transition-colors" title="Descargar archivo cargado manualmente">
-                <Download size={12} /> Archivo original
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-4 mb-4">
-          <div>
-            <p className="text-xs text-gray-400 mb-0.5">Nivel de madurez</p>
-            <div className="flex items-baseline gap-2">
-              <span style={{ fontSize: '2.5rem', fontWeight: 800, color: ml.color, lineHeight: 1 }}>{result.level}</span>
-              <span className="text-gray-400 text-sm">/5</span>
-              <span className="ml-1 px-2 py-0.5 rounded-full text-xs" style={{ background: ml.bg, color: ml.color, fontWeight: 700 }}>{ml.name}</span>
-            </div>
-          </div>
-          <div className="flex-1">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>Puntuación</span><span style={{ fontWeight: 600, color: ml.color }}>{result.score}/100</span>
-            </div>
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <motion.div className="h-full rounded-full" style={{ background: ml.color }}
-                initial={{ width: 0 }} animate={{ width: `${result.score}%` }} transition={{ duration: 0.7, ease: 'easeOut', delay: 0.2 }} />
-            </div>
-          </div>
-        </div>
-        <MaturityLevelBar level={result.level} />
-        <p className="text-gray-500 text-xs mt-3 leading-relaxed">{ml.desc}</p>
+    <section className="mb-8 font-[Arial,Roboto,sans-serif]">
+      <div className="bg-neutral-700 text-white text-center py-2 px-4 text-[14px] font-bold tracking-wide">
+        {title}
       </div>
-      {/* Sub-scores (Domains/Factors) */}
-      {(result.por_dominio || result.por_factor) && (
-        <div className="p-5 border-b border-gray-100 bg-neutral-50/50">
-          <p className="text-[11px] uppercase tracking-wider text-gray-500 mb-4" style={{ fontWeight: 700 }}>
-            Desglose por {isAgil ? 'Factores' : 'Dominios'}
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {Object.entries((isAgil ? result.por_factor : result.por_dominio) || {}).map(([key, data]) => (
-              <div key={key} className="bg-white border border-neutral-200/60 rounded-xl p-3 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1 truncate" title={key}>{key.replace(/_/g, ' ')}</p>
-                <div className="flex items-end justify-between">
-                  <span className="text-lg font-bold text-gray-800 leading-none">{data.score}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium truncate max-w-[60px]" title={data.nivel}>{data.nivel}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[30%_40%_30%] gap-4 bg-white border border-neutral-300 border-t-0 p-4">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px] text-neutral-900">
+            <thead>
+              <tr className="bg-neutral-100">
+                <th className="border border-neutral-300 px-2.5 py-2 text-left font-bold">Etiquetas de fila</th>
+                <th className="border border-neutral-300 px-2.5 py-2 text-right font-bold">Promedio</th>
+                <th className="border border-neutral-300 px-2.5 py-2 text-left font-bold">Nivel Madurez</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((row) => {
+                const isTotal = row.key === 'total_general';
+                return (
+                  <tr key={row.key} className={isTotal ? 'bg-neutral-200 font-bold' : 'bg-white'}>
+                    <td className="border border-neutral-300 px-2.5 py-2">{row.label}</td>
+                    <td className="border border-neutral-300 px-2.5 py-2 text-right tabular-nums">{formatOneDecimal(row.value)}</td>
+                    <td className="border border-neutral-300 px-2.5 py-2">{row.maturity}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
-      
-      {/* Strengths */}
-      {result.fortalezas && result.fortalezas.length > 0 && (
-        <div className="p-5 border-b border-gray-100">
-          <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3" style={{ fontWeight: 700 }}>Fortalezas Destacadas</p>
-          <ul className="space-y-2.5">
-            {result.fortalezas.map((f, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-[13px] text-gray-600 leading-relaxed">
-                <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5 text-neutral-400" />
-                <div>
-                  <span className="font-medium text-gray-800">{f.nombre}</span>
-                  {f.tipo && <span className="text-gray-400 text-[11px] ml-2">({f.tipo})</span>}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
-      {/* Gaps */}
-      <div className="p-5 border-b border-gray-100">
-        <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3" style={{ fontWeight: 700 }}>Brechas Identificadas</p>
-        <ul className="space-y-3">
-          {result.gaps.map((g, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-[13px] text-gray-600 leading-relaxed bg-neutral-50/80 p-3 rounded-xl border border-neutral-200/60">
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5 text-neutral-400" />
-              <div className="flex-1">
-                <p className="font-medium text-gray-800 mb-1">{g.nombre}</p>
-                {g.impacto_potencial && <p className="text-gray-500 text-[12px]">{g.impacto_potencial}</p>}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={rows} margin={{ top: 26, right: 12, left: 0, bottom: 58 }}>
+              <CartesianGrid stroke="#d9d9d9" vertical={false} />
+              <XAxis dataKey="label" interval={0} angle={-35} textAnchor="end" height={70} tick={{ fontSize: 11, fill: '#333' }} />
+              <YAxis domain={[1, 5]} ticks={ticks} tickFormatter={(value) => Number(value).toFixed(1)} tick={{ fontSize: 11, fill: '#333' }} />
+              <Bar dataKey="value" fill={barColor} isAnimationActive={false}>
+                <LabelList dataKey="value" position="top" formatter={(value: any) => formatOneDecimal(value)} style={{ fill: '#111', fontSize: 12, fontWeight: 700 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart data={rows} margin={{ top: 20, right: 28, bottom: 20, left: 28 }}>
+              <PolarGrid stroke="#bdbdbd" />
+              <PolarAngleAxis dataKey="label" tick={{ fill: '#333', fontSize: 11 }} />
+              <PolarRadiusAxis angle={90} domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tickFormatter={(value) => Number(value).toFixed(1)} tick={{ fill: '#666', fontSize: 10 }} />
+              <Radar dataKey="value" stroke="#1F497D" strokeWidth={2.5} fill="transparent" dot={{ r: 3.5, fill: '#1F497D', stroke: '#1F497D' }} isAnimationActive={false}>
+                <LabelList dataKey="value" formatter={(value: any) => formatOneDecimal(value)} position="outside" style={{ fill: '#1F497D', fontSize: 11, fontWeight: 700 }} />
+              </Radar>
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-      {/* Recommendations */}
-      <div className="p-5 bg-neutral-50">
-        <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-4" style={{ fontWeight: 700 }}>Recomendaciones</p>
-        <ul className="space-y-3">
-          {result.recommendations.map((r, i) => (
-            <li key={i} className="flex items-start gap-3 text-[13px] text-gray-700 leading-relaxed">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-white border border-neutral-300 text-neutral-600 mt-0.5" style={{ fontSize: '0.65rem', fontWeight: 700 }}>{i + 1}</span>
-              {r}
-            </li>
-          ))}
-        </ul>
-      </div>
+    </section>
+  );
+}
+
+function MaturityBIDashboard({ results }: { results: FullResults }) {
+  const primary = results.predictiva ?? results.agil;
+  const domainMap = results.predictiva?.por_dominio ?? results.agil?.por_dominio ?? results.agil?.por_factor ?? primary?.por_dominio;
+  const phaseMap = results.predictiva?.por_fase ?? results.agil?.por_fase ?? primary?.por_fase;
+  const domainData = buildRows(domainRows, domainMap);
+  const focusAreaData = buildRows(focusAreaRows, phaseMap);
+
+  return (
+    <div className="mb-6">
+      <MaturityBISection title="Análisis de Madurez por Dominio" rows={domainData} barColor="#4CAF50" />
+      <MaturityBISection title="Análisis de Madurez por Área de Enfoque" rows={focusAreaData} barColor="#1565C0" />
     </div>
   );
 }
@@ -770,7 +821,7 @@ export default function MadurezModule() {
           setView('results');
           playAgentSuccess();
           toast.success('Agente 5 completó el análisis de madurez', {
-            description: `Nivel general: ${MATURITY_LEVELS[(parsed.overallLevel || 1) - 1]?.name} (${parsed.overallScore}/100)`,
+            description: `Nivel general: ${formatMaturityLabel(MATURITY_LEVELS[(parsed.overallLevel || 1) - 1]?.name, parsed.overallLevel || 1)} (${formatOneDecimal(parsed.overallScore)})`,
           });
           return;
         }
@@ -920,7 +971,7 @@ export default function MadurezModule() {
     setIsApproving(false);
     setShowApproveModal(false);
     updatePhaseStatus(projectId!, 5, 'completado',
-      `Madurez PMO ${pmoType} · Nivel ${results?.overallLevel ?? 2} (${MATURITY_LEVELS[(results?.overallLevel ?? 2) - 1].name}) · Score ${results?.overallScore ?? 0}/100. ${results?.summary?.slice(0, 120)}…`
+      `Madurez PMO ${pmoType} � Nivel ${formatMaturityLabel(MATURITY_LEVELS[(results?.overallLevel ?? 2) - 1].name, results?.overallLevel ?? 2)} � Promedio ${formatOneDecimal(results?.overallScore ?? 0)}. ${results?.summary?.slice(0, 120)}...`
     );
     playPhaseComplete(); // Phase_Complete: consultor aprobó definitivamente
     setView('approved');
@@ -1098,47 +1149,11 @@ export default function MadurezModule() {
                 <VersionBadge version={results.version} timestamp={results.timestamp} />
               </div>
 
-              {/* Overall score hero */}
-              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-                <div className="grid grid-cols-1 lg:grid-cols-[150px_minmax(280px,1fr)_minmax(260px,360px)] items-center gap-6">
-                  <div className="flex-shrink-0 text-center px-4">
-                    <p className="text-xs text-gray-400 mb-1">Nivel general</p>
-                    <div className="flex items-baseline gap-1.5">
-                      <span style={{ fontSize: '3rem', fontWeight: 900, color: MATURITY_LEVELS[results.overallLevel - 1].color, lineHeight: 1 }}>
-                        {results.overallLevel}
-                      </span>
-                      <span className="text-gray-300 text-2xl">/5</span>
-                    </div>
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-xs mt-1"
-                      style={{ background: MATURITY_LEVELS[results.overallLevel - 1].bg, color: MATURITY_LEVELS[results.overallLevel - 1].color, fontWeight: 700 }}>
-                      {MATURITY_LEVELS[results.overallLevel - 1].name}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs mb-1.5">
-                      <span className="text-gray-400">Puntuación ponderada</span>
-                      <span style={{ fontWeight: 700, color: MATURITY_LEVELS[results.overallLevel - 1].color }}>{results.overallScore}/100</span>
-                    </div>
-                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
-                      <motion.div className="h-full rounded-full" style={{ background: MATURITY_LEVELS[results.overallLevel - 1].color }}
-                        initial={{ width: 0 }} animate={{ width: `${results.overallScore}%` }} transition={{ duration: 0.7, ease: 'easeOut' }} />
-                    </div>
-                    <MaturityLevelBar level={results.overallLevel} />
-                  </div>
-                  <div className="min-w-0 border-t border-neutral-100 pt-4 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
-                    <p className="text-[11px] uppercase tracking-wider text-neutral-400 mb-2" style={{ fontWeight: 700 }}>Sintesis del diagnostico</p>
-                    <p className="text-gray-600 text-sm leading-relaxed">{summaryText}</p>
-                  </div>
-                </div>
-              </div>
+              <MaturityBIDashboard results={results} />
 
-              <div className={`grid gap-5 mb-5 ${maturityCardGridClass}`}>
-                {results.predictiva && (
-                  <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} manager={predictivaManager} />
-                )}
-                {results.agil && (
-                  <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} manager={agilManager} />
-                )}
+              <div className="bg-white border border-neutral-300 p-4 mb-5 font-[Arial,Roboto,sans-serif]">
+                <p className="text-[12px] uppercase tracking-wide text-neutral-500 mb-2" style={{ fontWeight: 700 }}>Síntesis del diagnóstico</p>
+                <p className="text-neutral-700 text-[13px] leading-relaxed">{summaryText}</p>
               </div>
 
               <AnalysisDetails results={results} />
@@ -1216,34 +1231,18 @@ export default function MadurezModule() {
                 </span>
               </div>
 
-              {/* Overall score */}
-              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-                <div className="flex items-center gap-6">
-                  <div className="flex-shrink-0 text-center px-4">
-                    <p className="text-xs text-gray-400 mb-1">Nivel aprobado</p>
-                    <span style={{ fontSize: '3rem', fontWeight: 900, color: MATURITY_LEVELS[results.overallLevel - 1].color, lineHeight: 1 }}>{results.overallLevel}</span>
-                    <p className="text-xs mt-1" style={{ color: MATURITY_LEVELS[results.overallLevel - 1].color, fontWeight: 700 }}>
-                      {MATURITY_LEVELS[results.overallLevel - 1].name}
-                    </p>
-                  </div>
-                  <div className="flex-1">
-                    <MaturityLevelBar level={results.overallLevel} />
-                  </div>
-                  <div className="flex-shrink-0 text-right">
-                    <p className="text-gray-400 text-xs">Score ponderado</p>
-                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color: MATURITY_LEVELS[results.overallLevel - 1].color }}>{results.overallScore}/100</p>
-                    {phase.completedAt && (
-                      <p className="text-gray-400 text-xs mt-1 flex items-center gap-1 justify-end">
-                        <CheckCircle2 size={10} className="text-neutral-900" /> Aprobado el {phase.completedAt}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <MaturityBIDashboard results={results} />
 
-              <div className={`grid gap-5 mb-5 ${maturityCardGridClass}`}>
-                {results.predictiva && <MaturityResultCard surveyKey="predictiva" result={results.predictiva} pmoType={pmoType} manager={predictivaManager} />}
-                {results.agil && <MaturityResultCard surveyKey="agil" result={results.agil} pmoType={pmoType} manager={agilManager} />}
+              <div className="bg-white border border-neutral-300 p-4 mb-5 font-[Arial,Roboto,sans-serif]">
+                <div className="flex items-center justify-between gap-4 mb-2">
+                  <p className="text-[12px] uppercase tracking-wide text-neutral-500" style={{ fontWeight: 700 }}>Síntesis del diagnóstico</p>
+                  {phase.completedAt && (
+                    <p className="text-neutral-500 text-xs flex items-center gap-1 justify-end">
+                      <CheckCircle2 size={10} className="text-neutral-900" /> Aprobado el {phase.completedAt}
+                    </p>
+                  )}
+                </div>
+                <p className="text-neutral-700 text-[13px] leading-relaxed">{summaryText}</p>
               </div>
 
               <AnalysisDetails results={results} />

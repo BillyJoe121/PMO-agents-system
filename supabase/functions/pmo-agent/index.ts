@@ -1145,7 +1145,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   const modelsToTry = getModelCandidates(modelSettings);
   const apiKey = Deno.env.get("GOOGLE_API_KEY") ?? "";
   
-  // Invocar Gemini a través de API REST nativa (para soportar PDF inlineData sin problemas de LangChain)
+  // Invocar Gemini a traves de API REST nativa (para soportar PDF inlineData sin problemas de LangChain)
   const startTime = Date.now();
   const geminiResult = await callGeminiWithFallback(apiKey, modelsToTry, {
     contents: [{ role: "user", parts }],
@@ -1171,17 +1171,13 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     );
   }
 
-  // Limpiar posibles bloques de markdown y extraer solo el objeto JSON (desde { hasta })
   let cleaned = rawContent.trim();
-  
-  // Si Gemini todavía devuelve texto, intentamos extraer el bloque JSON
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
-  
+
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     cleaned = cleaned.substring(firstBrace, lastBrace + 1);
   } else {
-    // Fallback: remover markdown básico si por casualidad es un array [] u otro formato
     cleaned = cleaned
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -1193,11 +1189,11 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     diagnosis = JSON.parse(cleaned);
   } catch {
     throw new Error(
-      `La IA devolvió un JSON inválido. Tiempo: ${processingTime}s. Respuesta original: ${rawContent.substring(0, 150)}...`
+      `La IA devolvio un JSON invalido. Tiempo: ${processingTime}s. Respuesta original: ${rawContent.substring(0, 150)}...`
     );
   }
 
-  // ── Verificar si la fase fue cancelada durante el procesamiento ──────────
+  // Verificar si la fase fue cancelada durante el procesamiento ──────────
   // El usuario puede cancelar desde el frontend actualizando estado_visual a 'disponible'.
   // Si ya no está en 'procesando', saltamos el guardado para no sobreescribir la cancelación.
   const { data: currentState } = await supabase

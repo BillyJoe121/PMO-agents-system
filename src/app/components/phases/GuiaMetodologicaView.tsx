@@ -83,6 +83,12 @@ const PROCESSING_STEPS: ProcessingStep[] = [
   { id: 5, label: 'Verificando coherencia metodológica', detail: 'Validando consistencia entre capítulos y métricas...', durationMs: 1400 },
   { id: 6, label: 'Formateando documento final', detail: 'Aplicando estilos, índice de contenidos y portada...', durationMs: 1200 },
 ];
+const MAX_TRANSIENT_GEMINI_RETRIES = 3;
+const TRANSIENT_GEMINI_RETRY_DELAYS = [8000, 18000, 35000];
+
+function isTransientGeminiError(message: string) {
+  return /503|service unavailable|high demand|try again later|temporary|temporar|429|502|504/i.test(message);
+}
 
 // ---------------------------------------------------------------------------
 // Parsers
@@ -1194,6 +1200,9 @@ export default function GuiaMetodologicaView() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef(0);
   const pollTimeoutStartRef = useRef(0);
+  const transientRetryCountRef = useRef(0);
+  const transientRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAgentRequestRef = useRef<{ iteration: number; comments: string | null } | null>(null);
 
   const currentVersion = versions[currentVersionIdx] ?? null;
 
@@ -1237,6 +1246,63 @@ export default function GuiaMetodologicaView() {
     if (pollRef.current) clearInterval(pollRef.current);
     pollStartRef.current = startedAt;
     pollTimeoutStartRef.current = Date.now();
+
+    const scheduleTransientRetry = (message: string) => {
+      if (
+        !isTransientGeminiError(message) ||
+        !lastAgentRequestRef.current ||
+        transientRetryCountRef.current >= MAX_TRANSIENT_GEMINI_RETRIES
+      ) {
+        return false;
+      }
+
+      const attempt = transientRetryCountRef.current + 1;
+      transientRetryCountRef.current = attempt;
+      const delay = TRANSIENT_GEMINI_RETRY_DELAYS[attempt - 1] ?? TRANSIENT_GEMINI_RETRY_DELAYS[TRANSIENT_GEMINI_RETRY_DELAYS.length - 1];
+
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+      setIsAdjusting(false);
+      setView('processing');
+      setProcessingStep(1);
+
+      toast.info(`Gemini esta saturado. Reintentando Agente 7 (${attempt}/${MAX_TRANSIENT_GEMINI_RETRIES})...`, {
+        description: 'La pantalla seguira en modo de carga y volvera a consultar automaticamente.',
+        duration: 7000,
+      });
+
+      transientRetryTimeoutRef.current = setTimeout(async () => {
+        const retryStartedAt = Date.now();
+        pollStartRef.current = retryStartedAt;
+        pollTimeoutStartRef.current = retryStartedAt;
+
+        try {
+          await supabase
+            .from('fases_estado')
+            .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
+            .eq('proyecto_id', projectId)
+            .eq('numero_fase', 7);
+
+          updatePhaseStatus(projectId, 7, 'procesando');
+          setView('processing');
+          setProcessingStep(1);
+
+          const { error: retryError } = await supabase.functions.invoke('pmo-agent', {
+            body: { projectId, phaseNumber: 7, ...lastAgentRequestRef.current },
+          });
+          if (retryError) throw new Error(retryError.message);
+
+          startPolling(retryStartedAt, true);
+        } catch (retryErr: any) {
+          setIsAdjusting(false);
+          setView(chapters.length > 0 ? 'results' : 'auto-trigger');
+          updatePhaseStatus(projectId, 7, 'disponible');
+          toast.error('No se pudo reintentar el Agente 7.', { description: retryErr?.message, duration: 9000 });
+        }
+      }, delay);
+
+      return true;
+    };
 
     const poll = async () => {
       if (Date.now() - pollTimeoutStartRef.current > 180000) {
@@ -1285,6 +1351,7 @@ export default function GuiaMetodologicaView() {
       if (data?.datos_consolidados && (data.estado_visual === 'disponible' || data.estado_visual === 'completado')) {
         if ((data.datos_consolidados as any)?._error) {
           const message = (data.datos_consolidados as any)?.message || 'Revise el prompt del Agente 7 e intente nuevamente.';
+          if (scheduleTransientRetry(message)) return;
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           setIsAdjusting(false);
@@ -1306,6 +1373,7 @@ export default function GuiaMetodologicaView() {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
+        transientRetryCountRef.current = 0;
         setView(data.estado_visual === 'completado' ? 'approved' : 'results');
         playAgentSuccess();
         toast.success('Agente 7 genero la guia metodologica', {
@@ -1324,6 +1392,7 @@ export default function GuiaMetodologicaView() {
 
       if (data?.estado_visual === 'error') {
         const message = (data?.datos_consolidados as any)?.message || 'Revise el prompt del Agente 7 e intente nuevamente.';
+        if (scheduleTransientRetry(message)) return;
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
@@ -1341,6 +1410,10 @@ export default function GuiaMetodologicaView() {
     if (!projectId) return;
     const startedAt = Date.now();
     pollStartRef.current = startedAt;
+    transientRetryCountRef.current = 0;
+    if (transientRetryTimeoutRef.current) clearTimeout(transientRetryTimeoutRef.current);
+    transientRetryTimeoutRef.current = null;
+    lastAgentRequestRef.current = { iteration, comments };
 
     // CRITICAL: Update DB directly BEFORE invoking the edge function.
     // The edge function checks DB estado_visual === 'procesando' before saving results.
@@ -1362,6 +1435,11 @@ export default function GuiaMetodologicaView() {
       if (error) throw new Error(error.message);
       startPolling(startedAt, true);
     } catch (err: any) {
+      if (isTransientGeminiError(err?.message || '')) {
+        setView('processing');
+        startPolling(startedAt, true);
+        return;
+      }
       setIsAdjusting(false);
       setView(versions.length > 0 ? 'results' : 'auto-trigger');
       updatePhaseStatus(projectId, 7, 'disponible');
@@ -1425,6 +1503,7 @@ export default function GuiaMetodologicaView() {
     }
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (transientRetryTimeoutRef.current) clearTimeout(transientRetryTimeoutRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1455,6 +1534,10 @@ export default function GuiaMetodologicaView() {
     setIsAdjusting(true);
     const startedAt = Date.now();
     pollStartRef.current = startedAt;
+    transientRetryCountRef.current = 0;
+    if (transientRetryTimeoutRef.current) clearTimeout(transientRetryTimeoutRef.current);
+    transientRetryTimeoutRef.current = null;
+    lastAgentRequestRef.current = { iteration: nextIteration, comments: comment };
 
     try {
       // 1. Bloquear fases posteriores sin borrar la guía actual.
@@ -1490,6 +1573,11 @@ export default function GuiaMetodologicaView() {
       });
     } catch (e) {
       console.error('[Phase7] Reprocess error:', e);
+      if (isTransientGeminiError(e instanceof Error ? e.message : String(e))) {
+        setView('processing');
+        startPolling(startedAt, true);
+        return;
+      }
       const { data } = await supabase
         .from('fases_estado')
         .select('estado_visual')
