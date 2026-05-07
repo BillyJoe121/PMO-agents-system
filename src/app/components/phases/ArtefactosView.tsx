@@ -19,48 +19,54 @@ interface Artifact {
   format: 'xlsx' | 'docx' | 'pdf';
   size: string;
   category: 'recommended' | 'other';
+  downloadUrl?: string; // URL completa de descarga (firmada o pública)
 }
 
 const MOCK_ARTIFACTS: Artifact[] = [
   {
     id: 'a1',
-    name: 'Caso de negocio.docx',
-    description: 'Justificación económica y estratégica de la iniciativa.',
-    format: 'docx',
-    size: '112 KB',
+    name: 'Acta de constitución.xlsx',
+    description: 'Documento formal que autoriza la existencia del proyecto.',
+    format: 'xlsx',
+    size: '85 KB',
     category: 'recommended',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA-%20ACTA%20DE%20CONSTITUCION.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQS0gQUNUQSBERSBDT05TVElUVUNJT04ueGxzeCIsImlhdCI6MTc3ODEzNjYwOCwiZXhwIjoyMDkzNDk2NjA4fQ.6dW7xgLxuNSMCUZT1uUCTIc4kHxXU4LZi3jYjM3N1rU'
   },
   {
     id: 'a2',
-    name: 'Acta de constitución.docx',
-    description: 'Documento formal que autoriza la existencia del proyecto.',
-    format: 'docx',
-    size: '85 KB',
-    category: 'recommended',
-  },
-  {
-    id: 'a3',
     name: 'Matriz de interesados.xlsx',
     description: 'Registro de personas u organizaciones afectadas por el proyecto.',
     format: 'xlsx',
     size: '64 KB',
     category: 'recommended',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20INTERESADOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBJTlRFUkVTQURPUy54bHN4IiwiaWF0IjoxNzc4MTM2NDY5LCJleHAiOjIwOTM0OTY0Njl9.fys42HxXmRafJZeWlbDTgPx4hdgrOpYhvO1D-8_xExM'
+  },
+  {
+    id: 'a3',
+    name: 'Matriz de requisitos.xlsx',
+    description: 'Recopilación y seguimiento de las necesidades del negocio y del cliente.',
+    format: 'xlsx',
+    size: '72 KB',
+    category: 'recommended',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20REQUISITOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBSRVFVSVNJVE9TLnhsc3giLCJpYXQiOjE3NzgxMzY0OTEsImV4cCI6MjA5MzQ5NjQ5MX0.QjX_R59hXOOdH4IY_Qo7ceC6pi8Cd9GkyH5ajFC-Gn4'
   },
   {
     id: 'a4',
-    name: 'Enunciado de alcance.docx',
+    name: 'Declaración del alcance.xlsx',
     description: 'Descripción detallada de los entregables y límites del proyecto.',
-    format: 'docx',
+    format: 'xlsx',
     size: '95 KB',
     category: 'recommended',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I-%20PLANTILLA%20-%20DECLARACION%20DEL%20ALCANCE.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSS0gUExBTlRJTExBIC0gREVDTEFSQUNJT04gREVMIEFMQ0FOQ0UueGxzeCIsImlhdCI6MTc3ODEzNjY0OCwiZXhwIjoyMDkzNDk2NjQ4fQ.tlYp4SQ6FAe3X8h3wwh8xRZx76AWsqa1hmUneleTGzY'
   },
   {
     id: 'a5',
-    name: 'Cronograma (Sin formato).xlsx',
-    description: 'Listado de actividades, hitos y duraciones estimadas.',
+    name: 'Matriz de riesgos.xlsx',
+    description: 'Identificación, análisis y plan de respuesta a riesgos.',
     format: 'xlsx',
-    size: '142 KB',
+    size: '76 KB',
     category: 'recommended',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20RIESGOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBSSUVTR09TLnhsc3giLCJpYXQiOjE3NzgxMzY1MDUsImV4cCI6MjA5MzQ5NjUwNX0.aVHeApBTwNd2ukx7dgsxdJv1yvwTbxuDlPPx-O0Smvo'
   },
   {
     id: 'a6',
@@ -69,70 +75,25 @@ const MOCK_ARTIFACTS: Artifact[] = [
     format: 'xlsx',
     size: '98 KB',
     category: 'recommended',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I-%20PLANTILLA%20PRESUPUESTO.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSS0gUExBTlRJTExBIFBSRVNVUFVFU1RPLnhsc3giLCJpYXQiOjE3NzgxMzY2NjEsImV4cCI6MjA5MzQ5NjY2MX0.sAmYPCnkCmKy_0_NhiQMYwDi_UqENlc-bKsOF1dBbqw'
   },
   {
     id: 'a7',
-    name: 'Matriz de riesgos.xlsx',
-    description: 'Identificación, análisis y plan de respuesta a riesgos.',
+    name: 'Registro de cambios.xlsx',
+    description: 'Documentación de todas las modificaciones solicitadas y aprobadas.',
     format: 'xlsx',
-    size: '76 KB',
-    category: 'recommended',
+    size: '54 KB',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20REGISTRO%20DE%20CAMBIOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIFJFR0lTVFJPIERFIENBTUJJT1MueGxzeCIsImlhdCI6MTc3ODEzNjU5NSwiZXhwIjoyMDkzNDk2NTk1fQ.VGxhnfbp4b6qBMA_9DJAhF6Yz6rS5aathCM6tlVMkAU'
   },
   {
     id: 'a8',
-    name: 'Formato de comunicaciones.docx',
-    description: 'Plan de distribución de información a los interesados.',
-    format: 'docx',
-    size: '52 KB',
-    category: 'other',
-  },
-  {
-    id: 'a9',
-    name: 'Formato de incidencias.xlsx',
-    description: 'Registro y seguimiento de problemas surgidos durante la ejecución.',
+    name: 'Plantilla de abastecimiento.xlsx',
+    description: 'Gestión de compras, proveedores y suministros externos.',
     format: 'xlsx',
-    size: '44 KB',
+    size: '110 KB',
     category: 'other',
-  },
-  {
-    id: 'a10',
-    name: 'Formato de entregables y validación.docx',
-    description: 'Plantilla para la aceptación formal de los productos del proyecto.',
-    format: 'docx',
-    size: '68 KB',
-    category: 'recommended',
-  },
-  {
-    id: 'a11',
-    name: 'Informe de avance e indicadores.pdf',
-    description: 'Reporte periódico de estado con métricas de desempeño.',
-    format: 'pdf',
-    size: '1.2 MB',
-    category: 'recommended',
-  },
-  {
-    id: 'a12',
-    name: 'Acta de cierre.docx',
-    description: 'Documento que certifica la finalización exitosa del proyecto.',
-    format: 'docx',
-    size: '58 KB',
-    category: 'recommended',
-  },
-  {
-    id: 'a13',
-    name: 'Encuesta de satisfacción.docx',
-    description: 'Evaluación de la percepción del cliente sobre los resultados.',
-    format: 'docx',
-    size: '35 KB',
-    category: 'other',
-  },
-  {
-    id: 'a14',
-    name: 'Matriz de lecciones aprendidas.xlsx',
-    description: 'Conocimiento adquirido para mejorar proyectos futuros.',
-    format: 'xlsx',
-    size: '41 KB',
-    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-PLANTILLA%20ABASTECIMIENTO.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtUExBTlRJTExBIEFCQVNURUNJTUlFTlRPLnhsc3giLCJpYXQiOjE3NzgxMzY2MjEsImV4cCI6MjA5MzQ5NjYyMX0.IHk1Phrhu36v206z994sD8NY4ElL4wPrItY-SCUO0no'
   },
 ];
 
@@ -164,6 +125,13 @@ function mapArtifactsFromAgentData(agentData: any): Artifact[] {
       category: isRecommended ? 'recommended' as const : 'other' as const,
     };
   });
+}
+
+
+
+function hasUsableAgent8Result(agentData: any): boolean {
+  const data = agentData?._current ?? agentData?.data ?? agentData?.diagnosis ?? agentData;
+  return Array.isArray(data?.artefactos_recomendados) || Array.isArray(data?.otros_artefactos);
 }
 
 function FormatIcon({ format }: { format: Artifact['format'] }) {
@@ -204,6 +172,13 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
       </div>
       <div className="flex gap-2 pt-1 border-t border-gray-100 mt-auto">
         <button
+          onClick={() => {
+            if (!artifact.downloadUrl) {
+              toast.error('Enlace de descarga no disponible aún.');
+              return;
+            }
+            window.open(artifact.downloadUrl, '_blank');
+          }}
           className="flex-1 py-2 rounded-lg text-white text-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
           style={{ background: '#030213', fontWeight: 500 }}
         >
@@ -286,6 +261,7 @@ export default function ArtefactosView() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startPolling = useCallback(() => {
+    setHasLoadedArtifacts(false);
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       const { data } = await supabase
@@ -296,6 +272,7 @@ export default function ArtefactosView() {
         .single();
 
       if (data?.estado_visual === 'disponible' && data.datos_consolidados) {
+        if (!hasUsableAgent8Result(data.datos_consolidados)) return;
         clearInterval(pollRef.current!);
         pollRef.current = null;
         const res = data.datos_consolidados as any;
@@ -327,12 +304,13 @@ export default function ArtefactosView() {
 
     if (data?.estado_visual === 'procesando') {
       updatePhaseStatus(projectId, 8, 'procesando');
-      setHasLoadedArtifacts(true);
+      setHasLoadedArtifacts(false);
+      setRealArtifacts([]);
       startPolling();
       return;
     }
 
-    if (data?.datos_consolidados && data.estado_visual !== 'error') {
+    if (data?.datos_consolidados && data.estado_visual !== 'error' && hasUsableAgent8Result(data.datos_consolidados)) {
       setRealArtifacts(mapArtifactsFromAgentData(data.datos_consolidados));
       setHasLoadedArtifacts(true);
       updatePhaseStatus(projectId, 8, data.estado_visual === 'completado' ? 'completado' : 'disponible');
@@ -347,7 +325,7 @@ export default function ArtefactosView() {
     if (!projectId) return;
 
     setIsReprocessing(true);
-    setHasLoadedArtifacts(true);
+    setHasLoadedArtifacts(false);
     setRealArtifacts([]);
     updatePhaseStatus(projectId, 8, 'procesando');
     startPolling();
@@ -367,6 +345,7 @@ export default function ArtefactosView() {
       }
 
       if ((data as any)?.data) {
+        if (!hasUsableAgent8Result((data as any).data)) return;
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setRealArtifacts(mapArtifactsFromAgentData((data as any).data));
@@ -386,9 +365,10 @@ export default function ArtefactosView() {
 
   useEffect(() => {
     if (phase?.status === 'procesando') {
-      setHasLoadedArtifacts(true);
+      setHasLoadedArtifacts(false);
+      setRealArtifacts([]);
       startPolling();
-    } else if (phase?.agentData) {
+    } else if (phase?.agentData && hasUsableAgent8Result(phase.agentData)) {
       const res = phase.agentData as any;
       setRealArtifacts(mapArtifactsFromAgentData(res));
       setHasLoadedArtifacts(true);
@@ -489,6 +469,17 @@ export default function ArtefactosView() {
 
           {/* Artifacts Grid Container */}
           <div className="flex-1 overflow-y-auto p-8 relative">
+            {!hasLoadedArtifacts && (
+              <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center">
+                <Loader2 size={22} className="text-neutral-700 animate-spin mb-4" strokeWidth={1.75} />
+                <h3 className="text-neutral-900 text-sm" style={{ fontWeight: 600 }}>Clasificando artefactos</h3>
+                <p className="text-neutral-500 text-[13px] mt-2 max-w-sm">
+                  El Agente 8 está terminando de cruzar la guía metodológica con la lista maestra de entregables.
+                </p>
+              </div>
+            )}
+
+            {hasLoadedArtifacts && (
             <div className="max-w-5xl mx-auto space-y-10">
 
               {/* Recommended Section */}
@@ -532,6 +523,7 @@ export default function ArtefactosView() {
                 </div>
               </section>
             </div>
+            )}
           </div>
         </div>
 

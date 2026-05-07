@@ -10,12 +10,13 @@ import {
   CheckCircle2, ChevronDown, ChevronUp, Save, Loader2,
   Shield, Mail, Calendar, MoreVertical, Trash2,
   ToggleLeft, AlignLeft, List, ChevronRight,
+  Cpu,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAdminUsers, useAdminQuestions, type AuditorUser, type BankQuestion, type QuestionType, type UserRole } from '../../hooks/useAdmin';
+import { useAdminUsers, useAdminQuestions, useAiModelSettings, type AiModelMode, type AuditorUser, type BankQuestion, type QuestionType, type UserRole } from '../../hooks/useAdmin';
 
 /* ── Types ── */
-type AdminSection = 'usuarios' | 'preguntas';
+type AdminSection = 'usuarios' | 'preguntas' | 'modelos';
 type FaseCategory = 'fase1' | 'fase5';
 type Fase5SubTab = 'madurez_predictiva' | 'madurez_agil';
 
@@ -966,12 +967,101 @@ function QuestionsSection() {
 }
 
 /* ── Main Component ── */
+function ModelsSection() {
+  const { settings, isLoading, isSaving, updateMode } = useAiModelSettings();
+
+  const handleModeChange = async (mode: AiModelMode) => {
+    try {
+      await updateMode(mode);
+      toast.success(mode === 'low' ? 'Modo Low activado' : 'Modo High con fallback activado');
+    } catch (err: any) {
+      toast.error('No se pudo actualizar el modo de modelos', { description: err.message });
+    }
+  };
+
+  const updatedAt = settings.updatedAt
+    ? new Date(settings.updatedAt).toLocaleString('es-CO', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    : 'Sin registro';
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-gray-900" style={{ fontWeight: 700 }}>Modelos de IA</h2>
+          <p className="text-gray-500 text-sm mt-0.5">Modo global para todos los agentes PMO</p>
+        </div>
+        {(isLoading || isSaving) && (
+          <div className="flex items-center gap-2 text-gray-400 text-sm">
+            <Loader2 size={14} className="animate-spin" />
+            {isSaving ? 'Guardando...' : 'Cargando...'}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-5">
+        <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1 mb-5">
+          {[
+            { mode: 'low' as AiModelMode, label: 'Low' },
+            { mode: 'high_with_fallback' as AiModelMode, label: 'High + fallback' },
+          ].map(option => {
+            const active = settings.mode === option.mode;
+            return (
+              <button
+                key={option.mode}
+                onClick={() => handleModeChange(option.mode)}
+                disabled={isLoading || isSaving || active}
+                className={`px-4 py-2 rounded-lg text-sm transition-all disabled:cursor-default ${
+                  active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                }`}
+                style={{ fontWeight: active ? 700 : 500 }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border border-gray-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Cpu size={14} className="text-gray-500" />
+              <p className="text-xs uppercase tracking-wide text-gray-400" style={{ fontWeight: 700 }}>High</p>
+            </div>
+            <p className="text-gray-900 text-sm font-mono">{settings.highModel}</p>
+            <p className="text-gray-500 text-xs mt-2">Se intenta primero cuando el modo High + fallback está activo.</p>
+            <p className="text-gray-700 text-xs mt-1" style={{ fontWeight: 600 }}>Precios: Input $4.00 / Output $18.00</p>
+          </div>
+
+          <div className="border border-gray-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Cpu size={14} className="text-gray-500" />
+              <p className="text-xs uppercase tracking-wide text-gray-400" style={{ fontWeight: 700 }}>Low</p>
+            </div>
+            <p className="text-gray-900 text-sm font-mono">{settings.lowModel}</p>
+            <p className="text-gray-500 text-xs mt-2">Se usa como único modelo en Low o como respaldo si High falla.</p>
+            <p className="text-gray-700 text-xs mt-1" style={{ fontWeight: 600 }}>Precios: Input $0.10 / Output $0.40</p>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+          <span>Modo actual: <span className="text-gray-700" style={{ fontWeight: 700 }}>{settings.mode === 'low' ? 'Low' : 'High + fallback'}</span></span>
+          <span>Última actualización: {updatedAt}</span>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function AdminPanelView() {
   const [activeSection, setActiveSection] = useState<AdminSection>('usuarios');
 
   const navItems: { id: AdminSection; label: string; icon: React.ReactNode }[] = [
     { id: 'usuarios', label: 'Gestión de Usuarios', icon: <Users size={16} /> },
     { id: 'preguntas', label: 'Banco de Preguntas', icon: <BookOpen size={16} /> },
+    { id: 'modelos', label: 'Modelos de IA', icon: <Cpu size={16} /> },
   ];
 
   return (
@@ -1040,7 +1130,9 @@ export default function AdminPanelView() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
             >
-              {activeSection === 'usuarios' ? <UsersSection /> : <QuestionsSection />}
+              {activeSection === 'usuarios' && <UsersSection />}
+              {activeSection === 'preguntas' && <QuestionsSection />}
+              {activeSection === 'modelos' && <ModelsSection />}
             </motion.div>
           </AnimatePresence>
         </div>

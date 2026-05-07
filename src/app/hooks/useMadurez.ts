@@ -72,7 +72,7 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
 
   const generateLink = async () => {
     if (!projectId) return null;
-    await supabase.from('encuestas_links').update({ activo: false }).eq('proyecto_id', projectId).eq('tipo_encuesta', tipoEncuesta);
+    await supabase.from('encuestas_links').update({ activo: false }).eq('proyecto_id', projectId).eq('tipo_encuesta', tipoEncuesta).eq('activo', true);
     const { data, error } = await supabase.from('encuestas_links').insert({ proyecto_id: projectId, activo: true, tipo_encuesta: tipoEncuesta }).select('token').single();
     if (error) throw error;
     setActiveLink(data.token);

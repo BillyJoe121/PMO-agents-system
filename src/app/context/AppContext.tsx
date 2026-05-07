@@ -32,6 +32,9 @@ export interface Project {
   companyName: string;
   projectName: string;
   startDate: string;
+  tamano?: string;
+  mision?: string;
+  vision?: string;
   auditors: Auditor[];
   phases: Phase[];
   status: 'en_ejecucion' | 'completado';
@@ -61,10 +64,7 @@ function computePhaseAvailability(phases: Phase[]): Phase[] {
     if (idx === 0) return phase.status === 'bloqueado' ? { ...phase, status: 'disponible' } : phase;
     if (idx === 1) return { ...phase, status: phases[0]?.status === 'completado' ? 'disponible' : 'bloqueado' };
     if (idx === 2) return { ...phase, status: phases[1]?.status === 'completado' ? 'disponible' : 'bloqueado' };
-    if (idx === 3) {
-      const allFirstThreeDone = phases.slice(0, 3).every(p => p.status === 'completado');
-      return { ...phase, status: allFirstThreeDone ? 'disponible' : 'bloqueado' };
-    }
+    if (idx === 3) return { ...phase, status: phases[2]?.status === 'completado' ? 'disponible' : 'bloqueado' };
     return { ...phase, status: phases[idx - 1]?.status === 'completado' ? 'disponible' : 'bloqueado' };
   });
 }
@@ -131,6 +131,9 @@ function mapDBRowToProject(row: Record<string, unknown>): Project {
     companyName: (empresa.nombre as string) ?? 'Empresa sin nombre',
     projectName: row.nombre_proyecto as string,
     startDate: (row.fecha_inicio as string) ?? (row.created_at as string)?.split('T')[0] ?? '',
+    tamano: (row.tamano as string) ?? undefined,
+    mision: (row.mision as string) ?? undefined,
+    vision: (row.vision as string) ?? undefined,
     auditors: [auditor],
     phases,
     status: allDone ? 'completado' : 'en_ejecucion',
@@ -182,6 +185,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .select(`
           id,
           nombre_proyecto,
+          tamano,
+          mision,
+          vision,
           fase_actual,
           created_at,
           fecha_inicio,
@@ -304,6 +310,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         empresa_id: empresaId,
         auditor_id: data.auditors && data.auditors.length > 0 ? data.auditors[0].id : userId,
         nombre_proyecto: data.projectName,
+        tamano: data.tamano?.trim() || null,
+        mision: data.mision?.trim() || null,
+        vision: data.vision?.trim() || null,
         fase_actual: 1,
         fecha_inicio: data.startDate || new Date().toISOString().split('T')[0],
       })

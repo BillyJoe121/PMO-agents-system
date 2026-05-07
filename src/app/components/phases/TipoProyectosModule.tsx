@@ -14,7 +14,7 @@
  * TODO: RF-F4-05 → axios.post(N8N_WEBHOOK_AGENTE_4, { diagnostico_original, comentario_consultor })
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { Fragment, useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { supabase } from '../../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -28,8 +28,8 @@ import { useApp } from '../../context/AppContext';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import { useSoundManager } from '../../hooks/useSoundManager';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
-import { normalizeIdoneidadDiagnosisItems, getIdoneidadItemCode, getIdoneidadItemScore, inferIdoneidadDimension } from './IdoneidadModule';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { normalizeIdoneidadDiagnosisItems, getIdoneidadItemCode, getIdoneidadItemScore, inferIdoneidadDimension, factorMapping } from './IdoneidadModule';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -281,10 +281,11 @@ export default function TipoProyectosModule() {
     return items.map((res: any) => {
       const itemLabel = getIdoneidadItemCode(res);
       const score = getIdoneidadItemScore(res) ?? 0;
+      const factorInfo = factorMapping[itemLabel];
 
       return {
-        subject: itemLabel,
-        fullLabel: itemLabel,
+        subject: factorInfo ? factorInfo.name : itemLabel,
+        fullLabel: factorInfo ? `${itemLabel} - ${factorInfo.name}` : itemLabel,
         dimension: res.dimension ?? inferIdoneidadDimension(itemLabel),
         Puntaje: score,
         AgileZone: 4,
@@ -362,6 +363,46 @@ export default function TipoProyectosModule() {
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const autoTriggered = useRef(false);
+  const processingGuardUntilRef = useRef(0);
+
+  const keepProcessingIfAgentStarted = async () => {
+    if (!projectId) return false;
+
+    const { data } = await supabase
+      .from('fases_estado')
+      .select('estado_visual, datos_consolidados')
+      .eq('proyecto_id', projectId)
+      .eq('numero_fase', 4)
+      .single();
+
+    if (data?.estado_visual === 'procesando') {
+      setView('processing');
+      return true;
+    }
+
+    if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+      setView('processing');
+      return true;
+    }
+
+    return false;
+  };
+
+  const handlePhase4InvokeError = async (label: string, error: unknown) => {
+    const detail = error instanceof Error ? error.message : String(error || 'Error desconocido');
+    console.error(`[Phase4] ${label}:`, error);
+    if (await keepProcessingIfAgentStarted()) {
+      toast.info('El Agente 4 ya quedó en ejecución.', {
+        description: 'Seguiremos monitoreando el resultado en esta pantalla.',
+      });
+      return;
+    }
+    setIsReprocessing(false);
+    updatePhaseStatus(projectId!, 4, 'error');
+    setView('error');
+    playProcessError();
+    toast.error('Error en el Agente 4', { description: detail, duration: 8000 });
+  };
 
   // ── Sync with context if it loads after initial render ──
   useEffect(() => {
@@ -407,6 +448,7 @@ export default function TipoProyectosModule() {
 
       // If it's already processing (edge auto-trigger in progress), just go to polling
       if (data.estado_visual === 'procesando') {
+        processingGuardUntilRef.current = Date.now() + 15000;
         setView('processing');
         autoTriggered.current = true; // don't double-trigger
         return;
@@ -443,16 +485,14 @@ export default function TipoProyectosModule() {
         }
 
         setView('processing');
-        updatePhaseStatus(projectId!, 4, 'procesando');
         supabase.functions.invoke('pmo-agent', {
           body: { projectId, phaseNumber: 4, iteration: 1 }
         }).then(({ data, error }) => {
           if (error) {
             const detail = (data as any)?.error || error.message;
-            console.error('[Phase4] Edge function error:', detail);
-            toast.error('Error en el Agente 4', { description: detail, duration: 8000 });
+            handlePhase4InvokeError('Edge function error', new Error(detail));
           }
-        }).catch(e => console.error('[Phase4] invoke failed:', e));
+        }).catch(e => handlePhase4InvokeError('invoke failed', e));
       })();
     }
   }, [view, projectId]);
@@ -492,11 +532,28 @@ export default function TipoProyectosModule() {
         }
       }
 
+      if (data?.estado_visual === 'error') {
+        setIsReprocessing(false);
+        setView('error');
+        playProcessError();
+        const errorMessage = (data?.datos_consolidados as any)?.message;
+        toast.error('El Agente 4 encontró un error al procesar.', {
+          description: errorMessage,
+          duration: 8000,
+        });
+        return;
+      }
+
+      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+        return;
+      }
+
       // If reverted to disponible WITHOUT data, the agent truly failed
       if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
         setIsReprocessing(false);
         updatePhaseStatus(projectId!, 4, 'disponible');
         setView('error');
+        playProcessError();
         toast.error('El Agente 4 encontró un error al procesar.');
         return;
       }
@@ -526,16 +583,15 @@ export default function TipoProyectosModule() {
   // Manual trigger if auto trigger failed or wasn't called
   const handleTriggerAgent = async () => {
     autoTriggered.current = true;
-    updatePhaseStatus(projectId!, 4, 'procesando');
+    processingGuardUntilRef.current = Date.now() + 15000;
     setView('processing');
     supabase.functions.invoke('pmo-agent', {
       body: { projectId, phaseNumber: 4, iteration: 1 }
     }).then(({ error }) => {
       if (error) {
-        console.error('[Phase4] manual trigger error:', error);
-        // Let the poll handle the error state
+        handlePhase4InvokeError('manual trigger error', error);
       }
-    }).catch(e => console.error('[Phase4] invoke failed:', e));
+    }).catch(e => handlePhase4InvokeError('invoke failed', e));
   };
 
   // ── Handlers ──
@@ -591,26 +647,18 @@ export default function TipoProyectosModule() {
       // 0. Bloquear fases posteriores en AppContext + Supabase
       await reprocessPhase(projectId!, 4);
 
-      // 1. Update DB FIRST so the poll won't see old 'completado' state
-      await supabase
-        .from('fases_estado')
-        .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
-        .eq('proyecto_id', projectId)
-        .eq('numero_fase', 4);
-
-      updatePhaseStatus(projectId!, 4, 'procesando');
-
-      // 2. NOW switch view — poll will see 'procesando' and wait
+      // 1. Switch view immediately; the edge function owns the DB processing marker and run id.
+      processingGuardUntilRef.current = Date.now() + 15000;
       setView('processing');
 
-      // 3. Fire-and-forget: the polling effect will detect when the agent finishes
+      // 2. Fire-and-forget: the polling effect will detect when the agent finishes
       supabase.functions.invoke('pmo-agent', {
         body: { projectId, phaseNumber: 4, iteration: nextIteration, comments: reprocessComment }
       }).then(({ error }) => {
         if (error) {
-          console.error('[Phase4] Reprocess edge error:', error);
+          handlePhase4InvokeError('Reprocess edge error', error);
         }
-      }).catch(e => console.error('[Phase4] Reprocess invoke failed:', e));
+      }).catch(e => handlePhase4InvokeError('Reprocess invoke failed', e));
 
       toast.info('Re-procesando diagnóstico con retroalimentación...', {
         description: 'El Agente 4 está incorporando el comentario del consultor.',
@@ -1191,56 +1239,140 @@ export default function TipoProyectosModule() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 shadow-sm">
-             <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Gráfica de radar de la organización</p>
-             <div className="h-[400px] w-full">
-               {radarData.length > 0 ? (
-                 <ResponsiveContainer width="100%" height="100%">
-                   <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                     <PolarGrid stroke="#e5e5e5" />
-                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#737373', fontSize: 10, fontWeight: 500 }} />
-                     <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: '#a3a3a3', fontSize: 10 }} axisLine={false} />
-                     <Radar name="Zona Predictiva (8-10)" dataKey="PredictiveZone" stroke="none" fill="#ef4444" fillOpacity={0.12} isAnimationActive={false} />
-                     <Radar name="Zona Híbrida (4-8)" dataKey="HybridZone" stroke="none" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
-                     <Radar name="Zona Ágil (0-4)" dataKey="AgileZone" stroke="none" fill="#10b981" fillOpacity={0.25} isAnimationActive={false} />
-                     <Radar name="Puntaje Real" dataKey="Puntaje" stroke="#171717" strokeWidth={3} fill="#171717" fillOpacity={0.45} />
-                     <Tooltip content={<CustomRadarTooltip />} />
-                   </RadarChart>
-                 </ResponsiveContainer>
-               ) : (
-                 <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400">
-                    <p className="text-[13px]">Gráfica no disponible para estos datos</p>
-                 </div>
-               )}
-             </div>
-          </div>
+        <div className="mb-8">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Gráfica de radar para la Evaluación de Idoneidad</p>
+          <div className="p-5 bg-white rounded-xl border border-neutral-200/70 overflow-x-auto print:overflow-visible print:border-none print:shadow-none print:p-0 print:break-inside-avoid" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+            <div className="h-[750px] min-w-[750px] w-full print:min-w-0 print:w-full print:h-[650px] mx-auto">
+              {radarData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                    <PolarGrid stroke="#d4d4d4" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#525252', fontSize: 11, fontWeight: 600 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#737373', fontSize: 10 }} axisLine={false} tickCount={6} />
+                    <Radar name="Zona Predictiva (8-10)" dataKey="PredictiveZone" stroke="none" fill="#ef4444" fillOpacity={0.12} isAnimationActive={false} />
+                    <Radar name="Zona Híbrida (4-8)" dataKey="HybridZone" stroke="none" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
+                    <Radar name="Zona Ágil (0-4)" dataKey="AgileZone" stroke="none" fill="#10b981" fillOpacity={0.25} isAnimationActive={false} />
+                    <Radar name="Puntaje Real" dataKey="Puntaje" stroke="#171717" strokeWidth={3} fill="#171717" fillOpacity={0.45} />
+                    <Tooltip content={<CustomRadarTooltip />} />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '11px', fontWeight: 500 }} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400">
+                  <p className="text-[13px]">Gráfica no disponible para estos datos</p>
+                </div>
+              )}
+            </div>
 
-          <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 flex flex-col shadow-sm overflow-hidden">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Detalle de factores evaluados</p>
-            <div className="rounded-xl border border-neutral-100">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-neutral-100 bg-neutral-50">
-                    {['Item', 'Dimensión', 'Prom', 'Min', 'Max', 'Zona', 'Crítico'].map((h) => (
-                      <th key={h} className="px-3 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-50 bg-white">
-                  {((normalizeIdoneidadDiagnosisItems(diagnosisFase3).length ? normalizeIdoneidadDiagnosisItems(diagnosisFase3) : [{ item: emptyValue, dimension: emptyValue, promedio: emptyValue, minimo: emptyValue, maximo: emptyValue, zona: emptyValue, factor_critico: emptyValue }]) as any[]).map((item, i) => (
-                    <tr key={i} className="hover:bg-neutral-50/60">
-                      <td className="px-3 py-3 text-[12px] text-neutral-800" style={{ fontWeight: 600 }}>{valueOrEmpty(getIdoneidadItemCode(item))}</td>
-                      <td className="px-3 py-3 text-[12px] text-neutral-600 truncate max-w-[90px]">{valueOrEmpty(item.dimension)}</td>
-                      <td className="px-3 py-3 text-[12px] text-neutral-900 tabular-nums font-semibold">{valueOrEmpty(getIdoneidadItemScore(item))}</td>
-                      <td className="px-3 py-3 text-[12px] text-neutral-500 tabular-nums">{valueOrEmpty(item.minimo)}</td>
-                      <td className="px-3 py-3 text-[12px] text-neutral-500 tabular-nums">{valueOrEmpty(item.maximo)}</td>
-                      <td className="px-3 py-3 text-[11px] text-neutral-600 truncate max-w-[80px]">{valueOrEmpty(item.zona)}</td>
-                      <td className="px-3 py-3 text-[11px] text-neutral-500 truncate max-w-[60px]">{valueOrEmpty(item.factor_critico)}</td>
+            <div className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-neutral-100">
+              {['cultura', 'equipo', 'proyecto'].map((dim) => {
+                const data = (diagnosisFase3?.indicadores || diagnosisFase3?.indicadores_dimension)?.[dim];
+                if (!data) return null;
+                return (
+                  <div key={dim} className="bg-neutral-50 p-3 rounded-xl border border-neutral-200/50 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-neutral-500 font-semibold mb-0.5">{dim}</p>
+                      <p className="text-[10px] text-neutral-400">Coherencia: {data.coherencia_interna}</p>
+                    </div>
+                    <p className="text-neutral-900 font-bold text-lg tabular-nums">
+                      {typeof data.promedio === 'number' ? Number(data.promedio.toFixed(1)) : data.promedio}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 pt-5 border-t border-neutral-100">
+              <h4 className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 font-semibold mb-3">Detalle por factor</h4>
+              <div className="overflow-hidden rounded-xl border border-neutral-200/50 bg-white print:overflow-visible print:border-none print:break-inside-avoid">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="bg-neutral-50/80 border-b border-neutral-200/60">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold text-neutral-500 w-16">Código</th>
+                      <th className="px-3 py-2 font-semibold text-neutral-500">Factor Propuesto</th>
+                      <th className="px-3 py-2 font-semibold text-neutral-500">Descripción Técnica del Indicador</th>
+                      <th className="px-3 py-2 font-semibold text-neutral-500 w-16 text-right">Pts</th>
+                      <th className="px-3 py-2 font-semibold text-neutral-500 w-24 text-center">Zona</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100/60">
+                    {(() => {
+                      const groups: Record<string, any[]> = { Cultura: [], Equipo: [], Proyecto: [], Otros: [] };
+                      normalizeIdoneidadDiagnosisItems(diagnosisFase3).forEach((res: any) => {
+                        let dim = res.dimension || '';
+                        if (!dim) {
+                          const code = getIdoneidadItemCode(res);
+                          if (code.match(/^C\d/i)) dim = 'Cultura';
+                          else if (code.match(/^E\d/i)) dim = 'Equipo';
+                          else if (code.match(/^P\d/i)) dim = 'Proyecto';
+                          else dim = 'Otros';
+                        }
+                        const key = Object.keys(groups).find(k => k.toLowerCase() === dim.toLowerCase()) || 'Otros';
+                        groups[key].push(res);
+                      });
+
+                      return [
+                        { name: 'Cultura', items: groups.Cultura },
+                        { name: 'Equipo', items: groups.Equipo },
+                        { name: 'Proyecto', items: groups.Proyecto },
+                        { name: 'Otros', items: groups.Otros },
+                      ].filter(g => g.items.length > 0).map((group, gIdx) => (
+                        <Fragment key={gIdx}>
+                          <tr className="bg-neutral-50/30">
+                            <td className="px-3 py-1.5 font-bold text-neutral-800 uppercase tracking-tight text-[9px] bg-neutral-50/50" colSpan={5}>
+                              {group.name}
+                            </td>
+                          </tr>
+                          {group.items.map((res: any, idx: number) => {
+                            let zoneColor = 'bg-neutral-100 text-neutral-600 border-neutral-200';
+                            let zoneText = res.zona || 'Neutral';
+                            const p = getIdoneidadItemScore(res) ?? res.promedio;
+
+                            if (p <= 4) {
+                              zoneColor = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                              zoneText = 'Ágil';
+                            } else if (p <= 8) {
+                              zoneColor = 'bg-amber-50 text-amber-700 border-amber-100';
+                              zoneText = 'Híbrido';
+                            } else {
+                              zoneColor = 'bg-rose-50 text-rose-700 border-rose-100';
+                              zoneText = 'Predictivo';
+                            }
+
+                            const code = getIdoneidadItemCode(res);
+                            const factorInfo = factorMapping[code] || { name: res.factor || 'Factor Desconocido', description: res.interpretacion || 'Sin descripción' };
+
+                            return (
+                              <tr key={`${gIdx}-${idx}`} className="hover:bg-neutral-50/50 transition-colors">
+                                <td className="px-3 py-2 pl-5">
+                                  <span className="text-neutral-500 font-mono text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">{code}</span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className="text-neutral-800 font-medium leading-tight">{factorInfo.name}</span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <p className="text-[10px] text-neutral-500 leading-snug">{factorInfo.description}</p>
+                                  {res.interpretacion && factorInfo.description !== res.interpretacion && (
+                                    <p className="text-[10px] text-neutral-400 mt-1 italic leading-snug line-clamp-1 hover:line-clamp-none print:line-clamp-none transition-all">" {res.interpretacion} "</p>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 tabular-nums text-right font-bold text-neutral-900" style={{ fontSize: '13px' }}>
+                                  {valueOrEmpty(getIdoneidadItemScore(res))}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`inline-block px-2 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-md border ${zoneColor}`}>
+                                    {zoneText}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -1265,6 +1397,7 @@ export default function TipoProyectosModule() {
           autoTriggered.current = true;
           setDiagnosis(null);
           setIsReprocessing(true);
+          const nextIteration = (diagnosis?.iteration || 1) + 1;
 
           // 2. Block downstream phases (5, 6, 7…) in DB
           await supabase
@@ -1273,25 +1406,23 @@ export default function TipoProyectosModule() {
             .eq('proyecto_id', projectId!)
             .gt('numero_fase', 4);
 
-          // 3. Set THIS phase to 'procesando' in DB BEFORE switching view (avoids poll seeing 'disponible')
+          // 3. Clear this phase without marking it as processing; the edge function must create the run marker.
           await supabase
             .from('fases_estado')
-            .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
+            .update({ estado_visual: 'disponible', datos_consolidados: null, updated_at: new Date().toISOString() })
             .eq('proyecto_id', projectId!)
             .eq('numero_fase', 4);
 
-          // 4. Sync AppContext
-          updatePhaseStatus(projectId!, 4, 'procesando');
-
-          // 5. NOW switch view — polling starts and sees 'procesando', not 'disponible'
+          // 4. Switch to the local loading view while the edge function starts.
+          processingGuardUntilRef.current = Date.now() + 15000;
           setView('processing');
 
-          // 6. Fire-and-forget the agent call
+          // 5. Fire-and-forget the agent call
           supabase.functions.invoke('pmo-agent', {
-            body: { projectId, phaseNumber: 4, iteration: 1 }
+            body: { projectId, phaseNumber: 4, iteration: nextIteration }
           }).then(({ error }) => {
-            if (error) console.error('[Phase4] Reprocess (header) error:', error);
-          }).catch(e => console.error('[Phase4] Reprocess invoke failed:', e));
+            if (error) handlePhase4InvokeError('Reprocess (header) error', error);
+          }).catch(e => handlePhase4InvokeError('Reprocess invoke failed', e));
         }}
       />
 

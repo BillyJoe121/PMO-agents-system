@@ -157,11 +157,36 @@ function ConfirmModal({ open, onCancel, onConfirm, isLoading }: {
   );
 }
 
+// Mapeo de factores de Idoneidad a nombres propuestos y descripciones técnicas
+export const factorMapping: Record<string, { name: string; description: string }> = {
+  'C01': { name: 'Apropiación de Agilidad', description: 'Porcentaje de adopción histórica de marcos ágiles.' },
+  'C02': { name: 'Seguridad Psicológica', description: 'Nivel de confianza y entorno colaborativo interno.' },
+  'C03': { name: 'Alineación de Patrocinadores', description: 'Grado de entendimiento y soporte de los stakeholders.' },
+  'C04': { name: 'Confianza en la Entrega', description: 'Fe de los patrocinadores en el ciclo de retroalimentación.' },
+  'C05': { name: 'Autonomía Operativa', description: 'Nivel de empoderamiento del equipo para toma de decisiones.' },
+  'C06': { name: 'Tolerancia a la Incertidumbre', description: 'Disposición a ajustar estimaciones según el aprendizaje.' },
+  'C07': { name: 'Compromiso de Recursos', description: 'Disponibilidad de personal y desjerarquización funcional.' },
+  'C08': { name: 'Priorización de Funcionalidad', description: 'Valoración de la entrega sobre la documentación exhaustiva.' },
+  'C09': { name: 'Aceptación de Valor Incremental', description: 'Disposición a recibir el producto por etapas (no Big Bang).' },
+  'C10': { name: 'Enfoque en Valor de Negocio', description: 'Medición de éxito basada en valor y no solo en cronograma.' },
+  'E01': { name: 'Escalabilidad del Equipo', description: 'Tamaño y gestión del núcleo de trabajo.' },
+  'E02': { name: 'Seniory de Roles Clave', description: 'Nivel de experiencia técnica en posiciones críticas.' },
+  'E03': { name: 'Alfabetización Ágil', description: 'Experiencia previa acumulada de los integrantes en agilidad.' },
+  'E04': { name: 'Cercanía con el Cliente', description: 'Frecuencia y calidad del feedback con el negocio.' },
+  'E05': { name: 'Sincronía del Entorno', description: 'Factibilidad de co-ubicación física o digital síncrona.' },
+  'E06': { name: 'Autoridad del Product Owner', description: 'Capacidad decisoria del PO sin burocracia de comités.' },
+  'P01': { name: 'Tasa de Variabilidad', description: 'Porcentaje de cambio mensual en los requisitos.' },
+  'P02': { name: 'Viabilidad de MVP', description: 'Aceptación de construcción por mínimos viables evaluables.' },
+  'P03': { name: 'Refinamiento Iterativo', description: 'Apertura a la evolución de requisitos durante el ciclo.' },
+  'P04': { name: 'Criticidad del Error', description: 'Magnitud del impacto ante fallos en el producto final.' },
+  'P05': { name: 'Estabilidad de Alcance', description: 'Claridad y rigidez de los requisitos en la fase inicial.' }
+};
+
 export default function IdoneidadModule() {
   // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const { activeLink, responses, diagnosis, isLoadingData, externalFile, setExternalFile, existingFileName, existingFileUrl, fetchInitialData, generateLink, processPhase, deleteFile } = useIdoneidad(projectId);
@@ -199,10 +224,11 @@ export default function IdoneidadModule() {
     return items.map((res: any) => {
       const itemLabel = getIdoneidadItemCode(res);
       const score = getIdoneidadItemScore(res) ?? 0;
+      const factorInfo = factorMapping[itemLabel];
 
       return {
-        subject: itemLabel,
-        fullLabel: itemLabel,
+        subject: factorInfo ? factorInfo.name : itemLabel,
+        fullLabel: factorInfo ? `${itemLabel} - ${factorInfo.name}` : itemLabel,
         dimension: res.dimension ?? inferIdoneidadDimension(itemLabel),
         Puntaje: score,
         // Thresholds for background zones
@@ -406,6 +432,33 @@ export default function IdoneidadModule() {
     }
   };
 
+  const handleReprocess = async () => {
+    setIsSending(true);
+    setModuleState('processing');
+    const nextIteration = ((phase.agentData as any)?.metadata?.iteration || 1) + 1;
+
+    try {
+      await reprocessPhase(projectId!, 3);
+      updatePhaseStatus(projectId!, 3, 'procesando');
+      await processPhase({
+        iteration: nextIteration,
+        comments: 'Reproceso solicitado desde el encabezado de la Fase 3.',
+      });
+      updatePhaseStatus(projectId!, 3, 'completado', 'Diagnóstico reprocesado.');
+      setModuleState('completed');
+      playPhaseComplete();
+      toast.success('Fase 3 reprocesada', { description: 'El diagnóstico de idoneidad fue generado nuevamente.' });
+      await fetchInitialData();
+    } catch (err: any) {
+      toast.error('Error reprocesando fase', { description: err?.message });
+      setModuleState('selection');
+      updatePhaseStatus(projectId!, 3, 'disponible');
+      playProcessError();
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   const handleDownloadCSV = () => {
     // Si no hay respuestas online pero hay archivo CSV externo cargado en DB
     if (responses.length === 0 && existingFileUrl) {
@@ -464,6 +517,7 @@ export default function IdoneidadModule() {
         phaseNumber={3}
         phaseName="Diagnóstico de Idoneidad"
         eyebrow={moduleState === 'completed' ? 'Completada' : 'Activa'}
+        onReprocessed={handleReprocess}
       />
 
       {/* Processing overlay */}
@@ -754,10 +808,10 @@ export default function IdoneidadModule() {
                   {radarData.length > 0 && (
                     <div className="mb-8">
                       <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Gráfica de radar para la Evaluación de Idoneidad</p>
-                      <div className="p-5 bg-white rounded-xl border border-neutral-200/70" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                        <div className="h-[500px] w-full">
+                      <div className="p-5 bg-white rounded-xl border border-neutral-200/70 overflow-x-auto print:overflow-visible print:border-none print:shadow-none print:p-0 print:break-inside-avoid" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                        <div className="h-[750px] min-w-[750px] w-full print:min-w-0 print:w-full print:h-[650px] mx-auto">
                           <ResponsiveContainer width="100%" height="100%">
-                            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                               <PolarGrid stroke="#d4d4d4" />
                               <PolarAngleAxis dataKey="subject" tick={{ fill: '#525252', fontSize: 11, fontWeight: 600 }} />
                               <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#737373', fontSize: 10 }} axisLine={false} tickCount={6} />
@@ -795,13 +849,15 @@ export default function IdoneidadModule() {
 
                         <div className="mt-6 pt-5 border-t border-neutral-100">
                           <h4 className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 font-semibold mb-3">Detalle por factor</h4>
-                          <div className="overflow-hidden rounded-xl border border-neutral-200/50 bg-white">
+                          <div className="overflow-hidden rounded-xl border border-neutral-200/50 bg-white print:overflow-visible print:border-none print:break-inside-avoid">
                             <table className="w-full text-left text-[11px]">
                               <thead className="bg-neutral-50/80 border-b border-neutral-200/60">
                                 <tr>
-                                  <th className="px-3 py-2 font-semibold text-neutral-500">Factor / Pregunta</th>
-                                  <th className="px-3 py-2 font-semibold text-neutral-500 w-20 text-right">Pts</th>
-                                  <th className="px-3 py-2 font-semibold text-neutral-500 w-28 text-center">Zona</th>
+                                  <th className="px-3 py-2 font-semibold text-neutral-500 w-16">Código</th>
+                                  <th className="px-3 py-2 font-semibold text-neutral-500">Factor Propuesto</th>
+                                  <th className="px-3 py-2 font-semibold text-neutral-500">Descripción Técnica del Indicador</th>
+                                  <th className="px-3 py-2 font-semibold text-neutral-500 w-16 text-right">Pts</th>
+                                  <th className="px-3 py-2 font-semibold text-neutral-500 w-24 text-center">Zona</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-neutral-100/60">
@@ -829,7 +885,7 @@ export default function IdoneidadModule() {
                                     <React.Fragment key={gIdx}>
                                       {/* Group Header */}
                                       <tr className="bg-neutral-50/30">
-                                        <td className="px-3 py-1.5 font-bold text-neutral-800 uppercase tracking-tight text-[9px] bg-neutral-50/50" colSpan={3}>
+                                        <td className="px-3 py-1.5 font-bold text-neutral-800 uppercase tracking-tight text-[9px] bg-neutral-50/50" colSpan={5}>
                                           {group.name}
                                         </td>
                                       </tr>
@@ -850,13 +906,22 @@ export default function IdoneidadModule() {
                                           zoneText = 'Predictivo';
                                         }
 
+                                        const code = getIdoneidadItemCode(res);
+                                        const factorInfo = factorMapping[code] || { name: res.factor || 'Factor Desconocido', description: res.interpretacion || 'Sin descripción' };
+
                                         return (
                                           <tr key={`${gIdx}-${idx}`} className="hover:bg-neutral-50/50 transition-colors">
                                             <td className="px-3 py-2 pl-5">
-                                              <div className="flex flex-col">
-                                                <span className="text-neutral-800 font-medium leading-tight">{getIdoneidadItemCode(res)}</span>
-                                                {res.interpretacion && <p className="text-[10px] text-neutral-400 mt-0.5 leading-snug line-clamp-1 hover:line-clamp-none print:line-clamp-none transition-all">{res.interpretacion}</p>}
-                                              </div>
+                                              <span className="text-neutral-500 font-mono text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">{code}</span>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              <span className="text-neutral-800 font-medium leading-tight">{factorInfo.name}</span>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              <p className="text-[10px] text-neutral-500 leading-snug">{factorInfo.description}</p>
+                                              {res.interpretacion && factorInfo.description !== res.interpretacion && (
+                                                <p className="text-[10px] text-neutral-400 mt-1 italic leading-snug line-clamp-1 hover:line-clamp-none print:line-clamp-none transition-all">" {res.interpretacion} "</p>
+                                              )}
                                             </td>
                                             <td className="px-3 py-2 tabular-nums text-right font-bold text-neutral-900" style={{ fontSize: '13px' }}>
                                               {valueOrEmpty(getIdoneidadItemScore(res))}
@@ -1057,7 +1122,7 @@ export default function IdoneidadModule() {
                     </DiagnosisCard>
 
                     <DiagnosisCard title="Resultados por item completos">
-                      <div className="overflow-x-auto rounded-xl border border-neutral-100">
+                      <div className="overflow-x-auto rounded-xl border border-neutral-100 print:overflow-visible print:border-none print:break-inside-avoid">
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="border-b border-neutral-100 bg-neutral-50">
@@ -1067,18 +1132,24 @@ export default function IdoneidadModule() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-50 bg-white">
-                            {((normalizeIdoneidadDiagnosisItems(diagnosis).length ? normalizeIdoneidadDiagnosisItems(diagnosis) : [{ item: emptyValue, dimension: emptyValue, promedio: emptyValue, minimo: emptyValue, maximo: emptyValue, desviacion_estandar: emptyValue, zona: emptyValue, factor_critico: emptyValue }]) as any[]).map((item, i) => (
-                              <tr key={i} className="hover:bg-neutral-50/60">
-                                <td className="px-3 py-3 text-[12px] text-neutral-800" style={{ fontWeight: 600 }}>{valueOrEmpty(getIdoneidadItemCode(item))}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.dimension)}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-900 tabular-nums">{valueOrEmpty(getIdoneidadItemScore(item))}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.minimo)}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.maximo)}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.desviacion_estandar)}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.zona)}</td>
-                                <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.factor_critico)}</td>
-                              </tr>
-                            ))}
+                            {((normalizeIdoneidadDiagnosisItems(diagnosis).length ? normalizeIdoneidadDiagnosisItems(diagnosis) : [{ item: emptyValue, dimension: emptyValue, promedio: emptyValue, minimo: emptyValue, maximo: emptyValue, desviacion_estandar: emptyValue, zona: emptyValue, factor_critico: emptyValue }]) as any[]).map((item, i) => {
+                              const code = getIdoneidadItemCode(item);
+                              const mappedName = factorMapping[code]?.name;
+                              const displayCode = mappedName ? `${code} - ${mappedName}` : valueOrEmpty(code);
+                              
+                              return (
+                                <tr key={i} className="hover:bg-neutral-50/60">
+                                  <td className="px-3 py-3 text-[12px] text-neutral-800" style={{ fontWeight: 600 }}>{displayCode}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.dimension)}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-900 tabular-nums">{valueOrEmpty(getIdoneidadItemScore(item))}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.minimo)}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.maximo)}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-600 tabular-nums">{valueOrEmpty(item.desviacion_estandar)}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.zona)}</td>
+                                  <td className="px-3 py-3 text-[12px] text-neutral-600">{valueOrEmpty(item.factor_critico)}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

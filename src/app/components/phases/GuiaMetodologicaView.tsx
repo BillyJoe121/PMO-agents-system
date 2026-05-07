@@ -1162,7 +1162,7 @@ function versionsFromPayload(raw: any): DocVersion[] {
 export default function GuiaMetodologicaView() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
+  const { getProject, updatePhaseStatus, isLoading } = useApp();
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -1201,7 +1201,6 @@ export default function GuiaMetodologicaView() {
     const current = unwrapGuidePayload(raw);
     const nextChapters = normalizeChapters(current);
     if (nextChapters.length === 0) {
-      toast.error('El Agente 7 devolvio una guia sin capitulos renderizables.');
       return false;
     }
     const nextVersions = versionsFromPayload(raw);
@@ -1453,10 +1452,18 @@ export default function GuiaMetodologicaView() {
     const comment = adjustText;
     setAdjustText('');
     setIsAdjustment(true);
+    setIsAdjusting(true);
+    const startedAt = Date.now();
+    pollStartRef.current = startedAt;
 
     try {
-      // 1. Bloquear fases posteriores en AppContext + Supabase (igual que Fase 4)
-      await reprocessPhase(projectId!, 7);
+      // 1. Bloquear fases posteriores sin borrar la guía actual.
+      // El backend usa el payload previo para conservar el historial de versiones.
+      await supabase
+        .from('fases_estado')
+        .update({ estado_visual: 'bloqueado', datos_consolidados: null, updated_at: new Date().toISOString() })
+        .eq('proyecto_id', projectId!)
+        .gt('numero_fase', 7);
 
       // 2. Update DB to 'procesando' BEFORE invoking so cancellation check passes
       await supabase
@@ -1470,22 +1477,34 @@ export default function GuiaMetodologicaView() {
       autoTriggered.current = true; // prevent auto-trigger loop during reprocess
       setView('processing');
       setProcessingStep(1);
-
-      // 3. Fire-and-forget: polling will detect completion
-      supabase.functions.invoke('pmo-agent', {
-        body: { projectId, phaseNumber: 7, iteration: nextIteration, comments: comment },
-      }).catch(e => console.error('[Phase7] Reprocess invoke failed:', e));
-
-      const startedAt = Date.now();
-      pollStartRef.current = startedAt;
       startPolling(startedAt, true);
+
+      // 3. Invoke the agent; polling will detect completion
+      const { data, error } = await supabase.functions.invoke('pmo-agent', {
+        body: { projectId, phaseNumber: 7, iteration: nextIteration, comments: comment },
+      });
+      if (error) throw new Error((data as any)?.error || error.message);
 
       toast.info('Reprocesando guía metodológica…', {
         description: 'El Agente 7 está incorporando las instrucciones del consultor.',
       });
     } catch (e) {
       console.error('[Phase7] Reprocess error:', e);
-      toast.error('Error al reprocesar');
+      const { data } = await supabase
+        .from('fases_estado')
+        .select('estado_visual')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 7)
+        .single();
+
+      if (data?.estado_visual === 'procesando') {
+        toast.info('El Agente 7 ya quedÃ³ en ejecuciÃ³n.', {
+          description: 'Seguiremos monitoreando el resultado en esta pantalla.',
+        });
+        return;
+      }
+
+      toast.error('Error al reprocesar', { description: e instanceof Error ? e.message : undefined });
       setIsAdjusting(false);
       setView('results');
     }

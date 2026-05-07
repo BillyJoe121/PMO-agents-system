@@ -665,11 +665,6 @@ export default function MadurezModule() {
       return true;
     }
 
-    if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
-      setView('processing');
-      return true;
-    }
-
     return false;
   }, [projectId]);
 
@@ -790,9 +785,12 @@ export default function MadurezModule() {
         return;
       }
 
+      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+        return;
+      }
+
       // Agent failed (reverted to disponible with no data)
       if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
-        if (Date.now() < processingGuardUntilRef.current) return;
         setIsReprocessing(false);
         updatePhaseStatus(projectId!, 5, 'disponible');
         setView('overview');
@@ -823,7 +821,7 @@ export default function MadurezModule() {
 
   // ── Handlers ──
   const handleSend = async () => {
-    processingGuardUntilRef.current = Date.now() + 120000;
+    processingGuardUntilRef.current = Date.now() + 15000;
     setView('processing');
     setResults(null);
     let didInvokeAgent = false;
@@ -845,7 +843,7 @@ export default function MadurezModule() {
           ...(agilFileUrl && { agilFileUrl }),
         }
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new Error((response.data as any)?.error || response.error.message);
       // Polling is now driven by the useEffect(view==='processing') — nothing else needed
     } catch (err: any) {
       if (didInvokeAgent && await keepProcessingAfterInvokeError()) {
@@ -873,7 +871,7 @@ export default function MadurezModule() {
     if (!comment.trim()) { toast.error('Escriba un comentario para re-procesar.'); return; }
     setIsReprocessing(true);
     setResults(null);
-    processingGuardUntilRef.current = Date.now() + 120000;
+    processingGuardUntilRef.current = Date.now() + 15000;
     let didInvokeAgent = false;
 
     try {
@@ -883,6 +881,11 @@ export default function MadurezModule() {
       // Set view to processing AFTER supabase update so the polling useEffect picks it up
       setView('processing');
 
+      let predictivaFileUrl: string | null = null;
+      let agilFileUrl: string | null = null;
+      if (needsPredictiva) predictivaFileUrl = await predictivaManager.uploadFileIfAny() || null;
+      if (needsAgil) agilFileUrl = await agilManager.uploadFileIfAny() || null;
+
       didInvokeAgent = true;
       const response = await supabase.functions.invoke('pmo-agent', {
         body: {
@@ -891,9 +894,11 @@ export default function MadurezModule() {
           iteration: 2,
           pmoType,
           comentario_consultor: comment,
+          ...(predictivaFileUrl && { predictivaFileUrl }),
+          ...(agilFileUrl && { agilFileUrl }),
         }
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new Error((response.data as any)?.error || response.error.message);
       setSavedComment(comment);
       setComment('');
     } catch (err: any) {

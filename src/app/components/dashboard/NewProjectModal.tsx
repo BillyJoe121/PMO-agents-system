@@ -7,7 +7,7 @@ import { useAdminUsers } from '../../hooks/useAdmin';
 interface NewProjectModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { companyName: string; projectName: string; auditors: Auditor[]; startDate: string }) => void;
+  onSubmit: (data: { companyName: string; projectName: string; auditors: Auditor[]; startDate: string; tamano?: string; mision?: string; vision?: string }) => void;
 }
 
 // Paleta de colores para los avatares de auditores
@@ -16,6 +16,9 @@ const AVATAR_COLORS = ['#030213', '#059669', '#7c3aed', '#dc2626', '#d97706', '#
 export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectModalProps) {
   const [companyName, setCompanyName] = useState('');
   const [projectName, setProjectName] = useState('');
+  const [tamano, setTamano] = useState('');
+  const [mision, setMision] = useState('');
+  const [vision, setVision] = useState('');
   const [selectedAuditors, setSelectedAuditors] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -58,13 +61,13 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
         color: AVATAR_COLORS[idx % AVATAR_COLORS.length],
       }));
 
-    onSubmit({ companyName, projectName, auditors, startDate });
+    onSubmit({ companyName, projectName, auditors, startDate, tamano, mision, vision });
     setIsLoading(false);
     handleClose();
   };
 
   const handleClose = () => {
-    setCompanyName(''); setProjectName(''); setSelectedAuditors([]); setStartDate(''); setErrors({});
+    setCompanyName(''); setProjectName(''); setTamano(''); setMision(''); setVision(''); setSelectedAuditors([]); setStartDate(''); setErrors({});
     onClose();
   };
 
@@ -87,7 +90,7 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg z-10"
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto z-10"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
@@ -136,6 +139,42 @@ export default function NewProjectModal({ open, onClose, onSubmit }: NewProjectM
                 {errors.projectName && (
                   <p className="text-red-500 text-xs flex items-center gap-1"><AlertCircle size={12} /> {errors.projectName}</p>
                 )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>Tamaño de la organización</label>
+                <textarea
+                  value={tamano}
+                  onChange={e => setTamano(e.target.value)}
+                  placeholder="Ej: empresa mediana con 250 colaboradores, operaciones en Colombia y tres unidades de negocio principales..."
+                  rows={3}
+                  maxLength={2500}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none transition-all bg-white focus:border-gray-400 focus:ring-2 focus:ring-gray-100 resize-y"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>Misión</label>
+                <textarea
+                  value={mision}
+                  onChange={e => setMision(e.target.value)}
+                  placeholder="Describa la misión de la organización..."
+                  rows={4}
+                  maxLength={2500}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none transition-all bg-white focus:border-gray-400 focus:ring-2 focus:ring-gray-100 resize-y"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-gray-700 text-sm" style={{ fontWeight: 500 }}>Visión</label>
+                <textarea
+                  value={vision}
+                  onChange={e => setVision(e.target.value)}
+                  placeholder="Describa la visión de la organización..."
+                  rows={4}
+                  maxLength={2500}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm outline-none transition-all bg-white focus:border-gray-400 focus:ring-2 focus:ring-gray-100 resize-y"
+                />
               </div>
 
               {/* Auditores — desde Supabase */}

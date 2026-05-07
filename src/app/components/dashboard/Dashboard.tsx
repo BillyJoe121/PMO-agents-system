@@ -126,7 +126,7 @@ export default function Dashboard() {
     });
   }, [projects, activeTab, search, filterAuditor, filterEstado]);
 
-  const handleNewProject = async (data: { companyName: string; projectName: string; auditors: any[]; startDate: string }) => {
+  const handleNewProject = async (data: { companyName: string; projectName: string; auditors: any[]; startDate: string; tamano?: string; mision?: string; vision?: string }) => {
     try {
       await addProject(data);
       toast.success('Proyecto creado exitosamente', {

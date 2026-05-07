@@ -272,7 +272,7 @@ export function useDocumentacion(projectId: string) {
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || result.success === false) {
         throw new Error(result.error ?? 'Error desconocido en el agente');
       }
 

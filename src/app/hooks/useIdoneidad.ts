@@ -62,6 +62,8 @@ export function useIdoneidad(projectId: string | undefined) {
         const consolidated = faseData.datos_consolidados as Record<string, any>;
         const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
         setDiagnosis(innerDiagnosis);
+      } else {
+        setDiagnosis(null);
       }
 
       // 4. Buscar archivos de encuestas offline previos
@@ -132,7 +134,8 @@ export function useIdoneidad(projectId: string | undefined) {
       .from('encuestas_links')
       .update({ activo: false })
       .eq('proyecto_id', projectId)
-      .eq('tipo_encuesta', 'idoneidad');
+      .eq('tipo_encuesta', 'idoneidad')
+      .eq('activo', true);
 
     const { data, error } = await supabase
       .from('encuestas_links')
@@ -145,7 +148,7 @@ export function useIdoneidad(projectId: string | undefined) {
     return data.token;
   };
 
-  const processPhase = async () => {
+  const processPhase = async (options?: { iteration?: number; comments?: string }) => {
     if (!projectId) return false;
     try {
       // Al confirmar el envío se invalida el enlace activo
@@ -153,7 +156,8 @@ export function useIdoneidad(projectId: string | undefined) {
         .from('encuestas_links')
         .update({ activo: false })
         .eq('proyecto_id', projectId)
-        .eq('tipo_encuesta', 'idoneidad');
+        .eq('tipo_encuesta', 'idoneidad')
+        .eq('activo', true);
       
       setActiveLink(null);
 
@@ -174,9 +178,15 @@ export function useIdoneidad(projectId: string | undefined) {
       }
 
       const response = await supabase.functions.invoke('pmo-agent', {
-        body: { projectId, phaseNumber: 3, iteration: 1, externalFileUrl: finalFileUrl }
+        body: {
+          projectId,
+          phaseNumber: 3,
+          iteration: options?.iteration ?? 1,
+          comments: options?.comments ?? null,
+          externalFileUrl: finalFileUrl,
+        }
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new Error((response.data as any)?.error || response.error.message);
       return true;
     } catch (err) {
       console.error(err);

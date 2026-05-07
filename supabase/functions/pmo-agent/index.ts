@@ -18,6 +18,198 @@ function hasMeaningfulData(value: unknown) {
   return Object.keys(value as Record<string, unknown>).length > 0;
 }
 
+const PHASE4_PROCESSING_STALE_MS = 5 * 60 * 1000;
+const DEFAULT_HIGH_MODEL = "gemini-3.1-pro-preview";
+const DEFAULT_LOW_MODEL = "gemini-flash-lite-latest";
+const DEFAULT_AI_MODEL_MODE = "high_with_fallback";
+
+type AiModelMode = "low" | "high_with_fallback";
+
+interface AiModelSettings {
+  mode: AiModelMode;
+  high_model: string;
+  low_model: string;
+}
+
+interface GeminiAttemptError {
+  model: string;
+  message: string;
+  status?: number;
+}
+
+interface GeminiGenerateResult {
+  data: any;
+  model: string;
+  attemptedModels: string[];
+  errors: GeminiAttemptError[];
+  fallbackUsed: boolean;
+}
+
+function createRunId(phaseNumber: number) {
+  return `phase-${phaseNumber}-${Date.now()}-${crypto.randomUUID()}`;
+}
+
+function isProcessingStale(updatedAt?: string | null) {
+  if (!updatedAt) return true;
+  const updatedTime = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updatedTime)) return true;
+  return Date.now() - updatedTime > PHASE4_PROCESSING_STALE_MS;
+}
+
+function isProcessingMarker(value: unknown) {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>)._processing === true
+  );
+}
+
+function hasCompletedPhaseData(value: unknown) {
+  if (!hasMeaningfulData(value)) return false;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if (record._error || record._processing) return false;
+  }
+  return true;
+}
+
+function phaseProcessingPayload(phaseNumber: number, runId: string) {
+  return {
+    _processing: true,
+    _run_id: runId,
+    phaseNumber,
+    started_at: new Date().toISOString(),
+  };
+}
+
+function normalizeAiModelSettings(row?: Partial<AiModelSettings> | null): AiModelSettings {
+  const mode = row?.mode === "low" ? "low" : DEFAULT_AI_MODEL_MODE;
+  return {
+    mode,
+    high_model: row?.high_model || DEFAULT_HIGH_MODEL,
+    low_model: row?.low_model || DEFAULT_LOW_MODEL,
+  };
+}
+
+async function getAiModelSettings(supabase: ReturnType<typeof createClient>): Promise<AiModelSettings> {
+  const { data, error } = await supabase
+    .from("ai_model_settings")
+    .select("mode, high_model, low_model")
+    .eq("id", "global")
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[pmo-agent] No se pudo leer ai_model_settings; usando defaults.", error.message);
+    return normalizeAiModelSettings(null);
+  }
+
+  return normalizeAiModelSettings(data as Partial<AiModelSettings> | null);
+}
+
+function getModelCandidates(settings: AiModelSettings) {
+  const models = settings.mode === "low"
+    ? [settings.low_model]
+    : [settings.high_model, settings.low_model];
+
+  return [...new Set(models.filter(Boolean))];
+}
+
+function shouldTryNextGeminiModel(status: number | undefined, isLastModel: boolean) {
+  if (isLastModel) return false;
+  // En modo high_with_fallback, el modelo high puede fallar por cuota, preview no disponible
+  // o incompatibilidad de generationConfig. En esos casos igual intentamos el modelo low.
+  return status === undefined || [400, 404, 429, 500, 502, 503, 504].includes(status);
+}
+
+function getGeminiErrorMessage(data: any) {
+  return data?.error?.message || data?.error?.status || JSON.stringify(data);
+}
+
+async function callGeminiWithFallback(
+  apiKey: string,
+  models: string[],
+  body: Record<string, unknown>
+): Promise<GeminiGenerateResult> {
+  const errors: GeminiAttemptError[] = [];
+  const attemptedModels: string[] = [];
+
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    attemptedModels.push(model);
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        return {
+          data,
+          model,
+          attemptedModels,
+          errors,
+          fallbackUsed: index > 0,
+        };
+      }
+
+      const message = getGeminiErrorMessage(data);
+      errors.push({ model, status: response.status, message });
+
+      if (!shouldTryNextGeminiModel(response.status, index === models.length - 1)) {
+        throw new Error(`Error de Gemini API (${model}, ${response.status}): ${message}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Error desconocido llamando a Gemini";
+      const alreadyLogged = errors.some(e => e.model === model && e.message === message);
+      if (!alreadyLogged) errors.push({ model, message });
+
+      const latestStatus = [...errors].reverse().find(e => e.model === model)?.status;
+      if (latestStatus !== undefined && !shouldTryNextGeminiModel(latestStatus, index === models.length - 1)) {
+        throw error;
+      }
+
+      if (index === models.length - 1) {
+        throw new Error(
+          `Gemini falló en todos los modelos (${attemptedModels.join(", ")}). Último error: ${message}`
+        );
+      }
+    }
+  }
+
+  throw new Error("No hay modelos configurados para Gemini.");
+}
+
+function attachModelMetadata(
+  value: unknown,
+  modelResult: GeminiGenerateResult,
+  settings: AiModelSettings
+) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const metadata = (record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata))
+    ? record.metadata as Record<string, unknown>
+    : {};
+
+  return {
+    ...record,
+    metadata: {
+      ...metadata,
+      model_mode: settings.mode,
+      model_high: settings.high_model,
+      model_low: settings.low_model,
+      model_used: modelResult.model,
+      model_fallback_used: modelResult.fallbackUsed,
+      attempted_models: modelResult.attemptedModels,
+      model_errors: modelResult.errors,
+    },
+  };
+}
+
 const IDONEIDAD_ITEM_RE = /([CEP]\d{1,2})/i;
 
 function cleanIdoneidadItemCode(value: unknown) {
@@ -218,6 +410,33 @@ async function getPayloadForPhase(
     iteration,
   };
 
+  let organizationContextCache: any | undefined;
+  const getOrganizationContext = async () => {
+    if (organizationContextCache !== undefined) return organizationContextCache;
+
+    const { data, error } = await supabase
+      .from("proyectos")
+      .select("id, nombre_proyecto, tamano, mision, vision, empresas(nombre)")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (error || !data) {
+      console.warn("[pmo-agent] No se pudo leer contexto organizacional:", error?.message);
+      organizationContextCache = null;
+      return organizationContextCache;
+    }
+
+    organizationContextCache = {
+      company_name: (data.empresas as any)?.nombre ?? null,
+      project_name: data.nombre_proyecto ?? null,
+      size: data.tamano ?? null,
+      mission: data.mision ?? null,
+      vision: data.vision ?? null,
+    };
+
+    return organizationContextCache;
+  };
+
   // Fase 1 — Registro documental: Lee de la tabla 'documentos'
   if (phaseNumber === 1) {
     const { data: docs, error } = await supabase
@@ -268,7 +487,11 @@ async function getPayloadForPhase(
 
     return {
       metadata: { ...baseMetadata, agent_id: "agente-3" },
-      payload: { documents, total_documents: documents.length },
+      payload: {
+        organization_context: await getOrganizationContext(),
+        documents,
+        total_documents: documents.length,
+      },
       comments,
       __fileUrls: fileUrls,
     };
@@ -312,6 +535,7 @@ async function getPayloadForPhase(
     return {
       metadata: { ...baseMetadata, agent_id: "agente-1" },
       payload: {
+        organization_context: await getOrganizationContext(),
         interviews,
         total_interviews: interviews.length,
       },
@@ -355,6 +579,7 @@ async function getPayloadForPhase(
     return {
       metadata: { ...baseMetadata, agent_id: "agente-3" },
       payload: {
+        organization_context: await getOrganizationContext(),
         input_method: externalFileUrl ? "online_and_offline" : "online_survey",
         respondents: formattedRespondents,
         survey_completed_at: now,
@@ -708,28 +933,60 @@ async function checkAndTriggerPhase4(
     .eq("proyecto_id", projectId)
     .in("numero_fase", [1, 2, 3]);
 
-  const allCompleted = (fases ?? []).every(
+  const allCompleted = (fases ?? []).length === 3 && (fases ?? []).every(
     (f: { estado_visual: string }) => f.estado_visual === "completado"
   );
 
   if (!allCompleted) return;
 
-  // Marcar fase 4 como "procesando"
-  await supabase
+  const { data: phase4 } = await supabase
     .from("fases_estado")
-    .update({ estado_visual: "procesando", updated_at: new Date().toISOString() })
+    .select("estado_visual, datos_consolidados, updated_at")
     .eq("proyecto_id", projectId)
-    .eq("numero_fase", 4);
+    .eq("numero_fase", 4)
+    .maybeSingle();
+
+  if (hasCompletedPhaseData(phase4?.datos_consolidados)) return;
+
+  const alreadyProcessing =
+    phase4?.estado_visual === "procesando" &&
+    !isProcessingStale(phase4?.updated_at);
+
+  if (alreadyProcessing) return;
+
+  const runId = createRunId(4);
 
   // Llamar al agente 4
   try {
-    await runAgent(supabase, projectId, 4, 1, null);
-  } catch (error) {
-    console.error("Error en auto-trigger Fase 4:", error);
-    // Revertir a disponible si falla el auto-trigger
     await supabase
       .from("fases_estado")
-      .update({ estado_visual: "disponible", updated_at: new Date().toISOString() })
+      .upsert(
+        {
+          proyecto_id: projectId,
+          numero_fase: 4,
+          estado_visual: "procesando",
+          datos_consolidados: phaseProcessingPayload(4, runId),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "proyecto_id,numero_fase" }
+      );
+
+    await runAgent(supabase, projectId, 4, 1, null, undefined, undefined, runId);
+  } catch (error) {
+    console.error("Error en auto-trigger Fase 4:", error);
+    const message = error instanceof Error ? error.message : "Error desconocido ejecutando Fase 4";
+    await supabase
+      .from("fases_estado")
+      .update({
+        estado_visual: "error",
+        datos_consolidados: {
+          _error: true,
+          message,
+          phaseNumber: 4,
+          timestamp: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      })
       .eq("proyecto_id", projectId)
       .eq("numero_fase", 4);
   }
@@ -746,7 +1003,8 @@ async function runAgent(
   iteration: number,
   comments: unknown | null,
   externalFileUrl?: string,
-  extraFileUrls?: string[]
+  extraFileUrls?: string[],
+  runId?: string
 ) {
   // Obtener config del agente
   const { data: agentConfig, error: configError } = await supabase
@@ -769,6 +1027,7 @@ async function runAgent(
   // el estado correcto, sin importar el estado previo de la fila en la BD.
   // Fases 3 y 9 se auto-completan directamente y omiten este paso.
   if (phaseNumber !== 3 && phaseNumber !== 9) {
+    const activeRunId = runId ?? createRunId(phaseNumber);
     await supabase
       .from("fases_estado")
       .upsert(
@@ -776,11 +1035,14 @@ async function runAgent(
           proyecto_id: projectId,
           numero_fase: phaseNumber,
           estado_visual: "procesando",
-          datos_consolidados: null,
+          datos_consolidados: phaseNumber === 4
+            ? phaseProcessingPayload(phaseNumber, activeRunId)
+            : null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "proyecto_id,numero_fase" }
       );
+    runId = activeRunId;
   }
 
   // Construir payload específico de la fase
@@ -879,32 +1141,23 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   }
 
   // Respetar el modelo configurado en la base de datos (configuracion_agentes)
-  const modelName = agentConfig.modelo || "gemini-3-flash-preview";
+  const modelSettings = await getAiModelSettings(supabase);
+  const modelsToTry = getModelCandidates(modelSettings);
   const apiKey = Deno.env.get("GOOGLE_API_KEY") ?? "";
   
   // Invocar Gemini a través de API REST nativa (para soportar PDF inlineData sin problemas de LangChain)
   const startTime = Date.now();
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-  
-  const geminiResponse = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      generationConfig: {
-        temperature: agentConfig?.temperatura ?? 0.2,
-        maxOutputTokens: phaseNumber === 7 ? 32768 : undefined,
-        responseMimeType: "application/json",
-      }
-    })
+  const geminiResult = await callGeminiWithFallback(apiKey, modelsToTry, {
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      temperature: agentConfig?.temperatura ?? 0.2,
+      maxOutputTokens: phaseNumber === 7 ? 32768 : undefined,
+      responseMimeType: "application/json",
+    }
   });
 
-  const geminiData = await geminiResponse.json();
+  const geminiData = geminiResult.data;
   const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
-
-  if (!geminiResponse.ok) {
-    throw new Error(`Error de Gemini API: ${geminiData.error?.message || JSON.stringify(geminiData)}`);
-  }
 
   // Extraer y validar el JSON de la respuesta
   let diagnosis: unknown;
@@ -949,12 +1202,19 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   // Si ya no está en 'procesando', saltamos el guardado para no sobreescribir la cancelación.
   const { data: currentState } = await supabase
     .from("fases_estado")
-    .select("estado_visual")
+    .select("estado_visual, datos_consolidados")
     .eq("proyecto_id", projectId)
     .eq("numero_fase", phaseNumber)
     .single();
 
-  if (currentState?.estado_visual !== "procesando") {
+  const currentData = currentState?.datos_consolidados as any;
+  const runMismatch =
+    phaseNumber === 4 &&
+    runId &&
+    isProcessingMarker(currentData) &&
+    currentData._run_id !== runId;
+
+  if (currentState?.estado_visual !== "procesando" || runMismatch) {
     console.log(`Fase ${phaseNumber} cancelada por el usuario durante el procesamiento. Resultado descartado.`);
     return { diagnosis: null, processingTime, cancelled: true };
   }
@@ -992,6 +1252,8 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
       _last_comment: typeof comments === "string" ? comments : null,
     };
   }
+
+  diagnosisToSave = attachModelMetadata(diagnosisToSave, geminiResult, modelSettings);
 
   // Guardar en fases_estado
   const { error: saveError } = await supabase
@@ -1082,6 +1344,53 @@ serve(async (req) => {
       }
     }
 
+    let runId: string | undefined;
+
+    if (phaseNumber === 4 && iteration <= 1 && !resolvedComments) {
+      const { data: existingPhase4 } = await supabase
+        .from("fases_estado")
+        .select("estado_visual, datos_consolidados, updated_at")
+        .eq("proyecto_id", projectId)
+        .eq("numero_fase", 4)
+        .maybeSingle();
+
+      if (hasCompletedPhaseData(existingPhase4?.datos_consolidados)) {
+        console.log("[pmo-agent] Fase 4 ya tiene diagnostico guardado; se omite disparo duplicado.");
+        return new Response(
+          JSON.stringify({
+            success: true,
+            phaseNumber,
+            processingTime: "0.00",
+            data: existingPhase4?.datos_consolidados,
+            cached: true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const freshProcessing =
+        existingPhase4?.estado_visual === "procesando" &&
+        !isProcessingStale(existingPhase4?.updated_at);
+
+      if (freshProcessing) {
+        console.log("[pmo-agent] Fase 4 ya esta procesando; se evita disparo duplicado.");
+        return new Response(
+          JSON.stringify({
+            success: true,
+            phaseNumber,
+            processingTime: "0.00",
+            data: existingPhase4?.datos_consolidados ?? null,
+            inProgress: true,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    if (phaseNumber === 4) {
+      runId = createRunId(4);
+    }
+
     // Marcar fase como "procesando" en la UI
     await supabase
       .from("fases_estado")
@@ -1090,7 +1399,9 @@ serve(async (req) => {
           proyecto_id: projectId,
           numero_fase: phaseNumber,
           estado_visual: "procesando",
-          datos_consolidados: null,
+          datos_consolidados: phaseNumber === 4 && runId
+            ? phaseProcessingPayload(phaseNumber, runId)
+            : null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "proyecto_id,numero_fase" }
@@ -1106,7 +1417,8 @@ serve(async (req) => {
         iteration,
         resolvedComments,
         externalFileUrl,
-        extraFileUrls
+        extraFileUrls,
+        runId
       );
       diagnosis = result.diagnosis;
       processingTime = result.processingTime;
@@ -1134,8 +1446,13 @@ serve(async (req) => {
 
     // Si termina la fase 3, verificar si disparar la 4 automáticamente
     if (phaseNumber === 3) {
-      // No usar await para no bloquear la respuesta de la fase 3
-      checkAndTriggerPhase4(supabase, projectId).catch(e => console.error("Auto trigger Phase 4 error:", e));
+      const phase4Job = checkAndTriggerPhase4(supabase, projectId);
+      const edgeRuntime = (globalThis as any).EdgeRuntime;
+      if (edgeRuntime?.waitUntil) {
+        edgeRuntime.waitUntil(phase4Job);
+      } else {
+        await phase4Job;
+      }
     }
 
     // Si termina la fase 1 (Agente 3 — Documentación), disparar el Agente 9 en paralelo

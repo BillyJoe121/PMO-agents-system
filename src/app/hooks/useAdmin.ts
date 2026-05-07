@@ -7,6 +7,15 @@ import { toast } from 'sonner';
 // ─────────────────────────────────────────────────────────────────────────────
 export type QuestionType = 'abierta' | 'si_no' | 'multiple';
 export type UserRole = 'auditor' | 'admin' | 'usuario_externo';
+export type AiModelMode = 'low' | 'high_with_fallback';
+
+export interface AiModelSettings {
+  id: 'global';
+  mode: AiModelMode;
+  highModel: string;
+  lowModel: string;
+  updatedAt?: string;
+}
 
 export interface AuditorUser {
   id: string;
@@ -36,6 +45,73 @@ export interface BankQuestion {
 // ─────────────────────────────────────────────────────────────────────────────
 // HOOK: Usuarios (tabla profiles)
 // ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_AI_MODEL_SETTINGS: AiModelSettings = {
+  id: 'global',
+  mode: 'high_with_fallback',
+  highModel: 'gemini-3.1-pro-preview',
+  lowModel: 'gemini-flash-lite-latest',
+};
+
+export function useAiModelSettings() {
+  const [settings, setSettings] = useState<AiModelSettings>(DEFAULT_AI_MODEL_SETTINGS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const mapSettings = (row: any): AiModelSettings => ({
+    id: 'global',
+    mode: row?.mode === 'low' ? 'low' : 'high_with_fallback',
+    highModel: row?.high_model || DEFAULT_AI_MODEL_SETTINGS.highModel,
+    lowModel: row?.low_model || DEFAULT_AI_MODEL_SETTINGS.lowModel,
+    updatedAt: row?.updated_at,
+  });
+
+  const fetchSettings = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('ai_model_settings')
+        .select('id, mode, high_model, low_model, updated_at')
+        .eq('id', 'global')
+        .maybeSingle();
+
+      if (error) throw error;
+      setSettings(mapSettings(data));
+    } catch (err) {
+      console.error('[useAiModelSettings] Error:', err);
+      toast.error('No se pudo cargar la configuración de modelos.');
+      setSettings(DEFAULT_AI_MODEL_SETTINGS);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  const updateMode = useCallback(async (mode: AiModelMode) => {
+    setIsSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('ai_model_settings')
+        .upsert({
+          id: 'global',
+          mode,
+          high_model: DEFAULT_AI_MODEL_SETTINGS.highModel,
+          low_model: DEFAULT_AI_MODEL_SETTINGS.lowModel,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' })
+        .select('id, mode, high_model, low_model, updated_at')
+        .single();
+
+      if (error) throw error;
+      setSettings(mapSettings(data));
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
+  return { settings, isLoading, isSaving, fetchSettings, updateMode };
+}
+
 export function useAdminUsers() {
   const [users, setUsers] = useState<AuditorUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);

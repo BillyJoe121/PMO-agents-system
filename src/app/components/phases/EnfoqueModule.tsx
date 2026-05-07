@@ -16,7 +16,7 @@ import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Loader2, CheckCircle2, Brain, MessageSquare, Save,
-  RefreshCw, ThumbsUp, Send, Clock, Sparkles, ChevronRight,
+  RefreshCw, ThumbsUp, Clock, Sparkles, ChevronRight,
   Zap, BarChart2, GitMerge, Target, AlertTriangle, BookOpen,
   Lightbulb, ListChecks, ShieldAlert, Code2, Copy, Check,
 } from 'lucide-react';
@@ -1066,7 +1066,7 @@ export default function EnfoqueModule() {
           const response = await supabase.functions.invoke('pmo-agent', {
             body: { projectId, phaseNumber: 6, iteration: 1 }
           });
-          if (response.error) throw new Error(response.error.message);
+          if (response.error) throw new Error((response.data as any)?.error || response.error.message);
           startPolling();
         } catch (err: any) {
           toast.error('Error iniciando Agente 6', { description: err.message });
@@ -1104,7 +1104,7 @@ export default function EnfoqueModule() {
       const response = await supabase.functions.invoke('pmo-agent', {
         body: { projectId, phaseNumber: 6, iteration: 2, comments: comment }
       });
-      if (response.error) throw new Error(response.error.message);
+      if (response.error) throw new Error((response.data as any)?.error || response.error.message);
       setSavedComment(comment);
       setComment('');
       startPolling(ts);
@@ -1172,46 +1172,8 @@ export default function EnfoqueModule() {
       <div className="max-w-[1100px] mx-auto px-10 py-10">
         <AnimatePresence mode="wait">
 
-          {/* Auto-trigger */}
-          {view === 'auto-trigger' && (
-            <motion.div key="auto-trigger" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 6 · Enfoque metodológico</p>
-              <motion.div animate={{ scale: [1, 1.04, 1] }} transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
-                className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6" style={{ background: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 12px 32px -12px rgba(0,0,0,0.25)' }}>
-                <Send size={22} className="text-white" strokeWidth={1.75} />
-              </motion.div>
-              <h2 className="text-neutral-900 tracking-tight mb-3" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>Enviando al Agente 6</h2>
-              <p className="text-neutral-500 text-[13px] max-w-md leading-relaxed mb-6">
-                Las Fases 4 y 5 están completadas. El sistema está consolidando los resultados de tipo de PMO y madurez para definir el enfoque de la guía metodológica.
-              </p>
-              <div className="flex items-center gap-2 mb-8">
-                {[
-                  { num: 4, label: `PMO ${pmoType}`, Icon: PMO_ICON[pmoType] },
-                  { num: 5, label: `Madurez Niv. ${maturityLevel}`, Icon: BarChart2 },
-                ].map(({ num, label, Icon: SrcIcon }, i) => (
-                  <div key={num} className="flex items-center gap-2">
-                    <motion.div initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.25 }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-[12px]" style={{ background: '#0a0a0a', fontWeight: 500 }}>
-                      <CheckCircle2 size={11} strokeWidth={1.75} /><SrcIcon size={11} strokeWidth={1.75} />{label}
-                    </motion.div>
-                    <ChevronRight size={13} className="text-neutral-300" strokeWidth={1.75} />
-                  </div>
-                ))}
-                <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.6 }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] border border-dashed"
-                  style={{ borderColor: pmoColor, color: pmoColor, fontWeight: 500 }}>
-                  <Brain size={11} strokeWidth={1.75} /> Agente 6
-                </motion.div>
-              </div>
-              <div className="flex items-center gap-2 text-neutral-400 text-[12px]">
-                <Loader2 size={12} className="animate-spin" strokeWidth={1.75} />Iniciando procesamiento…
-              </div>
-            </motion.div>
-          )}
-
           {/* Processing */}
-          {view === 'processing' && (
+          {(view === 'auto-trigger' || view === 'processing') && (
             <motion.div 
               key="processing-overlay"
               initial={{ opacity: 0 }} 
