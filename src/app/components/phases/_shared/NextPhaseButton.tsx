@@ -58,7 +58,7 @@ export default function NextPhaseButton({ projectId, show, nextPhase, prevPhase 
             }}
             className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-white text-[13px] transition-all"
             style={{
-              background: '#0a0a0a',
+              background: '#5454e9',
               fontWeight: 500,
               boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)',
             }}

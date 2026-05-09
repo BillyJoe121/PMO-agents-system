@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAdminUsers, useAdminQuestions, useAiModelSettings, type AiModelMode, type AuditorUser, type BankQuestion, type QuestionType, type UserRole } from '../../hooks/useAdmin';
+import IcesiLogo from '../brand/IcesiLogo';
 
 /* ── Types ── */
 type AdminSection = 'usuarios' | 'preguntas' | 'modelos';
@@ -177,7 +178,7 @@ function CreateUserDrawer({ open, onClose, onSave }: { open: boolean; onClose: (
                 onClick={handleSave}
                 disabled={isSaving}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#030213', fontWeight: 600 }}
+                style={{ background: '#5454e9', fontWeight: 600 }}
               >
                 {isSaving ? <><Loader2 size={14} className="animate-spin" /> Creando...</> : <><Plus size={14} /> Crear Auditor</>}
               </button>
@@ -264,7 +265,7 @@ function EditUserDrawer({ user, onClose, onSave }: { user: AuditorUser | null; o
               onClick={handleSave}
               disabled={isSaving}
               className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-              style={{ background: '#030213', fontWeight: 600 }}
+              style={{ background: '#5454e9', fontWeight: 600 }}
             >
               {isSaving ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : <><Save size={14} /> Guardar</>}
             </button>
@@ -327,7 +328,7 @@ function UsersSection() {
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity"
-          style={{ background: '#030213', fontWeight: 600 }}
+          style={{ background: '#5454e9', fontWeight: 600 }}
         >
           <Plus size={15} />+ Crear Auditor
         </button>
@@ -380,7 +381,7 @@ function UsersSection() {
                   <div className="flex items-center gap-3">
                     <div
                       className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs flex-shrink-0"
-                      style={{ background: ['#030213', '#059669', '#7c3aed', '#dc2626', '#d97706'][i % 5], fontWeight: 700 }}
+                      style={{ background: ['#5454e9', '#059669', '#7c3aed', '#dc2626', '#d97706'][i % 5], fontWeight: 700 }}
                     >
                       {user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                     </div>
@@ -608,7 +609,7 @@ function QuestionEditForm({
           onClick={onSave}
           disabled={isSaving}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs disabled:opacity-70 transition-opacity"
-          style={{ background: '#030213', fontWeight: 600 }}
+          style={{ background: '#5454e9', fontWeight: 600 }}
         >
           {isSaving ? <><Loader2 size={12} className="animate-spin" /> Guardando...</> : <><Save size={12} /> Guardar</>}
         </button>
@@ -765,7 +766,7 @@ function QuestionList({ questions, surveyType, onUpdate, onSaveQuestion, onDelet
                   <QuestionTypeBadge type={q.type} />
                   <span
                     className="text-xs px-2 py-0.5 rounded-full"
-                    style={{ background: '#e9ebef', color: '#030213', fontWeight: 600 }}
+                    style={{ background: '#e9ebef', color: '#5454e9', fontWeight: 600 }}
                   >
                     {q.dimension}
                   </span>
@@ -848,7 +849,7 @@ function QuestionsSection() {
         <button
           onClick={addQuestion}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity"
-          style={{ background: '#030213', fontWeight: 600 }}
+          style={{ background: '#5454e9', fontWeight: 600 }}
         >
           <Plus size={15} />+ Agregar Pregunta
         </button>
@@ -865,12 +866,12 @@ function QuestionsSection() {
         >
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs flex-shrink-0"
-            style={{ background: faseTab === 'fase1' ? '#030213' : '#e5e7eb', color: faseTab === 'fase1' ? '#fff' : '#6b7280', fontWeight: 700 }}
+            style={{ background: faseTab === 'fase1' ? '#5454e9' : '#e5e7eb', color: faseTab === 'fase1' ? '#fff' : '#6b7280', fontWeight: 700 }}
           >
             1
           </div>
           <div>
-            <p className="text-sm" style={{ fontWeight: faseTab === 'fase1' ? 700 : 500, color: faseTab === 'fase1' ? '#030213' : '#6b7280' }}>
+            <p className="text-sm" style={{ fontWeight: faseTab === 'fase1' ? 700 : 500, color: faseTab === 'fase1' ? '#5454e9' : '#6b7280' }}>
               Fase 1 — Idoneidad
             </p>
             <p className="text-xs text-gray-400 mt-0.5">{countFor('Idoneidad')} preguntas</p>
@@ -887,12 +888,12 @@ function QuestionsSection() {
         >
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center text-xs flex-shrink-0"
-            style={{ background: faseTab === 'fase5' ? '#030213' : '#e5e7eb', color: faseTab === 'fase5' ? '#fff' : '#6b7280', fontWeight: 700 }}
+            style={{ background: faseTab === 'fase5' ? '#5454e9' : '#e5e7eb', color: faseTab === 'fase5' ? '#fff' : '#6b7280', fontWeight: 700 }}
           >
             5
           </div>
           <div>
-            <p className="text-sm" style={{ fontWeight: faseTab === 'fase5' ? 700 : 500, color: faseTab === 'fase5' ? '#030213' : '#6b7280' }}>
+            <p className="text-sm" style={{ fontWeight: faseTab === 'fase5' ? 700 : 500, color: faseTab === 'fase5' ? '#5454e9' : '#6b7280' }}>
               Fase 5 — Madurez
             </p>
             <p className="text-xs text-gray-400 mt-0.5">{countFor('Madurez Predictiva') + countFor('Madurez Ágil')} preguntas</p>
@@ -920,7 +921,7 @@ function QuestionsSection() {
                       ? 'text-white shadow-sm'
                       : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
-                  style={fase5SubTab === value ? { background: '#030213', fontWeight: 600 } : { fontWeight: 500 }}
+                  style={fase5SubTab === value ? { background: '#5454e9', fontWeight: 600 } : { fontWeight: 500 }}
                 >
                   {label}
                   <span className="ml-1.5 opacity-70">({countFor(label)})</span>
@@ -1070,9 +1071,7 @@ export default function AdminPanelView() {
       <div className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col">
         <div className="px-5 py-5 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#030213' }}>
-              <Shield size={15} className="text-white" />
-            </div>
+            <IcesiLogo variant="positive" className="brand-logo-mark h-9 w-auto" />
             <div>
               <p className="text-gray-900 text-sm" style={{ fontWeight: 700 }}>Panel Admin</p>
               <p className="text-gray-400 text-xs">PMO Intelligence</p>
@@ -1090,7 +1089,7 @@ export default function AdminPanelView() {
                   ? 'text-white'
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
-              style={activeSection === item.id ? { background: '#030213', fontWeight: 600 } : { fontWeight: 500 }}
+              style={activeSection === item.id ? { background: '#5454e9', fontWeight: 600 } : { fontWeight: 500 }}
             >
               <span className={activeSection === item.id ? 'text-white' : 'text-gray-400'}>
                 {item.icon}

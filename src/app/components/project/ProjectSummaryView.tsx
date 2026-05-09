@@ -9,6 +9,7 @@
 import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, Printer, FileDown, CheckCircle2, Download, TrendingUp, Users, Layers } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import IcesiLogo from '../brand/IcesiLogo';
 
 const MATURITY_DATA = [
   { dimension: 'Procesos', value: 78 },
@@ -108,11 +109,11 @@ function SpiderChart({ data }: { data: { dimension: string; value: number }[] })
           <line key={`axis-${i}`} x1={cx} y1={cy} x2={outer.x.toFixed(2)} y2={outer.y.toFixed(2)} stroke="#e5e7eb" strokeWidth={1} />
         );
       })}
-      <path d={dataPath} fill="#030213" fillOpacity={0.15} stroke="#030213" strokeWidth={2} strokeLinejoin="round" />
+      <path d={dataPath} fill="#5454e9" fillOpacity={0.15} stroke="#5454e9" strokeWidth={2} strokeLinejoin="round" />
       {data.map((d, i) => {
         const r = (d.value / 100) * maxR;
         const p = point(i, r);
-        return <circle key={`dot-${i}`} cx={p.x} cy={p.y} r={3.5} fill="#030213" />;
+        return <circle key={`dot-${i}`} cx={p.x} cy={p.y} r={3.5} fill="#5454e9" />;
       })}
       {data.map((d, i) => {
         const labelR = maxR + 18;
@@ -128,7 +129,7 @@ function SpiderChart({ data }: { data: { dimension: string; value: number }[] })
         const r = (d.value / 100) * maxR;
         const p = point(i, r);
         return (
-          <text key={`val-${i}`} x={p.x.toFixed(2)} y={(p.y - 9).toFixed(2)} textAnchor="middle" fontSize={8} fontWeight={700} fill="#030213">
+          <text key={`val-${i}`} x={p.x.toFixed(2)} y={(p.y - 9).toFixed(2)} textAnchor="middle" fontSize={8} fontWeight={700} fill="#5454e9">
             {d.value}
           </text>
         );
@@ -178,7 +179,7 @@ export default function ProjectSummaryView() {
           <button
             onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm hover:opacity-90 transition-opacity"
-            style={{ background: '#030213', fontWeight: 600 }}
+            style={{ background: '#5454e9', fontWeight: 600 }}
           >
             <FileDown size={15} />
             Exportar a PDF
@@ -192,13 +193,10 @@ export default function ProjectSummaryView() {
         {/* ── Report Header ── */}
         <div className="flex items-start justify-between mb-8 pb-8 border-b-2 border-gray-200">
           <div>
-            {/* Logo placeholder */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white" style={{ background: '#030213' }}>
-                <TrendingUp size={22} />
-              </div>
+              <IcesiLogo variant="positive" className="brand-logo-mark h-14 w-auto" />
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest" style={{ fontWeight: 600 }}>Universidad ICESI · PMO Intelligence Platform</p>
+                <p className="text-xs text-gray-400 uppercase tracking-widest" style={{ fontWeight: 600 }}>Universidad Icesi - PMO Intelligence Platform</p>
                 <h1 className="text-gray-900" style={{ fontWeight: 800, fontSize: '1.75rem' }}>
                   Diagnóstico Consolidado de PMO
                 </h1>
@@ -240,7 +238,7 @@ export default function ProjectSummaryView() {
           <SectionDivider title="1. Diagnóstico de Idoneidad" />
           <div className="grid grid-cols-4 gap-6 mb-6">
             <div className="col-span-1 flex flex-col items-center justify-center bg-zinc-50 rounded-2xl p-6 border border-zinc-200">
-              <ScoreRing score={parseInt(scoreDisplay)} label="Score Final" color="#030213" />
+              <ScoreRing score={parseInt(scoreDisplay)} label="Score Final" color="#5454e9" />
               <span className="text-zinc-700 text-xs mt-2 text-center" style={{ fontWeight: 600 }}>Alta Idoneidad</span>
             </div>
             <div className="col-span-3 space-y-3">
@@ -301,7 +299,7 @@ export default function ProjectSummaryView() {
                     <div className="flex-1 bg-gray-100 rounded-full h-2">
                       <div
                         className="h-2 rounded-full"
-                        style={{ width: `${d.value}%`, background: '#030213', opacity: 0.7 + (d.value / 500) }}
+                        style={{ width: `${d.value}%`, background: '#5454e9', opacity: 0.7 + (d.value / 500) }}
                       />
                     </div>
                     <span className="text-gray-700 text-xs w-8 text-right" style={{ fontWeight: 600 }}>{d.value}%</span>
@@ -376,7 +374,7 @@ export default function ProjectSummaryView() {
 
         {/* Report Footer */}
         <div className="pt-6 border-t border-gray-200 flex items-center justify-between text-gray-400 text-xs">
-          <span>PMO Intelligence Platform · Universidad ICESI</span>
+          <span>PMO Intelligence Platform - Universidad Icesi</span>
           <span>Generado el {new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
           <span>Confidencial</span>
         </div>

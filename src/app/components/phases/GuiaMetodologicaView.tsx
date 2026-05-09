@@ -428,7 +428,7 @@ function generateDownloadHTML(
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Georgia, serif; font-size: 13px; color: #1f2937; line-height: 1.7; }
-  .cover { background: #030213; color: #fff; padding: 80px 60px; min-height: 200px; }
+  .cover { background: #5454e9; color: #fff; padding: 80px 60px; min-height: 200px; }
   .cover h1 { font-size: 2.2em; font-weight: 700; margin-bottom: 12px; }
   .cover p { opacity: 0.7; font-size: 1em; margin-bottom: 6px; }
   .cover .badge { display: inline-block; margin-top: 20px; padding: 6px 16px; border: 1px solid rgba(255,255,255,0.3); border-radius: 999px; font-size: 0.8em; }
@@ -437,19 +437,19 @@ function generateDownloadHTML(
   .toc h2 { font-size: 1em; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin-bottom: 12px; }
   .toc-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dotted #d1d5db; color: #374151; }
   .chapter { margin-bottom: 48px; }
-  h2 { font-size: 1.25em; color: #030213; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #030213; }
+  h2 { font-size: 1.25em; color: #5454e9; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #5454e9; }
   h3 { font-size: 1em; color: #374151; font-weight: 700; margin: 20px 0 8px; }
   p { margin-bottom: 12px; color: #374151; }
   .intro p { color: #4b5563; font-style: italic; }
   ul { margin: 8px 0 16px 20px; }
   li { margin-bottom: 5px; }
   table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
-  th { background: #030213; color: #fff; padding: 8px 12px; text-align: left; }
+  th { background: #5454e9; color: #fff; padding: 8px 12px; text-align: left; }
   td { border: 1px solid #e5e7eb; padding: 7px 12px; }
   tr:nth-child(even) td { background: #f9fafb; }
   .footer { text-align: center; color: #9ca3af; font-size: 0.8em; margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
   @media print { body { font-size: 11px; } .cover { min-height: auto; } }
-  @media screen { .print-btn { position: fixed; top: 20px; right: 20px; background: #030213; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; } }
+  @media screen { .print-btn { position: fixed; top: 20px; right: 20px; background: #5454e9; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; } }
 </style>
 </head>
 <body>
@@ -494,7 +494,7 @@ function ProcessingView({
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+        className="fixed inset-0 z-[100] bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center"
       >
         <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5 shadow-sm">
           <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
@@ -502,7 +502,7 @@ function ProcessingView({
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
             className="hidden"
-            style={{ borderTopColor: '#0a0a0a' }}
+            style={{ borderTopColor: '#5454e9' }}
           />
         </div>
 
@@ -524,7 +524,7 @@ function ProcessingView({
           <div className="h-1 bg-neutral-200/70 rounded-full overflow-hidden">
             <motion.div
               className="h-full rounded-full"
-              style={{ background: '#0a0a0a' }}
+              style={{ background: '#5454e9' }}
               animate={{ width: `${pct}%` }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />
@@ -550,7 +550,7 @@ function ProcessingView({
                     : <Loader2 size={14} className="animate-spin text-neutral-700" strokeWidth={1.75} />}
                 </div>
                 <div>
-                  <p className="text-[13px]" style={{ fontWeight: active ? 600 : 500, color: '#0a0a0a' }}>
+                  <p className="text-[13px]" style={{ fontWeight: active ? 600 : 500, color: '#5454e9' }}>
                     {step.label}
                   </p>
                   {active && (
@@ -608,12 +608,12 @@ function DocumentRenderer({ chapters, org, pmoType, version }: {
   chapters: GuideChapter[]; org: string; pmoType: PmoType; version: DocVersion;
 }) {
   const fmt = new Date(version.generatedAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
-  const accent = '#0a0a0a';
+  const accent = '#5454e9';
 
   return (
     <div className="bg-white shadow-2xl mx-auto" style={{ width: 'min(794px, 100%)' }}>
       {/* Cover */}
-      <div className="p-12 pb-10" style={{ background: '#030213', color: '#fff' }}>
+      <div className="p-12 pb-10" style={{ background: '#5454e9', color: '#fff' }}>
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.12)' }}>
             <FileText size={20} className="text-white" />
@@ -694,7 +694,7 @@ function DocumentRenderer({ chapters, org, pmoType, version }: {
                     <div className="overflow-x-auto rounded-xl border border-gray-200 mb-3">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr style={{ background: '#030213' }}>
+                          <tr style={{ background: '#5454e9' }}>
                             {sec.table.headers.map((h, hi) => (
                               <th key={hi} className="px-4 py-2.5 text-left text-white" style={{ fontWeight: 600 }}>{h}</th>
                             ))}
@@ -759,7 +759,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading, versionNum }: {
               <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 text-sm hover:bg-gray-50" style={{ fontWeight: 500 }}>Cancelar</button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#0a0a0a', fontWeight: 600 }}>
+                style={{ background: '#5454e9', fontWeight: 600 }}>
                 {isLoading ? <><Loader2 size={14} className="animate-spin" />Aprobando…</> : <><CheckCircle2 size={14} />Aprobar guía</>}
               </button>
             </div>
@@ -1638,7 +1638,7 @@ export default function GuiaMetodologicaView() {
   // with no data it immediately invokes the agent and shows the processing overlay.
   if (view === 'auto-trigger') {
     return (
-      <div className="h-screen bg-[#fafaf9] flex flex-col overflow-hidden">
+      <div className="h-screen bg-[#f7f8ff] flex flex-col overflow-hidden">
         <PhaseHeader
           projectId={projectId!}
           companyName={project.companyName}
@@ -1655,7 +1655,7 @@ export default function GuiaMetodologicaView() {
   // ── Render: processing ────────────────────────────────────────────────────
   if (view === 'processing') {
     return (
-      <div className="h-screen bg-[#fafaf9] flex flex-col overflow-hidden">
+      <div className="h-screen bg-[#f7f8ff] flex flex-col overflow-hidden">
         <PhaseHeader
           projectId={projectId!}
           companyName={project.companyName}
@@ -1671,7 +1671,7 @@ export default function GuiaMetodologicaView() {
 
   // ── Render: results & approved (split layout) ─────────────────────────────
   return (
-    <div className="h-screen bg-[#fafaf9] flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#f7f8ff] flex flex-col overflow-hidden">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}
@@ -1772,7 +1772,7 @@ export default function GuiaMetodologicaView() {
                 >
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5 tabular-nums"
                     style={currentVersionIdx === idx
-                      ? { background: '#0a0a0a', color: '#fff', fontWeight: 600 }
+                      ? { background: '#5454e9', color: '#fff', fontWeight: 600 }
                       : { background: '#f5f5f5', color: '#404040', fontWeight: 600 }}>
                     {v.number}
                   </div>
@@ -1891,7 +1891,7 @@ export default function GuiaMetodologicaView() {
                 whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                 onClick={() => setShowApprove(true)}
                 className="w-full py-3 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all"
-                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+                style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
               >
                 <CheckCircle2 size={13} strokeWidth={1.75} />
                 Aprobar guía metodológica
@@ -1913,7 +1913,7 @@ export default function GuiaMetodologicaView() {
                 <button
                   onClick={() => navigate(`/dashboard/project/${projectId}/phase/8`)}
                   className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-white text-[12px] transition-all"
-                  style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+                  style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
                 >
                   Fase 8 →
                 </button>

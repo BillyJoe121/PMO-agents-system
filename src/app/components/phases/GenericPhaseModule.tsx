@@ -40,7 +40,7 @@ function ConfirmModal({ open, phaseName, onCancel, onConfirm, isLoading }: {
               </button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
-                style={{ background: '#0a0a0a', fontWeight: 500 }}>
+                style={{ background: '#5454e9', fontWeight: 500 }}>
                 {isLoading ? <><Loader2 size={13} className="animate-spin" /> Procesando…</> : <><Send size={13} /> Confirmar y aprobar</>}
               </button>
             </div>
@@ -88,7 +88,7 @@ export default function GenericPhaseModule() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}
@@ -101,7 +101,7 @@ export default function GenericPhaseModule() {
       <AnimatePresence>
         {isProcessing && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center">
+            className="fixed inset-0 z-40 bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center">
             <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
             </div>
@@ -134,7 +134,7 @@ export default function GenericPhaseModule() {
               whileHover={{ y: -1 }} whileTap={{ y: 0 }}
               onClick={() => setShowConfirm(true)}
               className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-white text-[13px] transition-all flex-shrink-0"
-              style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+              style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
             >
               <Send size={13} strokeWidth={1.75} />
               Aprobar fase

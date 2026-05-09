@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fafaf9] gap-3">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f7f8ff] gap-3">
         <Loader2 className="animate-spin text-neutral-400" size={24} />
         <span className="text-neutral-500 text-[13px]" style={{ fontWeight: 500 }}>
           Verificando acceso...

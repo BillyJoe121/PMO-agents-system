@@ -14,6 +14,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { SoundToggleButton } from '../ui/SoundToggleButton';
 import { CreditsModal } from '../ui/CreditsModal';
+import IcesiLogo from '../brand/IcesiLogo';
 
 interface NavItem {
   icon: React.ReactNode;
@@ -45,9 +46,15 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[72px] flex flex-col items-center py-6 z-50 border-r border-gray-100 bg-white shadow-sm print:hidden">
+    <aside className="fixed left-0 top-0 h-screen w-[72px] flex flex-col items-center py-5 z-50 border-r border-gray-100 bg-white shadow-sm print:hidden">
       {/* Logo */}
-
+      <button
+        onClick={() => navigate('/dashboard')}
+        className="w-full px-2 mb-5 flex items-center justify-center"
+        title="Universidad Icesi"
+      >
+        <IcesiLogo variant="positive" className="brand-logo-mark h-9 max-w-[48px]" />
+      </button>
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 flex-1 w-full px-2">
@@ -65,14 +72,14 @@ export default function Sidebar() {
                   ? 'text-white shadow-md'
                   : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
                 }`}
-              style={active ? { background: '#030213' } : {}}
+              style={active ? { background: '#5454e9' } : {}}
             >
               {item.icon}
               {active && (
                 <motion.div
                   layoutId="sidebar-indicator"
                   className="absolute right-0 w-1 h-6 rounded-l-full"
-                  style={{ background: '#030213' }}
+                  style={{ background: '#5454e9' }}
                 />
               )}
               {/* Tooltip */}
@@ -96,7 +103,7 @@ export default function Sidebar() {
                 ? 'text-white shadow-md'
                 : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
               }`}
-            style={isActive('/dashboard/papelera') ? { background: '#030213' } : {}}
+            style={isActive('/dashboard/papelera') ? { background: '#5454e9' } : {}}
           >
             <Trash2 size={20} />
             <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">

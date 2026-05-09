@@ -4,7 +4,7 @@ import Sidebar from './Sidebar';
 
 export default function AppLayout() {
   return (
-    <div className="min-h-screen bg-neutral-50 flex print:bg-white">
+    <div className="brand-shell flex print:bg-white">
       <Sidebar />
       <main className="flex-1 ml-[72px] print:ml-0 min-h-screen overflow-auto">
         <Outlet />

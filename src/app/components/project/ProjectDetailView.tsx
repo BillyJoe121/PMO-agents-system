@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import PhaseItem from './PhaseItem';
 import EditProjectModal from '../dashboard/EditProjectModal';
+import IcesiLogo from '../brand/IcesiLogo';
 
 export default function ProjectDetailView() {
   // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
@@ -28,7 +29,7 @@ export default function ProjectDetailView() {
 
   if (!project) {
     return (
-      <div className="min-h-screen bg-[#fafaf9] flex items-center justify-center">
+      <div className="min-h-screen bg-[#f7f8ff] flex items-center justify-center">
         <div className="text-center">
           <p className="text-neutral-500 text-sm mb-4">Proyecto no encontrado.</p>
           <button onClick={() => navigate('/dashboard')} className="text-neutral-900 hover:underline text-sm" style={{ fontWeight: 500 }}>
@@ -92,20 +93,23 @@ export default function ProjectDetailView() {
   });
 
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 bg-[#fafaf9]/85 backdrop-blur-md border-b border-neutral-200/60">
+      <div className="sticky top-0 z-20 bg-[#f7f8ff]/85 backdrop-blur-md border-b border-neutral-200/60">
         <div className="max-w-[1100px] mx-auto px-10 pt-6 pb-5">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="group inline-flex items-center gap-2 pl-2 pr-3.5 py-1.5 rounded-full bg-white border border-neutral-200/80 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 text-[13px] mb-5 transition-all"
-            style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
-          >
-            <span className="w-5 h-5 rounded-full bg-neutral-100 group-hover:bg-neutral-200 flex items-center justify-center transition-colors">
-              <ArrowLeft size={11} strokeWidth={2} className="transition-transform group-hover:-translate-x-px" />
-            </span>
-            Mis proyectos
-          </button>
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="group inline-flex items-center gap-2 pl-2 pr-3.5 py-1.5 rounded-full bg-white border border-neutral-200/80 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 text-[13px] transition-all"
+              style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+            >
+              <span className="w-5 h-5 rounded-full bg-neutral-100 group-hover:bg-neutral-200 flex items-center justify-center transition-colors">
+                <ArrowLeft size={11} strokeWidth={2} className="transition-transform group-hover:-translate-x-px" />
+              </span>
+              Mis proyectos
+            </button>
+            <IcesiLogo variant="positive" className="brand-logo-mark hidden sm:block h-9 w-auto" />
+          </div>
 
           <div className="flex items-end justify-between gap-6 flex-wrap">
             <div className="min-w-0">
@@ -124,7 +128,7 @@ export default function ProjectDetailView() {
                       <div
                         key={a.id}
                         title={a.name}
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-white ring-2 ring-[#fafaf9]"
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white ring-2 ring-[#f7f8ff]"
                         style={{ background: a.color, fontSize: '0.625rem', fontWeight: 600 }}
                       >
                         {a.initials}
@@ -221,7 +225,7 @@ export default function ProjectDetailView() {
                 animate={{ width: `${progressPct}%` }}
                 transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
                 className="h-full rounded-full"
-                style={{ background: isComplete ? '#10b981' : '#0a0a0a' }}
+                style={{ background: isComplete ? '#10b981' : '#5454e9' }}
               />
             </div>
           </div>

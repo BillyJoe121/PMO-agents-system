@@ -57,7 +57,7 @@ function ConfirmModal({ open, count, onCancel, onConfirm, isLoading }: ConfirmMo
               </button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
-                style={{ background: '#0a0a0a', fontWeight: 500 }}>
+                style={{ background: '#5454e9', fontWeight: 500 }}>
                 {isLoading ? <><Loader2 size={13} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Confirmar</>}
               </button>
             </div>
@@ -504,7 +504,7 @@ function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: F
             whileHover={{ y: -1 }} whileTap={{ y: 0 }}
             onClick={onSave}
             className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-full text-white text-[13px] transition-all"
-            style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+            style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
           >
             <Save size={13} />
             {mode === 'edit' ? 'Actualizar entrevista' : 'Guardar entrevista'}
@@ -1105,7 +1105,7 @@ export default function EntrevistasModule() {
 
   if (isLoadingData) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center h-screen bg-[#fafaf9] gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center h-screen bg-[#f7f8ff] gap-3">
         <Loader2 className="animate-spin text-neutral-400" size={24} />
         <span className="text-neutral-500 text-[13px]" style={{ fontWeight: 500 }}>Cargando datos de la fase...</span>
       </div>
@@ -1116,7 +1116,7 @@ export default function EntrevistasModule() {
   const selectedEntrevista = entrevistas.find(e => e.id === selectedId) ?? null;
 
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}
@@ -1131,7 +1131,7 @@ export default function EntrevistasModule() {
       <AnimatePresence>
         {isProcessing && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center">
+            className="fixed inset-0 z-40 bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center">
             <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
             </div>
@@ -1505,7 +1505,7 @@ export default function EntrevistasModule() {
               onClick={handleMarkComplete}
               disabled={entrevistas.length === 0}
               className="px-6 py-3 rounded-full text-white text-[13px] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+              style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
             >
               Enviar al Agente
             </motion.button>

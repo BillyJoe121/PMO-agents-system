@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useApp } from '../../../context/AppContext';
 import { useCancelAgent } from '../../../hooks/useCancelAgent';
+import IcesiLogo from '../../brand/IcesiLogo';
 
 interface PhaseHeaderProps {
   projectId: string;
@@ -63,7 +64,7 @@ export default function PhaseHeader({
 
   return (
     <>
-      <div className="sticky top-0 z-20 bg-[#fafaf9]/85 backdrop-blur-md border-b border-neutral-200/60 print:relative print:bg-transparent print:border-none print:pt-8 print:pb-4">
+      <div className="sticky top-0 z-20 bg-[#f7f8ff]/85 backdrop-blur-md border-b border-neutral-200/60 print:relative print:bg-transparent print:border-none print:pt-8 print:pb-4">
         <div className="max-w-[1100px] mx-auto px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {/* Back button */}
@@ -99,6 +100,7 @@ export default function PhaseHeader({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
+            <IcesiLogo variant="positive" className="brand-logo-mark hidden lg:block h-9 w-auto mr-2" />
             {rightSlot}
 
             {/* ── Botón Ver JSON (automático si hay agentData) ── */}
@@ -367,7 +369,7 @@ export default function PhaseHeader({
                 <button
                   onClick={handleConfirmReprocess}
                   className="flex-1 py-2.5 rounded-xl text-white text-[13px] transition-colors"
-                  style={{ background: '#0a0a0a', fontWeight: 500 }}
+                  style={{ background: '#5454e9', fontWeight: 500 }}
                 >
                   Sí, reiniciar
                 </button>

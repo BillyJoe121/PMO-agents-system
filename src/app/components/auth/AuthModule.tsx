@@ -6,6 +6,7 @@ import {
   CheckCircle2, ArrowRight, Mail, Lock,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import IcesiLogo from '../brand/IcesiLogo';
 
 type AuthView = 'login' | 'recovery' | 'recovery-success';
 
@@ -89,14 +90,14 @@ export default function AuthModule() {
 
   /* ─────────────────────────────────────────── */
   return (
-    <div className="min-h-screen flex bg-[#fafaf9]" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="min-h-screen flex bg-[#f7f8ff]">
 
       {/* ═══════════════════════════════════════
           LEFT — Editorial brand panel
       ═══════════════════════════════════════ */}
       <div
         className="hidden lg:flex w-[48%] flex-col justify-between p-12 relative overflow-hidden flex-shrink-0"
-        style={{ background: '#0a0a0a' }}
+        style={{ background: '#5454e9' }}
       >
         {/* Subtle grid texture */}
         <div
@@ -115,9 +116,7 @@ export default function AuthModule() {
         >
           {/* Logomark */}
           <div className="flex items-center gap-3">
-            <span className="text-white/40 text-[12px] uppercase tracking-[0.14em]" style={{ fontWeight: 500 }}>
-              Universidad Icesi
-            </span>
+            <IcesiLogo variant="negative" className="brand-logo-mark h-12 w-auto" />
           </div>
         </motion.div>
 
@@ -129,10 +128,10 @@ export default function AuthModule() {
           className="relative z-10"
         >
           <p
-            className="text-white/30 uppercase tracking-[0.2em] mb-5 text-[11px]"
+            className="text-white/70 uppercase tracking-[0.2em] mb-5 text-[11px]"
             style={{ fontWeight: 500 }}
           >
-            Plataforma de diagnóstico
+            Universidad Icesi
           </p>
 
           <h1
@@ -150,7 +149,7 @@ export default function AuthModule() {
           {/* Capilar divider */}
           <div className="w-12 h-px bg-white/15 mb-6" />
 
-          <p className="text-white/40 text-[14px] leading-relaxed max-w-xs" style={{ fontWeight: 400 }}>
+          <p className="text-white/70 text-[14px] leading-relaxed max-w-xs" style={{ fontWeight: 400 }}>
             Auditoría organizacional guiada por agentes de inteligencia artificial. Ocho fases de diagnóstico profundo.
           </p>
         </motion.div>
@@ -163,14 +162,14 @@ export default function AuthModule() {
           className="relative z-10 text-white/15 text-[11px]"
           style={{ fontWeight: 400 }}
         >
-          © 2025 Universidad ICESI · Todos los derechos reservados
+          2026 Universidad Icesi · Todos los derechos reservados
         </motion.p>
       </div>
 
       {/* ═══════════════════════════════════════
           RIGHT — Form panel
       ═══════════════════════════════════════ */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-[#fafaf9]">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-[#f7f8ff]">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -190,11 +189,12 @@ export default function AuthModule() {
               >
                 {/* Header */}
                 <div className="mb-9">
+                  <IcesiLogo variant="positive" className="brand-logo-mark h-12 w-auto mb-8 lg:hidden" />
                   <p className="uppercase tracking-[0.18em] text-neutral-400 text-[11px] mb-3" style={{ fontWeight: 500 }}>
                     Acceso seguro
                   </p>
                   <h2
-                    className="text-[#0a0a0a]"
+                    className="text-[#5454e9]"
                     style={{ fontSize: '2.25rem', fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.025em' }}
                   >
                     Bienvenido
@@ -246,7 +246,7 @@ export default function AuthModule() {
                             : 'border-neutral-200/80 focus:border-neutral-400 focus:ring-4 focus:ring-neutral-100'
                           }
                         `}
-                        style={{ color: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                        style={{ color: '#5454e9', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                       />
                     </div>
                     <AnimatePresence>
@@ -297,7 +297,7 @@ export default function AuthModule() {
                             : 'border-neutral-200/80 focus:border-neutral-400 focus:ring-4 focus:ring-neutral-100'
                           }
                         `}
-                        style={{ color: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                        style={{ color: '#5454e9', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                       />
                       <button
                         type="button"
@@ -361,7 +361,7 @@ export default function AuthModule() {
                     whileTap={!isLoading ? { y: 0 } : {}}
                     className="w-full py-3.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-1"
                     style={{
-                      background: '#0a0a0a',
+                      background: '#5454e9',
                       fontWeight: 500,
                       boxShadow: isLoading
                         ? 'none'
@@ -404,11 +404,12 @@ export default function AuthModule() {
                 </button>
 
                 <div className="mb-9">
+                  <IcesiLogo variant="positive" className="brand-logo-mark h-12 w-auto mb-8 lg:hidden" />
                   <p className="uppercase tracking-[0.18em] text-neutral-400 text-[11px] mb-3" style={{ fontWeight: 500 }}>
                     Recuperación
                   </p>
                   <h2
-                    className="text-[#0a0a0a]"
+                    className="text-[#5454e9]"
                     style={{ fontSize: '2.25rem', fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.025em' }}
                   >
                     Restablecer<br />contraseña
@@ -437,7 +438,7 @@ export default function AuthModule() {
                             : 'border-neutral-200/80 focus:border-neutral-400 focus:ring-4 focus:ring-neutral-100'
                           }
                         `}
-                        style={{ color: '#0a0a0a', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
+                        style={{ color: '#5454e9', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
                       />
                     </div>
                     <AnimatePresence>
@@ -462,7 +463,7 @@ export default function AuthModule() {
                     whileTap={!isRecoveryLoading ? { y: 0 } : {}}
                     className="w-full py-3.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{
-                      background: '#0a0a0a',
+                      background: '#5454e9',
                       fontWeight: 500,
                       boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.22)',
                     }}
@@ -492,6 +493,7 @@ export default function AuthModule() {
                 transition={{ duration: 0.3 }}
               >
                 <div className="mb-9">
+                  <IcesiLogo variant="positive" className="brand-logo-mark h-12 w-auto mb-8 lg:hidden" />
                   <div
                     className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-6"
                     style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}
@@ -502,7 +504,7 @@ export default function AuthModule() {
                     Enlace enviado
                   </p>
                   <h2
-                    className="text-[#0a0a0a]"
+                    className="text-[#5454e9]"
                     style={{ fontSize: '2.25rem', fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.025em' }}
                   >
                     Revise su<br />bandeja

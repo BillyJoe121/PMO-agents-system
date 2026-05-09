@@ -525,7 +525,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
               </button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 transition-all"
-                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+                style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                 {isLoading
                   ? <><Loader2 size={13} className="animate-spin" /> Aprobando…</>
                   : 'Aprobar instrucciones'}
@@ -675,9 +675,9 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
       </div>
 
       {/* Brief-style container */}
-      <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: '#0a0a0a' }}>
+      <div className="rounded-2xl border-2 overflow-hidden" style={{ borderColor: '#5454e9' }}>
         {/* Header bar */}
-        <div className="px-5 py-3 flex items-center gap-2" style={{ background: '#0a0a0a' }}>
+        <div className="px-5 py-3 flex items-center gap-2" style={{ background: '#5454e9' }}>
           <Code2 size={14} className="text-gray-400" />
           <span className="text-gray-200 text-xs" style={{ fontWeight: 600 }}>BRIEF TÉCNICO — AGENTE 7</span>
           <span className="ml-auto text-gray-500 text-xs">Generado automáticamente por Agente 6</span>
@@ -693,7 +693,7 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
                 <button onClick={() => setExpanded(isOpen ? null : i)}
                   className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: isOpen ? '#0a0a0a' : '#f3f4f6' }}>
+                    style={{ background: isOpen ? '#5454e9' : '#f3f4f6' }}>
                     <CatIcon size={13} style={{ color: isOpen ? '#fff' : '#6b7280' }} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -714,7 +714,7 @@ function InstruccionesSection({ result }: { result: EnfoqueResult }) {
                     {instr.directrices.map((d, j) => (
                       <li key={j} className="flex items-start gap-2.5 pt-2">
                         <span className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center mt-0.5 text-white text-xs"
-                          style={{ background: '#0a0a0a', fontSize: '0.6rem', fontWeight: 700 }}>{j + 1}</span>
+                          style={{ background: '#5454e9', fontSize: '0.6rem', fontWeight: 700 }}>{j + 1}</span>
                         <p className="text-gray-600 text-sm leading-relaxed">{d}</p>
                       </li>
                     ))}
@@ -959,7 +959,7 @@ function CommentsSection({
         <div className="flex-1" />
         <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} onClick={onApprove}
           className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-          style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+          style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
           <ThumbsUp size={14} /> Aprobar instrucciones
         </motion.button>
       </div>
@@ -1148,7 +1148,7 @@ export default function EnfoqueModule() {
   );
 
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}
@@ -1179,7 +1179,7 @@ export default function EnfoqueModule() {
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+              className="fixed inset-0 z-[100] bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center"
             >
               <div 
                 className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 

@@ -99,7 +99,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
       <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
         <motion.div
           className="h-full rounded-full"
-          style={{ background: '#030213' }}
+          style={{ background: '#5454e9' }}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -272,13 +272,13 @@ export default function SurveyRespondentOverlay({
             <div className="flex items-center gap-3">
               <div
                 className="w-9 h-9 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-                style={{ background: '#030213' }}
+                style={{ background: '#5454e9' }}
               >
                 <span style={{ fontWeight: 800, fontSize: '0.7rem' }}>PMO</span>
               </div>
               <div>
                 <p className="text-gray-400 text-xs" style={{ fontWeight: 500 }}>
-                  Universidad ICESI · PMO Intelligence Platform
+                  Universidad Icesi - PMO Intelligence Platform
                 </p>
                 <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>
                   Encuesta de Madurez — {companyName}
@@ -311,7 +311,7 @@ export default function SurveyRespondentOverlay({
           {/* Identity step indicator */}
           {overlayStep === 'identity' && (
             <div className="flex items-center gap-2">
-              <div className="h-1.5 w-16 rounded-full" style={{ background: '#030213' }} />
+              <div className="h-1.5 w-16 rounded-full" style={{ background: '#5454e9' }} />
               <div className="h-1.5 flex-1 rounded-full bg-gray-200" />
               <span className="text-xs text-gray-400 ml-1" style={{ fontWeight: 500 }}>Paso 1 de 2</span>
             </div>
@@ -402,7 +402,7 @@ export default function SurveyRespondentOverlay({
                       whileTap={{ scale: 0.97 }}
                       onClick={handleIdentitySubmit}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm mt-1 transition-all"
-                      style={{ background: '#030213', fontWeight: 600 }}
+                      style={{ background: '#5454e9', fontWeight: 600 }}
                     >
                       Comenzar encuesta
                       <ArrowRight size={15} />
@@ -474,7 +474,7 @@ export default function SurveyRespondentOverlay({
                   <div className="flex items-center gap-2 mb-5">
                     <div
                       className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0"
-                      style={{ background: '#030213', fontWeight: 700 }}
+                      style={{ background: '#5454e9', fontWeight: 700 }}
                     >
                       {nombre.trim().split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
                     </div>
@@ -488,7 +488,7 @@ export default function SurveyRespondentOverlay({
                   <div className="mb-4">
                     <span
                       className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-wide"
-                      style={{ background: '#e9ebef', color: '#030213', fontWeight: 600 }}
+                      style={{ background: '#e9ebef', color: '#5454e9', fontWeight: 600 }}
                     >
                       {question.dimension}
                     </span>
@@ -514,14 +514,14 @@ export default function SurveyRespondentOverlay({
                           onClick={() => handleSelect(opt.value)}
                           className="w-full text-left px-4 py-3.5 rounded-2xl border-2 transition-all flex items-center gap-3"
                           style={{
-                            borderColor: isSelected ? '#030213' : '#e5e7eb',
+                            borderColor: isSelected ? '#5454e9' : '#e5e7eb',
                             background: isSelected ? '#e9ebef' : '#fff',
                           }}
                         >
                           <div
                             className="w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 transition-all"
                             style={{
-                              background: isSelected ? '#030213' : '#f3f4f6',
+                              background: isSelected ? '#5454e9' : '#f3f4f6',
                               color: isSelected ? '#fff' : '#6b7280',
                               fontWeight: 700,
                             }}
@@ -597,7 +597,7 @@ export default function SurveyRespondentOverlay({
                   style={{
                     width: i === currentStep ? 20 : 8,
                     height: 8,
-                    background: i <= currentStep ? '#030213' : '#e5e7eb',
+                    background: i <= currentStep ? '#5454e9' : '#e5e7eb',
                     opacity: i === currentStep ? 1 : i < currentStep ? 0.6 : 0.35,
                   }}
                 />
@@ -610,7 +610,7 @@ export default function SurveyRespondentOverlay({
               onClick={handleNext}
               disabled={!selectedAnswer}
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              style={{ background: '#030213', fontWeight: 600, minHeight: '44px' }}
+              style={{ background: '#5454e9', fontWeight: 600, minHeight: '44px' }}
             >
               {isLastQuestion ? 'Finalizar y Enviar' : 'Siguiente'}
               {!isLastQuestion && <ChevronRight size={16} />}

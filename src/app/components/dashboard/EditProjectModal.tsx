@@ -12,7 +12,7 @@ interface EditProjectModalProps {
   project: Project | null;
 }
 
-const AVATAR_COLORS = ['#030213', '#059669', '#7c3aed', '#dc2626', '#d97706', '#0284c7', '#be185d'];
+const AVATAR_COLORS = ['#5454e9', '#059669', '#7c3aed', '#dc2626', '#d97706', '#0284c7', '#be185d'];
 
 export default function EditProjectModal({ open, onClose, onSubmit, project }: EditProjectModalProps) {
   const [companyName, setCompanyName] = useState('');
@@ -205,7 +205,7 @@ export default function EditProjectModal({ open, onClose, onSubmit, project }: E
                   type="submit"
                   disabled={isLoading || loadingAuditors}
                   className="flex-1 py-2.5 rounded-lg text-white text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-                  style={{ background: '#030213', fontWeight: 600 }}
+                  style={{ background: '#5454e9', fontWeight: 600 }}
                 >
                   {isLoading ? (
                     <><Loader2 size={14} className="animate-spin" /> Guardando...</>

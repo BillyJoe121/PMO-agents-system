@@ -122,7 +122,7 @@ const MATURITY_LEVELS = [
   { level: 2, name: 'En Desarrollo',  color: '#525252', bg: '#f5f5f5', desc: 'Algunos procesos definidos, pero aplicación inconsistente entre equipos.' },
   { level: 3, name: 'Definido',       color: '#404040', bg: '#f5f5f5', desc: 'Procesos documentados y seguidos de manera consistente en la organización.' },
   { level: 4, name: 'Gestionado',     color: '#262626', bg: '#f5f5f5', desc: 'Procesos medidos y controlados mediante métricas y tableros de indicadores.' },
-  { level: 5, name: 'Optimizado',     color: '#0a0a0a', bg: '#f5f5f5', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
+  { level: 5, name: 'Optimizado',     color: '#5454e9', bg: '#f5f5f5', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
 ];
 
 // No local mock results are used in this module; all diagnostics come from fases_estado.
@@ -131,9 +131,9 @@ const MATURITY_LEVELS = [
 // PMO type config
 // ---------------------------------------------------------------------------
 const PMO_CONFIG = {
-  Ágil:       { color: '#0a0a0a', Icon: Layers,       label: 'Ágil' },
-  Híbrida:    { color: '#0a0a0a', Icon: Layers,  label: 'Híbrida' },
-  Predictiva: { color: '#0a0a0a', Icon: Layers, label: 'Predictiva' },
+  Ágil:       { color: '#5454e9', Icon: Layers,       label: 'Ágil' },
+  Híbrida:    { color: '#5454e9', Icon: Layers,  label: 'Híbrida' },
+  Predictiva: { color: '#5454e9', Icon: Layers, label: 'Predictiva' },
 };
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
               </button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 transition-all"
-                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+                style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                 {isLoading
                   ? <><Loader2 size={13} className="animate-spin" /> Aprobando…</>
                   : 'Aprobar diagnóstico'}
@@ -971,7 +971,7 @@ export default function MadurezModule() {
     setIsApproving(false);
     setShowApproveModal(false);
     updatePhaseStatus(projectId!, 5, 'completado',
-      `Madurez PMO ${pmoType} � Nivel ${formatMaturityLabel(MATURITY_LEVELS[(results?.overallLevel ?? 2) - 1].name, results?.overallLevel ?? 2)} � Promedio ${formatOneDecimal(results?.overallScore ?? 0)}. ${results?.summary?.slice(0, 120)}...`
+      `Madurez PMO ${pmoType} - Nivel ${formatMaturityLabel(MATURITY_LEVELS[(results?.overallLevel ?? 2) - 1].name, results?.overallLevel ?? 2)} - Promedio ${formatOneDecimal(results?.overallScore ?? 0)}. ${results?.summary?.slice(0, 120)}...`
     );
     playPhaseComplete(); // Phase_Complete: consultor aprobó definitivamente
     setView('approved');
@@ -991,7 +991,7 @@ export default function MadurezModule() {
 
   // ── Render ──
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}
@@ -1097,7 +1097,7 @@ export default function MadurezModule() {
                   onClick={allDone ? handleSend : undefined}
                   disabled={!allDone}
                   className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-white text-[13px] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:-translate-y-px"
-                  style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+                  style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                   <Send size={15} /> Confirmar encuestas y Enviar al Agente 5
                 </motion.button>
               </div>
@@ -1111,7 +1111,7 @@ export default function MadurezModule() {
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+              className="fixed inset-0 z-[100] bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center"
             >
               <div 
                 className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 
@@ -1207,7 +1207,7 @@ export default function MadurezModule() {
                   <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                     onClick={() => setShowApproveModal(true)}
                     className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-                    style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+                    style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                     <ThumbsUp size={14} /> Aprobar diagnóstico de madurez
                   </motion.button>
                 </div>

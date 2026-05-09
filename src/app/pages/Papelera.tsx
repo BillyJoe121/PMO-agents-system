@@ -6,6 +6,7 @@ import { ArrowLeft, Trash2, RefreshCcw, AlertTriangle, CheckCircle2, Loader2 } f
 import { useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
+import IcesiLogo from '../components/brand/IcesiLogo';
 
 // Tipo ligero para papelera
 interface TrashedProject {
@@ -79,15 +80,18 @@ export default function Papelera() {
   // if (currentUser?.role !== 'admin') return null;
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] px-10 py-10">
+    <div className="min-h-screen bg-[#f7f8ff] px-10 py-10">
       <div className="max-w-[1000px] mx-auto">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="inline-flex items-center gap-1.5 text-[12px] text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
-          style={{ fontWeight: 500 }}
-        >
-          <ArrowLeft size={12} strokeWidth={1.75} /> Volver al dashboard
-        </button>
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="inline-flex items-center gap-1.5 text-[12px] text-neutral-500 hover:text-neutral-900 transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <ArrowLeft size={12} strokeWidth={1.75} /> Volver al dashboard
+          </button>
+          <IcesiLogo variant="positive" className="brand-logo-mark h-9 w-auto" />
+        </div>
 
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-3">
@@ -192,7 +196,7 @@ export default function Papelera() {
                 <button 
                   onClick={handleRestore} disabled={isProcessing}
                   className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 hover:-translate-y-px transition-all disabled:opacity-70"
-                  style={{ background: '#0a0a0a', fontWeight: 500 }}
+                  style={{ background: '#5454e9', fontWeight: 500 }}
                 >
                   {isProcessing ? <Loader2 size={14} className="animate-spin" /> : 'Restaurar'}
                 </button>

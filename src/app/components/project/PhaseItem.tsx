@@ -281,7 +281,7 @@ export default function PhaseItem({ phase, projectId, onRetry, isLast, indexInGr
                     setShowResetModal(false);
                   }}
                   className="flex-1 py-2.5 rounded-full text-white text-[13px] hover:-translate-y-px transition-all"
-                  style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}
+                  style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}
                 >
                   Sí, reiniciar
                 </button>

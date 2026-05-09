@@ -180,7 +180,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
             window.open(artifact.downloadUrl, '_blank');
           }}
           className="flex-1 py-2 rounded-lg text-white text-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
-          style={{ background: '#030213', fontWeight: 500 }}
+          style={{ background: '#5454e9', fontWeight: 500 }}
         >
           <Download size={12} />Descargar
         </button>
@@ -231,7 +231,7 @@ function ConfirmFinalModal({
                 onClick={onConfirm}
                 disabled={isLoading}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{ background: '#0a0a0a', fontWeight: 600 }}
+                style={{ background: '#5454e9', fontWeight: 600 }}
               >
                 {isLoading
                   ? <><Loader2 size={14} className="animate-spin" /> Cerrando...</>
@@ -403,7 +403,7 @@ export default function ArtefactosView() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+          className="fixed inset-0 z-[100] bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center"
         >
           <div
             className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5"
@@ -459,7 +459,7 @@ export default function ArtefactosView() {
 
               <button
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity"
-                style={{ background: '#030213', fontWeight: 600 }}
+                style={{ background: '#5454e9', fontWeight: 600 }}
               >
                 <Archive size={15} />
                 Descargar todos (ZIP)
@@ -574,7 +574,7 @@ export default function ArtefactosView() {
                 whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
                 onClick={() => setShowConfirm(true)}
                 className="w-full py-5 rounded-2xl text-white flex flex-col items-center justify-center shadow-lg"
-                style={{ background: '#0a0a0a', fontWeight: 700 }}
+                style={{ background: '#5454e9', fontWeight: 700 }}
               >
                 <div className="flex items-center gap-2 text-base">
                   <Send size={18} />

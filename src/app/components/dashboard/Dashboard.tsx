@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import ProjectCard from './ProjectCard';
 import NewProjectModal from './NewProjectModal';
+import IcesiLogo from '../brand/IcesiLogo';
 
 type Tab = 'en_ejecucion' | 'completado';
 
@@ -167,7 +168,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       <div className="max-w-[1440px] mx-auto px-10 py-12">
         {/* Header */}
         <div className="flex items-end justify-between mb-12 gap-6">
@@ -184,32 +185,34 @@ export default function Dashboard() {
               <span className="text-neutral-600">{projects.length}</span> proyectos en cartera
             </p>
           </div>
-          <motion.button
-            whileHover={{ y: -1 }}
-            whileTap={{ y: 0 }}
-            onClick={() => setShowModal(true)}
-            className="group flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full text-white text-sm transition-all flex-shrink-0"
-            style={{
-              background: '#0a0a0a',
-              fontWeight: 500,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)',
-            }}
-          >
-            <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center transition-colors group-hover:bg-white/15">
-              <Plus size={13} strokeWidth={2.25} />
-            </span>
-            Nuevo proyecto
-          </motion.button>
+          <div className="flex items-center gap-4">
+            <IcesiLogo variant="positive" className="brand-logo-mark hidden md:block h-11 w-auto" />
+            <motion.button
+              whileHover={{ y: -1 }}
+              whileTap={{ y: 0 }}
+              onClick={() => setShowModal(true)}
+              className="brand-button-primary group flex items-center gap-2.5 pl-4 pr-5 py-3 rounded-full text-sm transition-all flex-shrink-0"
+              style={{
+                fontWeight: 500,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(84,84,233,0.42)',
+              }}
+            >
+              <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center transition-colors group-hover:bg-white/15">
+                <Plus size={13} strokeWidth={2.25} />
+              </span>
+              Nuevo proyecto
+            </motion.button>
+          </div>
         </div>
 
         {/* Stats strip */}
-        <div className="grid grid-cols-3 gap-px bg-neutral-200/60 rounded-2xl overflow-hidden mb-8 border border-neutral-200/60">
+        <div className="brand-kpi-strip grid-cols-3 mb-8">
           {[
             { label: 'Total', value: projects.length },
             { label: 'En ejecución', value: enEjecucionCount },
             { label: 'Completados', value: completadosCount },
           ].map((s) => (
-            <div key={s.label} className="bg-white px-5 py-3 flex items-center justify-between gap-3">
+            <div key={s.label} className="brand-kpi-item flex items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>{s.label}</p>
               <p className="text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.125rem', letterSpacing: '-0.02em' }}>
                 {s.value}
@@ -219,7 +222,7 @@ export default function Dashboard() {
         </div>
 
         {/* Toolbar — sticky on scroll */}
-        <div className="sticky top-0 z-30 py-4 mb-6 bg-[#fafaf9]/90 backdrop-blur-md flex items-center justify-between gap-4 flex-wrap">
+        <div className="sticky top-0 z-30 py-4 mb-6 bg-[#f7f8ff]/90 backdrop-blur-md flex items-center justify-between gap-4 flex-wrap">
           {/* Tabs */}
           <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white border border-neutral-200/80" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
             {tabs.map(tab => (
@@ -317,7 +320,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setShowModal(true)}
                   className="mt-6 flex items-center gap-2 px-4 py-2.5 rounded-full text-white text-sm transition-all hover:-translate-y-px"
-                  style={{ background: '#0a0a0a', fontWeight: 500 }}
+                  style={{ background: '#5454e9', fontWeight: 500 }}
                 >
                   <Plus size={14} /> Crear proyecto
                 </button>

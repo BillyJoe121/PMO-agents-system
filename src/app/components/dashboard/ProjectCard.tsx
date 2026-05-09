@@ -202,7 +202,7 @@ export default function ProjectCard({ project, index }: ProjectCardProps) {
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.9, delay: index * 0.05 + 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="h-full rounded-full"
-              style={{ background: progress === 100 ? '#10b981' : '#0a0a0a' }}
+              style={{ background: progress === 100 ? '#10b981' : '#5454e9' }}
             />
           </div>
         </div>

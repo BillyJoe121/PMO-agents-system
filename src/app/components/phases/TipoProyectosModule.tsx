@@ -194,7 +194,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
               </button>
               <button onClick={onConfirm} disabled={isLoading}
                 className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 transition-all"
-                style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
+                style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
                 {isLoading
                   ? <><Loader2 size={13} className="animate-spin" /> Aprobando…</>
                   : 'Aprobar diagnóstico'}
@@ -695,7 +695,7 @@ export default function TipoProyectosModule() {
         animate={{ scale: [1, 1.08, 1] }}
         transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
         className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg"
-        style={{ background: '#0a0a0a' }}
+        style={{ background: '#5454e9' }}
       >
         <Send size={34} className="text-white" />
       </motion.div>
@@ -714,7 +714,7 @@ export default function TipoProyectosModule() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.2 }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs"
-              style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+              style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
             >
               <CheckCircle2 size={12} />
               Agente {n}
@@ -757,7 +757,7 @@ export default function TipoProyectosModule() {
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-[#fafaf9]/85 backdrop-blur-md flex flex-col items-center justify-center"
+        className="fixed inset-0 z-[100] bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center"
       >
         <div 
           className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" 
@@ -1003,7 +1003,7 @@ export default function TipoProyectosModule() {
               whileTap={{ scale: 0.97 }}
               onClick={() => setShowApproveModal(true)}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-              style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+              style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
             >
               <ThumbsUp size={14} />
               Aprobar diagnóstico
@@ -1084,7 +1084,7 @@ export default function TipoProyectosModule() {
                   Composición del Enfoque
                 </p>
                 <div className="flex gap-1 h-3 rounded-full overflow-hidden mb-4 bg-white/50 border border-white/40">
-                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#0a0a0a' }} />
+                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#5454e9' }} />
                   <div style={{ width: `${diagnosis.type_breakdown.predictive_weight}%`, background: '#525252' }} />
                 </div>
                 <div className="flex justify-between text-[11px] mb-3" style={{ fontWeight: 600 }}>
@@ -1215,7 +1215,7 @@ export default function TipoProyectosModule() {
       <button
         onClick={handleRetry}
         className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm"
-        style={{ background: '#0a0a0a', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+        style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
       >
         <RefreshCw size={14} />
         Reintentar
@@ -1382,7 +1382,7 @@ export default function TipoProyectosModule() {
 
   // ── Layout ──
   return (
-    <div className="min-h-screen bg-[#fafaf9]">
+    <div className="min-h-screen bg-[#f7f8ff]">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}

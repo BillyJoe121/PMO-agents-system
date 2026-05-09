@@ -119,7 +119,7 @@ function mapDBRowToProject(row: Record<string, unknown>): Project {
       .join('')
       .substring(0, 2)
       .toUpperCase(),
-    color: '#030213',
+    color: '#5454e9',
     role: (perfil.role as string) ?? 'auditor'
   };
 
@@ -173,7 +173,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     id: '',
     name: 'Usuario',
     initials: 'US',
-    color: '#030213',
+    color: '#5454e9',
   });
 
   // ── Cargar proyectos desde Supabase ──────────────────────────────────────
@@ -231,7 +231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: profile.id,
         name,
         initials: name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase(),
-        color: '#030213',
+        color: '#5454e9',
         role: profile.role ?? 'auditor'
       });
     }
@@ -243,7 +243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchCurrentUser();
     } else {
       setProjects([]);
-      setCurrentUser({ id: '', name: 'Usuario', initials: 'US', color: '#030213' });
+      setCurrentUser({ id: '', name: 'Usuario', initials: 'US', color: '#5454e9' });
     }
   }, [session, fetchProjects, fetchCurrentUser]);
 

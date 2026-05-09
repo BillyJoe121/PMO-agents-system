@@ -11,6 +11,7 @@ import { useParams } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, CheckCircle2, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { useEncuestaExterna } from '../../hooks/useEncuestaExterna';
+import IcesiLogo from '../brand/IcesiLogo';
 
 const INTERPRETATION_MAP_IDONEIDAD: Record<number, string> = {
   0: 'Altamente ágil',
@@ -45,7 +46,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
       <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
         <motion.div
           className="h-full rounded-full"
-          style={{ background: '#030213' }}
+          style={{ background: '#5454e9' }}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -191,9 +192,7 @@ export default function ExternalSurveyView() {
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <header className="bg-white border-b border-gray-200 px-4 py-4">
           <div className="max-w-3xl mx-auto flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white flex-shrink-0" style={{ background: '#030213' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.75rem' }}>PMO</span>
-            </div>
+            <IcesiLogo variant="positive" className="brand-logo-mark h-10 w-auto flex-shrink-0" />
             <div>
               <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>{surveyTitle}</p>
             </div>
@@ -263,7 +262,7 @@ export default function ExternalSurveyView() {
                 onClick={() => setHasStarted(true)}
                 disabled={!userInfo.nombre.trim() || !userInfo.cargo.trim()}
                 className="w-full mt-5 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                style={{ background: '#030213', fontWeight: 600 }}
+                style={{ background: '#5454e9', fontWeight: 600 }}
               >
                 Comenzar Evaluación
                 <ChevronRight size={16} />
@@ -282,11 +281,9 @@ export default function ExternalSurveyView() {
         <div className="max-w-2xl mx-auto">
           {/* Logo + Survey name */}
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white flex-shrink-0" style={{ background: '#030213' }}>
-              <span style={{ fontWeight: 800, fontSize: '0.75rem' }}>PMO</span>
-            </div>
+            <IcesiLogo variant="positive" className="brand-logo-mark h-10 w-auto flex-shrink-0" />
             <div>
-              <p className="text-gray-400 text-xs" style={{ fontWeight: 500 }}>Universidad ICESI · PMO Intelligence Platform</p>
+              <p className="text-gray-400 text-xs" style={{ fontWeight: 500 }}>Universidad Icesi - PMO Intelligence Platform</p>
               <p className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Encuesta de {surveyTitle}</p>
             </div>
           </div>
@@ -310,7 +307,7 @@ export default function ExternalSurveyView() {
               <div className="mb-2">
                 <span
                   className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-wide"
-                  style={{ background: '#e9ebef', color: '#030213', fontWeight: 600 }}
+                  style={{ background: '#e9ebef', color: '#5454e9', fontWeight: 600 }}
                 >
                   {question.categoria}
                 </span>
@@ -398,8 +395,8 @@ export default function ExternalSurveyView() {
                         onClick={() => handleSelect(val)}
                         className="relative z-10 w-10 h-10 md:w-12 md:h-12 rounded-full border-2 transition-all flex items-center justify-center font-bold text-sm md:text-base hover:scale-110 focus:outline-none"
                         style={{
-                          borderColor: isSelected ? '#030213' : '#e5e7eb',
-                          background: isSelected ? '#030213' : '#fff',
+                          borderColor: isSelected ? '#5454e9' : '#e5e7eb',
+                          background: isSelected ? '#5454e9' : '#fff',
                           color: isSelected ? '#fff' : '#6b7280',
                           transform: isSelected ? 'scale(1.15)' : 'scale(1)',
                           boxShadow: isSelected ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
@@ -455,9 +452,9 @@ export default function ExternalSurveyView() {
                 className="flex-1 h-1.5 rounded-full transition-all"
                 style={{
                   background: i < currentStep
-                    ? '#030213'
+                    ? '#5454e9'
                     : i === currentStep
-                    ? '#030213'
+                    ? '#5454e9'
                     : '#e5e7eb',
                   opacity: i === currentStep ? 1 : i < currentStep ? 0.6 : 0.35,
                 }}
@@ -471,7 +468,7 @@ export default function ExternalSurveyView() {
             onClick={handleNext}
             disabled={selectedAnswer === undefined || isSubmitting}
             className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            style={{ background: '#030213', fontWeight: 600, minHeight: '44px' }}
+            style={{ background: '#5454e9', fontWeight: 600, minHeight: '44px' }}
           >
             {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : (isLastQuestion ? 'Finalizar' : 'Siguiente')}
             {!isLastQuestion && !isSubmitting && <ChevronRight size={16} />}
