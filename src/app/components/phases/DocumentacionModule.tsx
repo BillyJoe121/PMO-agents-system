@@ -15,12 +15,13 @@ import { DocumentacionLoadingView } from './documentacion/module/DocumentacionLo
 import { DocumentacionProcessingOverlay } from './documentacion/module/DocumentacionProcessingOverlay';
 import { DocumentList } from './documentacion/module/DocumentList';
 import { DocumentUploadSection } from './documentacion/module/DocumentUploadSection';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 type Documento = DocumentoLocal;
 
 export default function DocumentacionModule() {
   const { id: projectId } = useParams<{ id: string }>();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, isLoading } = useApp();
   const { playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -147,7 +148,7 @@ export default function DocumentacionModule() {
   }, []);
 
   const canComplete = documentos.length > 0 && documentos.every(d =>
-    d.category !== 'D11' || d.customCategory.trim() !== ''
+    d.category !== 'D16' || d.customCategory.trim() !== ''
   );
 
   const handleFiles = useCallback((files: FileList | File[]) => {
@@ -245,7 +246,11 @@ export default function DocumentacionModule() {
     }
   };
 
-  if (!project) return null;
+  if (!project) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y la fase documental..." />
+      : <MissingProjectState />;
+  }
 
   if (isLoadingData) {
     return <DocumentacionLoadingView />;

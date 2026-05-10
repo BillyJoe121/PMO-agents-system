@@ -5,6 +5,7 @@ import { Send, Loader2, AlertTriangle, CheckCircle2, Sparkles, FileEdit } from '
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import PhaseHeader from './_shared/PhaseHeader';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 function ConfirmModal({ open, phaseName, onCancel, onConfirm, isLoading }: {
   open: boolean; phaseName: string; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
@@ -55,7 +56,7 @@ export default function GenericPhaseModule() {
   // useParams() extrae :id y :phaseNum desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId, phaseNum: phaseNumber } = useParams<{ id: string; phaseNum: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, isLoading } = useApp();
 
   const pNum = parseInt(phaseNumber || '4');
   const project = getProject(projectId!);
@@ -66,7 +67,11 @@ export default function GenericPhaseModule() {
   const [isSending, setIsSending] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  if (!project || !phase) return null;
+  if (!project || !phase) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y la fase solicitada..." />
+      : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la fase solicitada." />;
+  }
 
   const isCompleted = phase.status === 'completado';
 

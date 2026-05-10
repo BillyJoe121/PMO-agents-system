@@ -10,6 +10,7 @@ import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, Printer, FileDown, CheckCircle2, Download, TrendingUp, Users, Layers } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import IcesiLogo from '../brand/IcesiLogo';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 const MATURITY_DATA = [
   { dimension: 'Procesos', value: 78 },
@@ -142,10 +143,14 @@ export default function ProjectSummaryView() {
   // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject } = useApp();
+  const { getProject, isLoading } = useApp();
   const project = getProject(projectId!);
 
-  if (!project) return null;
+  if (!project) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el resumen del proyecto..." />
+      : <MissingProjectState />;
+  }
 
   const handleExport = () => {
     // RF-F8-07: Implementar html2pdf.js o react-to-print

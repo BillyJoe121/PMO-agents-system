@@ -12,6 +12,7 @@ import { useSoundManager } from '../../hooks/useSoundManager';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import IdoneidadDiagnosisView from './idoneidad/IdoneidadDiagnosisView';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 import {
   factorMapping,
   getIdoneidadItemCode,
@@ -76,7 +77,7 @@ export default function IdoneidadModule() {
   // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const { activeLink, responses, diagnosis, isLoadingData, externalFile, setExternalFile, existingFileName, existingFileUrl, fetchInitialData, generateLink, processPhase, deleteFile } = useIdoneidad(projectId);
@@ -218,29 +219,24 @@ export default function IdoneidadModule() {
   };
 
   const handleReprocess = async () => {
-    setIsSending(true);
-    setModuleState('processing');
-    const nextIteration = ((phase.agentData as any)?.metadata?.iteration || 1) + 1;
-
     try {
       await reprocessPhase(projectId!, 3);
-      updatePhaseStatus(projectId!, 3, 'procesando');
-      await processPhase({
-        iteration: nextIteration,
-        comments: 'Reproceso solicitado desde el encabezado de la Fase 3.',
-      });
-      updatePhaseStatus(projectId!, 3, 'completado', 'Diagnóstico reprocesado.');
-      setModuleState('completed');
-      playPhaseComplete();
-      toast.success('Fase 3 reprocesada', { description: 'El diagnóstico de idoneidad fue generado nuevamente.' });
+      updatePhaseStatus(projectId!, 3, 'disponible');
+      setModuleState('selection');
+      setEntryMethod(null);
+      setManualData('');
+      setShowConfirm(false);
+      setExternalFile(null);
+      await generateLink();
       await fetchInitialData();
+      toast.success('Fase 3 reiniciada', {
+        description: 'Puedes recopilar nuevas respuestas o cargar un nuevo archivo antes de enviar al agente.',
+      });
     } catch (err: any) {
-      toast.error('Error reprocesando fase', { description: err?.message });
+      toast.error('Error reiniciando fase', { description: err?.message });
       setModuleState('selection');
       updatePhaseStatus(projectId!, 3, 'disponible');
       playProcessError();
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -292,7 +288,11 @@ export default function IdoneidadModule() {
     }
   };
 
-  if (!project || !phase) return null;
+  if (!project || !phase) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y la fase de idoneidad..." />
+      : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la fase de idoneidad." />;
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f8ff]">

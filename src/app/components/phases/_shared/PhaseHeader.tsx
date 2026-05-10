@@ -80,7 +80,7 @@ export default function PhaseHeader({
 
   return (
     <>
-      <div className="sticky top-0 z-20 bg-[#f7f8ff]/85 backdrop-blur-md border-b border-neutral-200/60 print:hidden">
+      <div className="fixed inset-x-0 top-0 z-[70] bg-[#f7f8ff]/95 backdrop-blur-md border-b border-neutral-200/60 shadow-[0_1px_0_rgba(255,255,255,0.65)] print:hidden">
         <div className="max-w-full mx-auto px-6 py-3 grid grid-cols-3 items-center gap-4">
           <div className="flex items-center gap-3 min-w-0 justify-start">
             {/* Back button */}
@@ -374,6 +374,7 @@ export default function PhaseHeader({
           </div>
         )}
       </div>
+      <div className="h-[100px] flex-shrink-0 print:hidden" aria-hidden="true" />
 
       {/* ── Modal de confirmación ─────────────────────────────────────────── */}
       <AnimatePresence>

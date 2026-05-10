@@ -57,7 +57,7 @@ export default function Sidebar() {
       </button>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 flex-1 w-full px-2">
+      <nav className="flex flex-col gap-1 flex-1 w-full px-2 mt-10">
         {navItems.map(item => {
           const active = isActive(item.path);
           return (

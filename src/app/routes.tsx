@@ -20,6 +20,7 @@ import ExternalSurveyView from './components/survey/ExternalSurveyView';
 import AdminPanelView from './components/admin/AdminPanelView';
 import Papelera from './pages/Papelera';
 import PlaceholderPage from './components/layout/PlaceholderPage';
+import { AppErrorBoundary, LoadingRouteState, RouteErrorFallback } from './components/layout/RouteState';
 
 /**
  * Root layout: provee los proveedores globales.
@@ -28,7 +29,9 @@ function Root() {
   return (
     <AuthProvider>
       <AppProvider>
-        <Outlet />
+        <AppErrorBoundary>
+          <Outlet />
+        </AppErrorBoundary>
       </AppProvider>
     </AuthProvider>
   );
@@ -41,7 +44,7 @@ function Root() {
 function AuthRoute() {
   const { session, isLoading } = useAuth();
   
-  if (isLoading) return null; // El ProtectedRoute ya maneja el loading principal
+  if (isLoading) return <LoadingRouteState message="Verificando sesion..." />;
   if (session) return <Navigate to="/dashboard" replace />;
   
   return <AuthModule />;
@@ -51,6 +54,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     Component: Root,
+    errorElement: <RouteErrorFallback />,
     children: [
       // ── Auth (index) ──
       { index: true, Component: AuthRoute },
@@ -61,6 +65,7 @@ export const router = createBrowserRouter([
       // ── Rutas protegidas del dashboard ──
       {
         path: 'dashboard',
+        errorElement: <RouteErrorFallback />,
         element: (
           <ProtectedRoute>
             <AppLayout />

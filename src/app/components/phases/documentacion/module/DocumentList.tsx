@@ -91,7 +91,7 @@ export function DocumentList({
                       />
 
                       <AnimatePresence>
-                        {doc.category === 'D11' && (
+                        {doc.category === 'D16' && (
                           <motion.input
                             initial={{ width: 0, opacity: 0 }}
                             animate={{ width: '10rem', opacity: 1 }}

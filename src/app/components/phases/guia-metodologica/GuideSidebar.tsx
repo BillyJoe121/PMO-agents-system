@@ -52,7 +52,7 @@ export function GuideSidebar({
             </span>
           )}
         </div>
-        <div className="space-y-2 max-h-[190px] overflow-y-auto pr-0.5">
+        <div className="space-y-2 max-h-[150px] 2xl:max-h-[190px] overflow-y-auto pr-0.5 [&::-webkit-scrollbar]:w-[8px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-primary [&::-webkit-scrollbar-thumb]:rounded-full">
           {versions.map((v, idx) => (
             <button
               key={v.number}
@@ -96,7 +96,7 @@ export function GuideSidebar({
       {/* RF-F7-04: Adjustment panel — fills remaining height */}
       <div className="flex-1 px-5 pb-4 flex flex-col overflow-hidden min-h-0">
         {!isCompleted ? (
-          <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 flex-1 min-h-0 flex flex-col">
+          <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
               <div className="w-8 h-8 rounded-xl bg-[#865cf0]/10 text-[#6a45d8] flex items-center justify-center">
                 <MessageSquare size={14} strokeWidth={1.85} />
@@ -112,9 +112,9 @@ export function GuideSidebar({
               value={adjustText}
               onChange={e => onAdjustTextChange(e.target.value)}
               placeholder="Ej: En el capítulo 3, amplía las ceremonias ágiles con ejemplos de la industria financiera…"
-              className="flex-1 min-h-[180px] w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-[#865cf0]/45 focus:ring-4 focus:ring-[#865cf0]/10 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400"
+              className="flex-1 min-h-[96px] w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-[#865cf0]/45 focus:ring-4 focus:ring-[#865cf0]/10 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400"
             />
-            <p className="text-neutral-400 text-[11px] text-right mt-1 mb-3 flex-shrink-0 tabular-nums">{adjustText.length} caracteres</p>
+            <p className="text-neutral-400 text-[11px] text-right mt-1 mb-2 flex-shrink-0 tabular-nums">{adjustText.length} caracteres</p>
             <div className="flex gap-2 flex-shrink-0">
               <motion.button
                 whileHover={{ y: -1 }} whileTap={{ y: 0 }}

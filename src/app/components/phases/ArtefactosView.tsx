@@ -11,6 +11,7 @@ import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import PhaseHeader from './_shared/PhaseHeader';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 interface Artifact {
   id: string;
@@ -255,7 +256,7 @@ function ConfirmFinalModal({
 export default function ArtefactosView() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, isLoading } = useApp();
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 8);
@@ -385,7 +386,11 @@ export default function ArtefactosView() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [phase?.status, phase?.agentData, hasLoadedArtifacts, startPolling, loadPhase8State]);
 
-  if (!project || !phase) return null;
+  if (!project || !phase) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y el catalogo de artefactos..." />
+      : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la fase de artefactos." />;
+  }
 
   const isCompleted = phase.status === 'completado';
 
@@ -439,7 +444,7 @@ export default function ArtefactosView() {
   const hasEmptyRecommendations = hasLoadedArtifacts && !isProcessing && recommendedArtifacts.length === 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {renderProcessing()}
 
       <PhaseHeader
@@ -452,11 +457,11 @@ export default function ArtefactosView() {
       />
 
       {/* Split Layout */}
-      <div className="flex-1 grid grid-cols-12 overflow-hidden" style={{ height: 'calc(100vh - 65px)' }}>
+      <div className="flex-1 min-h-0 grid grid-cols-12 overflow-hidden">
 
         {/* ── Left: Artifacts Grid (col-span-8) ── */}
         <div className="col-span-8 flex flex-col border-r border-gray-200 overflow-hidden">
-          <div className="bg-white border-b border-neutral-100 px-8 py-6 flex items-center justify-between flex-shrink-0">
+          <div className="bg-white border-b border-neutral-100 px-8 py-5 flex items-center justify-between flex-shrink-0">
             <div>
               <h2 className="text-neutral-900 text-2xl tracking-tight" style={{ fontWeight: 850 }}>Catálogo de Entregables</h2>
               <p className="text-neutral-500 text-[13px] mt-1">Se han generado {MOCK_ARTIFACTS.length} plantillas personalizadas para su gestión operativa.</p>
@@ -473,7 +478,7 @@ export default function ArtefactosView() {
           </div>
 
           {/* Artifacts Grid Container */}
-          <div className="flex-1 overflow-y-auto p-8 relative">
+          <div className="flex-1 min-h-0 overflow-y-auto p-8 relative [&::-webkit-scrollbar]:w-[8px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-primary [&::-webkit-scrollbar-thumb]:rounded-full">
             {!hasLoadedArtifacts && (
               <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center">
                 <Loader2 size={22} className="text-neutral-700 animate-spin mb-4" strokeWidth={1.75} />
@@ -540,18 +545,18 @@ export default function ArtefactosView() {
 
         {/* ── Right: Iteration & Close (col-span-4) ── */}
         <div className="col-span-4 flex flex-col bg-neutral-50/50 border-l border-neutral-200 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-8 space-y-8">
-            <div className="bg-white rounded-2xl border border-neutral-200/60 p-6 shadow-sm">
-              <h3 className="text-neutral-900 text-[14px] mb-4 uppercase tracking-wider" style={{ fontWeight: 800 }}>Resumen del Paquete</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-100/50">
+          <div className="flex-1 min-h-0 p-6 space-y-5">
+            <div className="bg-white rounded-2xl border border-neutral-200/60 p-5 shadow-sm">
+              <h3 className="text-neutral-900 text-[13px] mb-3 uppercase tracking-wider" style={{ fontWeight: 800 }}>Resumen del Paquete</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 border border-emerald-100/50">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
                     <span className="text-neutral-700 text-sm font-semibold">Recomendados</span>
                   </div>
                   <span className="text-emerald-700 font-bold tabular-nums">{recommendedArtifacts.length}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-100 border border-neutral-200/50">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-100 border border-neutral-200/50">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-neutral-400" />
                     <span className="text-neutral-600 text-sm">Complementarios</span>
@@ -564,9 +569,9 @@ export default function ArtefactosView() {
             <hr className="border-neutral-200/60" />
 
             {!isCompleted && (
-              <div className="bg-amber-50 border border-amber-200/50 rounded-2xl p-6 flex items-start gap-4 shadow-sm shadow-amber-900/5">
-                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 border border-amber-200/60 shadow-sm">
-                  <AlertTriangle size={20} className="text-amber-500" />
+              <div className="bg-amber-50 border border-amber-200/50 rounded-2xl p-5 flex items-start gap-3 shadow-sm shadow-amber-900/5">
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 border border-amber-200/60 shadow-sm">
+                  <AlertTriangle size={18} className="text-amber-500" />
                 </div>
                 <div>
                   <p className="text-amber-950 text-sm mb-1.5" style={{ fontWeight: 700 }}>Revisión Final de Entrega</p>
@@ -591,18 +596,18 @@ export default function ArtefactosView() {
           </div>
 
           {!isCompleted && (
-            <div className="p-8 border-t border-neutral-200 bg-white flex-shrink-0 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
+            <div className="px-6 pb-6 pt-4 bg-white flex-shrink-0">
               <motion.button
                 whileHover={{ scale: 1.01, brightness: 1.1 }} whileTap={{ scale: 0.98 }}
                 onClick={() => setShowConfirm(true)}
-                className="w-full py-6 rounded-2xl text-white flex flex-col items-center justify-center shadow-xl shadow-blue-600/20 group relative overflow-hidden"
+                className="w-full max-w-sm mx-auto py-3.5 rounded-xl text-white flex items-center justify-center gap-2.5 shadow-lg shadow-blue-600/15 group relative overflow-hidden"
                 style={{ background: '#5454e9', fontWeight: 850 }}
               >
-                <div className="flex items-center gap-3 text-[17px] relative z-10">
-                  <Send size={20} />
+                <div className="flex items-center gap-2.5 text-[14px] relative z-10">
+                  <Send size={16} />
                   Aprobar y Cerrar Proyecto
                 </div>
-                <span className="text-blue-100/60 text-[11px] mt-1.5 uppercase tracking-widest relative z-10" style={{ fontWeight: 500 }}>
+                <span className="hidden">
                   Acción definitiva e irreversible
                 </span>
                 <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />

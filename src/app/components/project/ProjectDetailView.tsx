@@ -8,12 +8,13 @@ import { supabase } from '../../lib/supabase';
 import PhaseItem from './PhaseItem';
 import EditProjectModal from '../dashboard/EditProjectModal';
 import IcesiLogo from '../brand/IcesiLogo';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 export default function ProjectDetailView() {
   // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, reprocessPhase, editProject, moveToTrash, updatePhaseStatus } = useApp();
+  const { getProject, reprocessPhase, editProject, moveToTrash, updatePhaseStatus, isLoading } = useApp();
   const [showSummary, setShowSummary] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -28,6 +29,11 @@ export default function ProjectDetailView() {
   const project = getProject(projectId!);
 
   if (!project) {
+    if (isLoading) return <LoadingRouteState message="Cargando el proyecto..." />;
+    return <MissingProjectState />;
+  }
+
+  /*
     return (
       <div className="min-h-screen bg-[#f7f8ff] flex items-center justify-center">
         <div className="text-center">
@@ -40,6 +46,7 @@ export default function ProjectDetailView() {
     );
   }
 
+  */
   const completedCount = project.phases.filter(p => p.status === 'completado').length;
   const totalPhases = project.phases.length;
   const progressPct = (completedCount / totalPhases) * 100;

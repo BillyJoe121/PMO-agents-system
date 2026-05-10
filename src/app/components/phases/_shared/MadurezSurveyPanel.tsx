@@ -4,6 +4,9 @@ import { Globe, Copy, RefreshCw, ClipboardEdit, AlertTriangle, Users, Trash2, Pa
 import { useMadurez } from '../../../hooks/useMadurez';
 import { toast } from 'sonner';
 
+const displayStoredFileName = (fileName: string) =>
+  fileName.replace(/^f5_(predictiva|agil)_\d+_(\d+_)?/i, '');
+
 export default function MadurezSurveyPanel({
   title,
   subtitle,
@@ -156,13 +159,13 @@ export default function MadurezSurveyPanel({
               <input ref={fileInputRef} type="file" accept=".csv" multiple className="hidden" onChange={handleFileChange} />
               
               <div className="space-y-2 mb-3">
-                {existingFiles.map((f, i) => (
-                  <div key={`exist-${i}`} className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center gap-3">
+                {existingFiles.map((f) => (
+                  <div key={`exist-${f.name}`} className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
                       <Paperclip size={14} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-blue-900 font-medium truncate">{f.name}</p>
+                      <p className="text-[13px] text-blue-900 font-medium truncate">{displayStoredFileName(f.name)}</p>
                       <p className="text-[11px] text-blue-600/70">Archivo en base de datos</p>
                     </div>
                     <div className="flex items-center gap-1 border-l border-blue-200/50 pl-1">
@@ -176,8 +179,8 @@ export default function MadurezSurveyPanel({
                   </div>
                 ))}
 
-                {externalFiles.map((f, i) => (
-                  <div key={`ext-${i}`} className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl flex items-center gap-3">
+                {externalFiles.map((f) => (
+                  <div key={`ext-${f.name}-${f.size}-${f.lastModified}`} className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center flex-shrink-0 text-neutral-600">
                       <CheckCircle2 size={14} />
                     </div>

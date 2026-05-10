@@ -133,7 +133,7 @@ export function useDocumentacion(projectId: string) {
             name: d.nombre_personalizado || 'Documento',
             size: (d.metadatos?.size_kb || 0) * 1024,
             type: 'application/pdf',
-            category: isStandard ? d.categoria : 'D11',
+            category: isStandard ? d.categoria : 'D16',
             customCategory: isStandard ? '' : d.categoria,
             storagePath: d.storage_path,
             dbId: d.id,
@@ -175,7 +175,7 @@ export function useDocumentacion(projectId: string) {
         // Si ya fue subido antes (tiene storagePath), actualizamos su categoria en DB por si cambió y lo reutilizamos
         if (doc.storagePath && doc.dbId) {
           await supabase.from('documentos').update({
-            categoria: doc.category === 'D11' ? doc.customCategory : doc.category
+            categoria: doc.category === 'D16' ? doc.customCategory : doc.category
           }).eq('id', doc.dbId);
           enriched.push(doc);
           continue;
@@ -225,7 +225,7 @@ export function useDocumentacion(projectId: string) {
           .insert({
             proyecto_id: projectId,
             storage_path: signedUrl,
-            categoria: doc.category === 'D11' ? doc.customCategory : doc.category,
+            categoria: doc.category === 'D16' ? doc.customCategory : doc.category,
             nombre_personalizado: doc.name,
             metadatos: { size_kb: Math.round(doc.size / 1024), original_name: doc.name },
           })

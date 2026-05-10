@@ -280,7 +280,7 @@ async function callKimi(
       "Authorization": `Bearer ${apiKey.trim()}`,
     },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(90000), // 90s timeout para chat completion
+    signal: AbortSignal.timeout(180000), // 180s timeout para salidas largas como la guia de Fase 7
   });
   const data = await readResponseData(response);
 

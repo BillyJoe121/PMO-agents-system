@@ -2,6 +2,23 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { EncuestaResponse } from './useIdoneidad';
 
+const sanitizeUploadFileName = (fileName: string) =>
+  fileName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'encuesta.csv';
+
+const normalizeStoredFileName = (fileName: string) =>
+  fileName.replace(/^f5_(predictiva|agil)_\d+_(\d+_)?/i, '').toLowerCase();
+
+const normalizeLocalFileName = (fileName: string) =>
+  sanitizeUploadFileName(fileName).toLowerCase();
+
+const fileIdentity = (file: File) =>
+  `${file.name.toLowerCase()}::${file.size}::${file.lastModified}`;
+
 export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predictiva' | 'agil') {
   const [activeLink, setActiveLink] = useState<string | null>(null);
   const [responses, setResponses] = useState<EncuestaResponse[]>([]);
@@ -42,11 +59,20 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
       if (f5Files.length > 0) {
         f5Files.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const validFiles = f5Files.filter(f => !deletedFilesRef.current.has(f.name));
-        const fileObjects = await Promise.all(validFiles.map(async (file) => {
+        const dedupedFiles = Array.from(
+          validFiles.reduce((acc, file) => {
+            const key = normalizeStoredFileName(file.name);
+            if (!acc.has(key)) acc.set(key, file);
+            return acc;
+          }, new Map<string, (typeof validFiles)[number]>()).values()
+        );
+        const uploadedFileNames = new Set(dedupedFiles.map(file => normalizeStoredFileName(file.name)));
+        const fileObjects = await Promise.all(dedupedFiles.map(async (file) => {
           const { data: signedData } = await supabase.storage.from('documentos-pmo').createSignedUrl(`proyectos/${projectId}/${file.name}`, 3600);
           return { name: file.name, url: signedData?.signedUrl || '' };
         }));
         setExistingFiles(fileObjects);
+        setExternalFiles(prev => prev.filter(file => !uploadedFileNames.has(normalizeLocalFileName(file.name))));
       } else {
         setExistingFiles([]);
       }
@@ -81,25 +107,31 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
 
   const deleteExistingFile = async (fileName: string) => {
     if (!projectId) return;
-    deletedFilesRef.current.add(fileName);
-    setExistingFiles(prev => prev.filter(f => f.name !== fileName));
-    const { error } = await supabase.storage.from('documentos-pmo').remove([`proyectos/${projectId}/${fileName}`]);
+    const targetName = normalizeStoredFileName(fileName);
+    const prefix = `f5_${tipoEncuesta}_`;
+    const { data: files } = await supabase.storage.from('documentos-pmo').list(`proyectos/${projectId}`);
+    const fileNamesToDelete = (files || [])
+      .filter(file => file.name.startsWith(prefix) && normalizeStoredFileName(file.name) === targetName)
+      .map(file => file.name);
+    const namesToDelete = fileNamesToDelete.length > 0 ? fileNamesToDelete : [fileName];
+
+    namesToDelete.forEach(name => deletedFilesRef.current.add(name));
+    setExistingFiles(prev => prev.filter(f => normalizeStoredFileName(f.name) !== targetName));
+    const { error } = await supabase.storage.from('documentos-pmo').remove(
+      namesToDelete.map(name => `proyectos/${projectId}/${name}`)
+    );
     if (error) console.error("Error deleting file:", error);
   };
 
   const uploadFileIfAny = async () => {
-    if (!projectId || externalFiles.length === 0) return existingFiles.map(f => f.url);
+    if (!projectId || externalFiles.length === 0) return existingFiles.length > 0 ? existingFiles[0].url : null;
     
     const uploadedUrls: string[] = [...existingFiles.map(f => f.url)];
+    const filesToUpload = [...externalFiles];
     
-    for (const file of externalFiles) {
-      const safeFileName = file.name
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9._-]/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_+|_+$/g, '');
-      const path = `proyectos/${projectId}/f5_${tipoEncuesta}_${Date.now()}_${safeFileName || 'encuesta.csv'}`;
+    for (const [index, file] of filesToUpload.entries()) {
+      const safeFileName = sanitizeUploadFileName(file.name);
+      const path = `proyectos/${projectId}/f5_${tipoEncuesta}_${Date.now()}_${index}_${safeFileName}`;
       const { error } = await supabase.storage.from('documentos-pmo').upload(path, file);
       if (error) throw error;
       const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(path, 3600);
@@ -107,11 +139,17 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
          uploadedUrls.push(data.signedUrl);
       }
     }
+    const uploadedKeys = new Set(filesToUpload.map(fileIdentity));
+    setExternalFiles(prev => prev.filter(file => !uploadedKeys.has(fileIdentity(file))));
     return uploadedUrls.length > 0 ? uploadedUrls[0] : null; // Keep returning one or adapt if needed elsewhere
   };
 
   const addExternalFile = (file: File) => {
-    setExternalFiles(prev => [...prev, file]);
+    setExternalFiles(prev => {
+      const fileName = normalizeLocalFileName(file.name);
+      const withoutSameName = prev.filter(existing => normalizeLocalFileName(existing.name) !== fileName);
+      return [...withoutSameName, file];
+    });
   };
 
   const removeExternalFile = (fileName: string) => {

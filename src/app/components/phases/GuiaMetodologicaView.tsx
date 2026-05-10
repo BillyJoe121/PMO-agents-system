@@ -32,6 +32,7 @@ import { ApproveModal } from './guia-metodologica/ApproveModal';
 import { DocumentRenderer } from './guia-metodologica/DocumentRenderer';
 import { GuideSidebar } from './guia-metodologica/GuideSidebar';
 import { ProcessingView } from './guia-metodologica/ProcessingView';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 import {
   MAX_TRANSIENT_GEMINI_RETRIES,
   PROCESSING_STEPS,
@@ -82,6 +83,7 @@ export default function GuiaMetodologicaView() {
   const transientRetryCountRef = useRef(0);
   const transientRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAgentRequestRef = useRef<{ iteration: number; comments: string | null } | null>(null);
+  const guideFinishedRef = useRef(false);
 
   const currentVersion = versions[currentVersionIdx] ?? null;
 
@@ -98,11 +100,31 @@ export default function GuiaMetodologicaView() {
     return true;
   }, []);
 
+  const finishGuideGeneration = useCallback((raw: any, status: 'disponible' | 'completado' = 'disponible') => {
+    if (guideFinishedRef.current) return true;
+    const ok = applyGuidePayload(raw);
+    if (!ok) return false;
+
+    guideFinishedRef.current = true;
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+    setIsAdjusting(false);
+    transientRetryCountRef.current = 0;
+    setView(status === 'completado' ? 'approved' : 'results');
+    updatePhaseStatus(projectId!, 7, status);
+    playAgentSuccess();
+    toast.success('Agente 7 genero la guia metodologica', {
+      description: 'El documento quedo listo para revision.',
+    });
+    return true;
+  }, [applyGuidePayload, playAgentSuccess, projectId, updatePhaseStatus]);
+
   // ── RF-F7-01: Auto-trigger on mount ──────────────────────────────────────
   const startPolling = useCallback((startedAt = Date.now(), forceRestart = false) => {
     if (!projectId) return;
     if (pollRef.current && !forceRestart) return;
     if (pollRef.current) clearInterval(pollRef.current);
+    guideFinishedRef.current = false;
     pollStartRef.current = startedAt;
     pollTimeoutStartRef.current = Date.now();
 
@@ -143,14 +165,17 @@ export default function GuiaMetodologicaView() {
             .eq('numero_fase', 7);
 
           updatePhaseStatus(projectId, 7, 'procesando');
+          guideFinishedRef.current = false;
           setView('processing');
           setProcessingStep(1);
 
-          const { error: retryError } = await supabase.functions.invoke('pmo-agent', {
+          const { data: retryData, error: retryError } = await supabase.functions.invoke('pmo-agent', {
             body: { projectId, phaseNumber: 7, ...lastAgentRequestRef.current },
           });
           if (retryError) throw new Error(retryError.message);
 
+          const retryPayload = (retryData as any)?.data ?? (retryData as any)?.diagnosis;
+          if (retryPayload && !(retryData as any)?.inProgress && finishGuideGeneration(retryPayload, 'disponible')) return;
           startPolling(retryStartedAt, true);
         } catch (retryErr: any) {
           setIsAdjusting(false);
@@ -164,7 +189,7 @@ export default function GuiaMetodologicaView() {
     };
 
     const poll = async () => {
-      if (Date.now() - pollTimeoutStartRef.current > 180000) {
+      if (Date.now() - pollTimeoutStartRef.current > 8 * 60 * 1000) {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
@@ -219,8 +244,7 @@ export default function GuiaMetodologicaView() {
           toast.error('El Agente 7 encontro un error.', { description: message, duration: 9000 });
           return;
         }
-        const ok = applyGuidePayload(data.datos_consolidados);
-        if (!ok) {
+        if (!finishGuideGeneration(data.datos_consolidados, data.estado_visual === 'completado' ? 'completado' : 'disponible')) {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           setIsAdjusting(false);
@@ -229,16 +253,6 @@ export default function GuiaMetodologicaView() {
           updatePhaseStatus(projectId, 7, 'disponible');
           return;
         }
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = null;
-        setIsAdjusting(false);
-        transientRetryCountRef.current = 0;
-        setView(data.estado_visual === 'completado' ? 'approved' : 'results');
-        updatePhaseStatus(projectId, 7, data.estado_visual as any);
-        playAgentSuccess();
-        toast.success('Agente 7 genero la guia metodologica', {
-          description: 'El documento quedo listo para revision.',
-        });
         return;
       }
 
@@ -263,8 +277,8 @@ export default function GuiaMetodologicaView() {
     };
 
     poll();
-    pollRef.current = setInterval(poll, 4000);
-  }, [applyGuidePayload, chapters.length, playAgentSuccess, projectId, updatePhaseStatus]);
+    pollRef.current = setInterval(poll, 1500);
+  }, [chapters.length, finishGuideGeneration, projectId, updatePhaseStatus]);
 
   const invokeAgent7 = useCallback(async (iteration = 1, comments: string | null = null) => {
     if (!projectId) return;
@@ -274,6 +288,7 @@ export default function GuiaMetodologicaView() {
     if (transientRetryTimeoutRef.current) clearTimeout(transientRetryTimeoutRef.current);
     transientRetryTimeoutRef.current = null;
     lastAgentRequestRef.current = { iteration, comments };
+    guideFinishedRef.current = false;
 
     // CRITICAL: Update DB directly BEFORE invoking the edge function.
     // The edge function checks DB estado_visual === 'procesando' before saving results.
@@ -288,11 +303,14 @@ export default function GuiaMetodologicaView() {
     updatePhaseStatus(projectId, 7, 'procesando');
     setView('processing');
     setProcessingStep(1);
+    startPolling(startedAt, true);
     try {
-      const { error } = await supabase.functions.invoke('pmo-agent', {
+      const { data, error } = await supabase.functions.invoke('pmo-agent', {
         body: { projectId, phaseNumber: 7, iteration, comments },
       });
       if (error) throw new Error(error.message);
+      const agentPayload = (data as any)?.data ?? (data as any)?.diagnosis;
+      if (agentPayload && !(data as any)?.inProgress && finishGuideGeneration(agentPayload, 'disponible')) return;
       startPolling(startedAt, true);
     } catch (err: any) {
       if (isTransientGeminiError(err?.message || '')) {
@@ -300,12 +318,34 @@ export default function GuiaMetodologicaView() {
         startPolling(startedAt, true);
         return;
       }
+      const { data: stateAfterError } = await supabase
+        .from('fases_estado')
+        .select('estado_visual, datos_consolidados')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 7)
+        .single();
+
+      if (stateAfterError?.datos_consolidados && stateAfterError.estado_visual !== 'error') {
+        if (finishGuideGeneration(stateAfterError.datos_consolidados, stateAfterError.estado_visual === 'completado' ? 'completado' : 'disponible')) return;
+      }
+
+      if (stateAfterError?.estado_visual === 'procesando') {
+        setView('processing');
+        startPolling(startedAt, true);
+        toast.info('El Agente 7 sigue en ejecucion.', {
+          description: 'Seguiremos monitoreando el resultado en esta pantalla.',
+        });
+        return;
+      }
+
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
       setIsAdjusting(false);
       setView(versions.length > 0 ? 'results' : 'auto-trigger');
       updatePhaseStatus(projectId, 7, 'disponible');
       toast.error('Error iniciando Agente 7', { description: err.message });
     }
-  }, [projectId, startPolling, updatePhaseStatus, versions.length]);
+  }, [finishGuideGeneration, projectId, startPolling, updatePhaseStatus, versions.length]);
 
   // ── Processing: advance steps then show results ───────────────────────────
   useEffect(() => {
@@ -372,7 +412,11 @@ export default function GuiaMetodologicaView() {
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  if (!project || !phase) return null;
+  if (!project || !phase) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y la guia metodologica..." />
+      : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la guia metodologica." />;
+  }
 
   // ── Remaining handlers (non-hook, safe after guard) ──────────────────────
   const handleRequestAdjustments = async () => {
@@ -418,6 +462,7 @@ export default function GuiaMetodologicaView() {
       updatePhaseStatus(projectId!, 7, 'procesando');
       hasFailed.current = false;
       autoTriggered.current = true; // prevent auto-trigger loop during reprocess
+      guideFinishedRef.current = false;
       setView('processing');
       setProcessingStep(1);
       startPolling(startedAt, true);
@@ -427,6 +472,8 @@ export default function GuiaMetodologicaView() {
         body: { projectId, phaseNumber: 7, iteration: nextIteration, comments: comment },
       });
       if (error) throw new Error((data as any)?.error || error.message);
+      const agentPayload = (data as any)?.data ?? (data as any)?.diagnosis;
+      if (agentPayload && !(data as any)?.inProgress && finishGuideGeneration(agentPayload, 'disponible')) return;
 
       toast.info('Reprocesando guía metodológica…', {
         description: 'El Agente 7 está incorporando las instrucciones del consultor.',
@@ -547,7 +594,7 @@ export default function GuiaMetodologicaView() {
 
           {/* Document canvas */}
           {/* RF-F7-03: Integrar iframe apuntando a la signedUrl de Supabase Storage (PDF real del Agente 7) */}
-          <div className="flex-1 min-h-0 bg-[#f2f3f7] overflow-y-auto overscroll-contain p-4 lg:p-6 relative print:block print:h-auto print:overflow-visible print:p-0">
+          <div className="flex-1 min-h-0 bg-[#f2f3f7] overflow-y-auto overscroll-contain p-4 lg:p-6 relative print:block print:h-auto print:overflow-visible print:p-0 [&::-webkit-scrollbar]:w-[8px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-primary [&::-webkit-scrollbar-thumb]:rounded-full">
 
             {/* Adjustment overlay */}
             <AnimatePresence>

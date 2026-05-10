@@ -22,15 +22,21 @@ import {
 
 const DOC_CATEGORIES = [
   { value: 'D01', label: 'Organigrama' },
-  { value: 'D02', label: 'Artefactos de Gestion de proyectos' },
+  { value: 'D02', label: 'Artefactos de Gestión de proyectos' },
   { value: 'D03', label: 'Plataformas y Sistemas' },
   { value: 'D04', label: 'Listado de Proyectos' },
-  { value: 'D05', label: 'Proyecto mejor documentado' },
-  { value: 'D06', label: 'Resultados Estrategicos' },
-  { value: 'D07', label: 'Mapa de Procesos' },
-  { value: 'D08', label: 'Arquitectura Organizacional/TI' },
-  { value: 'D09', label: 'Metodologia de Proyectos' },
-  { value: 'D10', label: 'Portafolio de Productos/Servicios' },
+  { value: 'D05', label: 'Listado de lideres del proyecto' },
+  { value: 'D06', label: 'Proyecto mejor documentado' },
+  { value: 'D07', label: 'Resultados Estratégicos' },
+  { value: 'D08', label: 'Resultados financieros' },
+  { value: 'D09', label: 'Mapa de Procesos' },
+  { value: 'D10', label: 'Filosofia organizacional' },
+  { value: 'D11', label: 'Modelo de Negocio' },
+  { value: 'D12', label: 'Arquitectura Organizacional/TI' },
+  { value: 'D13', label: 'Metodología de Gestión de Proyectos' },
+  { value: 'D14', label: 'Portafolio de Productos/Servicios' },
+  { value: 'D15', label: 'Segmentos de clientes' },
+  { value: 'D16', label: 'Otros' },
 ];
 
 function buildDocumentLookup(diagnosis: AgentDiagnosis) {
@@ -375,7 +381,7 @@ export default function DocumentacionDiagnosisView({ diagnosis }: { diagnosis: A
         <LifecycleCoverage diagnosis={d} lookup={lookup} />
       </PhaseReportSection>
 
-      <PhaseReportSection title="Inventario y cobertura documental" eyebrow="D01 - D10" icon={<FileSearch size={18} />} tone="slate">
+      <PhaseReportSection title="Inventario y cobertura documental" eyebrow="D01 - D16" icon={<FileSearch size={18} />} tone="slate">
         <InventoryTable diagnosis={d} />
       </PhaseReportSection>
 

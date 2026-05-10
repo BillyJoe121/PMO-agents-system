@@ -33,8 +33,8 @@ function ProcessingView({
         </h2>
         <p className="text-[#5454e9] text-[13px] max-w-md text-center leading-relaxed mb-6">
           {isAdjustment
-            ? 'El Agente está incorporando los ajustes del consultor y generando una nueva versión.'
-            : 'La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6.'}
+            ? 'El Agente esta incorporando los ajustes del consultor y generando una nueva version extensa. Este proceso puede tardar varios minutos.'
+            : 'La guia se esta construyendo de acuerdo al enfoque aprobado en la Fase 6. Este proceso puede tardar varios minutos.'}
         </p>
 
         <div className="hidden">
@@ -87,7 +87,7 @@ function ProcessingView({
         
         <p className="text-neutral-400 text-[10px] mt-8 flex items-center gap-1.5 justify-center uppercase tracking-widest">
           <AlertCircle size={10} strokeWidth={1.75} />
-          No cierre esta pantalla
+          Seguiremos monitoreando el resultado
         </p>
       </motion.div>
     </AnimatePresence>

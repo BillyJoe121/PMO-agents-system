@@ -244,6 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else {
       setProjects([]);
       setCurrentUser({ id: '', name: 'Usuario', initials: 'US', color: '#5454e9' });
+      setIsLoading(false);
     }
   }, [session, fetchProjects, fetchCurrentUser]);
 
@@ -274,7 +275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [fetchProjects, fetchCurrentUser]);
+  }, [session, fetchProjects]);
 
   // ── Crear nuevo proyecto ──────────────────────────────────────────────────
   const addProject = useCallback(async (data: Omit<Project, 'id' | 'phases' | 'status'>) => {

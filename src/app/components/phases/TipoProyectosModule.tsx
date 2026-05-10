@@ -30,6 +30,7 @@ import { useSoundManager } from '../../hooks/useSoundManager';
 import { normalizeIdoneidadDiagnosisItems, getIdoneidadItemCode, getIdoneidadItemScore, inferIdoneidadDimension, factorMapping } from './IdoneidadModule';
 import TipoProyectosDiagnosisView from './tipo-proyectos/TipoProyectosDiagnosisView';
 import TipoProyectosIdoneidadAnnex from './tipo-proyectos/TipoProyectosIdoneidadAnnex';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,15 +121,44 @@ function parseDiagnosisPayload(data: any): any | null {
 export default function TipoProyectosModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 4);
   const phase3 = project?.phases.find(p => p.number === 3);
+  const [freshPhase3AgentData, setFreshPhase3AgentData] = useState<any>(null);
+  const phase3AgentData = freshPhase3AgentData ?? phase3?.agentData;
+
+  useEffect(() => {
+    if (phase3?.agentData) {
+      setFreshPhase3AgentData(phase3.agentData);
+      return;
+    }
+    if (!projectId) return;
+
+    let isActive = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 3)
+        .maybeSingle();
+
+      if (!isActive || error) return;
+      if (data?.datos_consolidados) {
+        setFreshPhase3AgentData(data.datos_consolidados);
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [projectId, phase3?.agentData]);
 
   const radarData = useMemo(() => {
-    const diagnosisFase3 = phase3?.agentData?.diagnosis || phase3?.agentData;
+    const diagnosisFase3 = phase3AgentData?.diagnosis || phase3AgentData;
     if (!diagnosisFase3) return [];
     
     const items = normalizeIdoneidadDiagnosisItems(diagnosisFase3);
@@ -165,7 +195,7 @@ export default function TipoProyectosModule() {
         PredictiveZone: 10,
       };
     });
-  }, [phase3?.agentData]);
+  }, [phase3AgentData]);
 
   // Derive initial view from phase status
   const deriveInitialView = (): ModuleView => {
@@ -416,7 +446,11 @@ export default function TipoProyectosModule() {
     };
   }, [view, projectId, playAgentSuccess]);
 
-  if (!project) return null;
+  if (!project) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y la clasificacion..." />
+      : <MissingProjectState />;
+  }
   // phase may be undefined briefly when navigating from Phase 3 — use safe defaults
   const safePhase = phase ?? { number: 4, status: 'disponible' as const, agentData: null, completedAt: null };
 
@@ -628,7 +662,7 @@ export default function TipoProyectosModule() {
   );
 
   const renderPhase3Annex = () => (
-    <TipoProyectosIdoneidadAnnex phase3AgentData={phase3?.agentData} radarData={radarData} />
+    <TipoProyectosIdoneidadAnnex phase3AgentData={phase3AgentData} radarData={radarData} />
   );
 
   const renderDiagnosis = () => {

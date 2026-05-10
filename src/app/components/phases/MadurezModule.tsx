@@ -30,10 +30,11 @@ import { MadurezOverview } from './madurez/module/MadurezOverview';
 import { ProcessingOverlay } from './madurez/module/ProcessingOverlay';
 import { MATURITY_LEVELS, PMO_CONFIG, formatMaturityLabel, formatOneDecimal, parseAgentResults, parsePmoType } from './madurez/module/maturityLogic';
 import type { FullResults, ModuleView, PmoType } from './madurez/module/types';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 export default function MadurezModule() {
   const { id: projectId } = useParams<{ id: string }>();
-  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -255,7 +256,11 @@ export default function MadurezModule() {
     };
   }, [view, projectId, playAgentSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!project || !phase) return null;
+  if (!project || !phase) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y la fase de madurez..." />
+      : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la fase de madurez." />;
+  }
 
   // Survey completion check
   const hasPredictivaData = predictivaManager.responses.length > 0 || predictivaManager.existingFiles.length > 0 || predictivaManager.externalFiles.length > 0;

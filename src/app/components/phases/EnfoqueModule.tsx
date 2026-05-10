@@ -16,6 +16,7 @@ import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import { supabase } from '../../lib/supabase';
 import EnfoqueDiagnosisView from './enfoque/EnfoqueDiagnosisView';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +25,45 @@ type PmoType = 'Ágil' | 'Híbrida' | 'Predictiva';
 type Criticidad = 'Alta' | 'Media' | 'Baja';
 type DiagnosisVersion = 'original' | 'reprocesado';
 type ModuleView = 'auto-trigger' | 'processing' | 'results' | 'approved';
+
+function hasObjectContent(value: unknown): boolean {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value as Record<string, unknown>).length > 0
+  );
+}
+
+function hasUsablePhase6Data(datos: any): boolean {
+  if (!datos || typeof datos !== 'object' || Array.isArray(datos)) return false;
+  if (datos._processing || datos._error) return false;
+
+  const d = datos.diagnosis ?? datos;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return false;
+  if (d._processing || d._error) return false;
+
+  const ga = d.guide_approach ?? {};
+  const pc = d.parametros_construccion ?? {};
+  const experto = d.diagnostico_experto ?? {};
+
+  return Boolean(
+    ga.type ||
+    ga.primary_framework ||
+    ga.secondary_framework ||
+    ga.framework_balance ||
+    ga.justification ||
+    ga.strategic_orientation ||
+    pc.tone ||
+    pc.recommended_length ||
+    experto.resumen_diagnostico ||
+    (Array.isArray(experto.brechas_priorizadas) && experto.brechas_priorizadas.length > 0) ||
+    (Array.isArray(d.critical_weaknesses) && d.critical_weaknesses.length > 0) ||
+    (Array.isArray(d.secciones) && d.secciones.length > 0) ||
+    hasObjectContent(d.insumos_por_subagente) ||
+    d.summary
+  );
+}
 
 function formatJsonScalar(value: any): string {
   if (value === null || value === undefined || value === '') return 'N/A';
@@ -117,9 +157,8 @@ function formatSectionLabel(id: string): string {
 // Agent result adapter: maps real pmo-agent output → EnfoqueResult for the UI
 // ---------------------------------------------------------------------------
 function mapAgentResultV2(datos: any): EnfoqueResult | null {
-  if (!datos) return null;
+  if (!hasUsablePhase6Data(datos)) return null;
   const d = datos.diagnosis ?? datos;
-  if (!d) return null;
 
   const ga = d.guide_approach ?? {};
   const pc = d.parametros_construccion ?? {};
@@ -255,7 +294,7 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
 export default function EnfoqueModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus, reprocessPhase } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
 
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
@@ -270,9 +309,10 @@ export default function EnfoqueModule() {
 
   const deriveView = (): ModuleView => {
     if (!project || !phase) return 'processing';
-    if (phase.status === 'completado') return 'approved';
+    const mapped = mapAgentResultV2(phase.agentData);
+    if (phase.status === 'completado' && mapped) return 'approved';
     if (phase.status === 'procesando') return 'processing';
-    if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'results';
+    if (mapped) return 'results';
     return 'auto-trigger';
   };
 
@@ -290,18 +330,41 @@ export default function EnfoqueModule() {
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartTimeRef = useRef<number>(0);
 
+  const applyAgentResult = useCallback((rawData: any, status: string = 'disponible') => {
+    const mapped = mapAgentResultV2(rawData);
+    if (!mapped) return false;
+
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = null;
+    setResult(mapped);
+    setView(status === 'completado' ? 'approved' : 'results');
+    updatePhaseStatus(projectId!, 6, status === 'completado' ? 'completado' : 'disponible');
+    playAgentSuccess();
+    toast.success('Agente 6 definio el enfoque metodologico', { description: mapped.enfoque.tipo });
+    return true;
+  }, [playAgentSuccess, projectId, updatePhaseStatus]);
+
   // Start polling fases_estado for agent result
   const startPolling = useCallback((afterTimestamp?: number) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    const minTime = afterTimestamp ?? pollStartTimeRef.current;
+    const minTime = 0;
     pollIntervalRef.current = setInterval(async () => {
       if (!projectId) return;
       const { data } = await supabase
         .from('fases_estado')
-        .select('datos_consolidados, updated_at')
+        .select('datos_consolidados, estado_visual, updated_at')
         .eq('proyecto_id', projectId)
         .eq('numero_fase', 6)
         .single();
+      if (data?.estado_visual === 'error') {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+        updatePhaseStatus(projectId!, 6, 'disponible');
+        setView('auto-trigger');
+        const message = (data?.datos_consolidados as any)?.message ?? 'El agente no pudo generar el enfoque.';
+        toast.error('Error en el Agente 6', { description: message, duration: 9000 });
+        return;
+      }
       if (data?.datos_consolidados) {
         // Skip stale data from before this poll session started
         if (minTime > 0 && new Date(data.updated_at).getTime() < minTime) return;
@@ -310,11 +373,18 @@ export default function EnfoqueModule() {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
           setResult(mapped);
-          setView('results');
-          updatePhaseStatus(projectId!, 6, 'disponible');
+          setView(data.estado_visual === 'completado' ? 'approved' : 'results');
+          updatePhaseStatus(projectId!, 6, data.estado_visual === 'completado' ? 'completado' : 'disponible');
           playAgentSuccess();
           toast.success('Agente 6 definió el enfoque metodológico', { description: mapped.enfoque.tipo });
         }
+      }
+      if (data?.estado_visual === 'disponible' && !hasUsablePhase6Data(data?.datos_consolidados)) {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+        setResult(null);
+        autoTriggered.current = false;
+        setView('auto-trigger');
       }
     }, 4000);
   }, [projectId, playAgentSuccess, updatePhaseStatus]);
@@ -370,7 +440,12 @@ export default function EnfoqueModule() {
     }
 
     if (phase.status === 'completado') {
-      setView('approved');
+      if (result) {
+        setView('approved');
+      } else {
+        setResult(null);
+        setView('auto-trigger');
+      }
       return;
     }
 
@@ -383,7 +458,7 @@ export default function EnfoqueModule() {
     if (!project || !phase || !projectId) return;
     if (!hasCheckedExistingResult) return;
     if (phase.status !== 'disponible') return;
-    if (phase.agentData && Object.keys(phase.agentData).length > 0) return;
+    if (mapAgentResultV2(phase.agentData)) return;
     if (result) return;
     if (project.phases.some(p => p.number > 6 && p.status === 'completado')) return;
     if (autoTriggered.current) return;
@@ -397,6 +472,7 @@ export default function EnfoqueModule() {
             body: { projectId, phaseNumber: 6, iteration: 1 }
           });
           if (response.error) throw new Error((response.data as any)?.error || response.error.message);
+          if ((response.data as any)?.data && applyAgentResult((response.data as any).data)) return;
           startPolling();
         } catch (err: any) {
           toast.error('Error iniciando Agente 6', { description: err.message });
@@ -406,9 +482,13 @@ export default function EnfoqueModule() {
         }
       })();
     }
-  }, [hasCheckedExistingResult, phase, project, projectId, result, startPolling, updatePhaseStatus, view]);
+  }, [applyAgentResult, hasCheckedExistingResult, phase, project, projectId, result, startPolling, updatePhaseStatus, view]);
 
-  if (!project || !phase) return null;
+  if (!project || !phase) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y el enfoque metodologico..." />
+      : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la fase de enfoque." />;
+  }
 
   // ── Handlers ──
   const handleSaveComment = async () => {
@@ -437,6 +517,7 @@ export default function EnfoqueModule() {
       if (response.error) throw new Error((response.data as any)?.error || response.error.message);
       setSavedComment(comment);
       setComment('');
+      if ((response.data as any)?.data && applyAgentResult((response.data as any).data)) return;
       startPolling(ts);
     } catch (err: any) {
       toast.error('Error re-procesando Agente 6', { description: (err as Error).message });

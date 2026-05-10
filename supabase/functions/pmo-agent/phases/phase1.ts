@@ -2,16 +2,21 @@ import { fileTypeFromPath, type PhasePayloadContext, type PhasePayloadResult } f
 
 const PHASE1_CATEGORY_LABELS: Record<string, string> = {
   D01: "Organigrama",
-  D02: "Artefactos de Gestion de proyectos",
+  D02: "Artefactos de Gestión de proyectos",
   D03: "Plataformas y Sistemas",
   D04: "Listado de Proyectos",
-  D05: "Proyecto mejor documentado",
-  D06: "Resultados Estrategicos",
-  D07: "Mapa de Procesos",
-  D08: "Arquitectura Organizacional/TI",
-  D09: "Metodologia de Proyectos",
-  D10: "Portafolio de Productos/Servicios",
-  D11: "Otros",
+  D05: "Listado de lideres del proyecto",
+  D06: "Proyecto mejor documentado",
+  D07: "Resultados Estratégicos",
+  D08: "Resultados financieros",
+  D09: "Mapa de Procesos",
+  D10: "Filosofia organizacional",
+  D11: "Modelo de Negocio",
+  D12: "Arquitectura Organizacional/TI",
+  D13: "Metodología de Gestión de Proyectos",
+  D14: "Portafolio de Productos/Servicios",
+  D15: "Segmentos de clientes",
+  D16: "Otros",
 };
 
 export function getPhase1CategoryLabel(categoryCode: string) {
@@ -19,7 +24,7 @@ export function getPhase1CategoryLabel(categoryCode: string) {
 }
 
 export function isPredefinedPhase1Category(categoryCode: string) {
-  return /^D\d+$/.test(categoryCode) && categoryCode !== "D11";
+  return /^D\d+$/.test(categoryCode) && categoryCode !== "D16";
 }
 
 export async function buildPhase1Payload(ctx: PhasePayloadContext): Promise<PhasePayloadResult> {
@@ -41,7 +46,7 @@ export async function buildPhase1Payload(ctx: PhasePayloadContext): Promise<Phas
       fileUrls.push({ url: urlToUse, type: fileTypeFromPath(rawStoragePath) });
     }
 
-    const categoryCode = String(d.categoria ?? "D11");
+    const categoryCode = String(d.categoria ?? "D16");
     const isPredefined = isPredefinedPhase1Category(categoryCode);
 
     return {

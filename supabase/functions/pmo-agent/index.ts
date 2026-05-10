@@ -6,6 +6,22 @@ import { createRunId, hasCompletedPhaseData, hasMeaningfulData, isProcessingMark
 import { getPayloadForPhase } from "./_shared/phasePayloads.ts";
 import { withCompletedPhase3Items } from "./_shared/phase3Completion.ts";
 
+function extractCommentText(comments: unknown): string | null {
+  if (typeof comments === "string" && comments.trim()) return comments.trim();
+  if (comments && typeof comments === "object") {
+    const record = comments as Record<string, unknown>;
+    const value = record.comments ?? record.comment ?? record.comentario_consultor;
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function extractCurrentGuideForRevision(comments: unknown): any | null {
+  if (!comments || typeof comments !== "object") return null;
+  const record = comments as Record<string, unknown>;
+  return (record.current_guide_for_revision ?? record.previous_guide ?? record.current_guide ?? null) as any;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS — Permite llamadas desde el Frontend React
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,13 +175,17 @@ Si existen 23 preguntas en los datos de entrada, resultados_por_item debe tener 
   const phase7OutputInstruction = phaseNumber === 7 ? `
 
 REQUISITO ESTRICTO PARA FASE 7:
-Debes generar una guia metodologica extensa, detallada y profesional. No entregues un resumen ni una estructura ligera.
+Debes generar una guia metodologica extensa, detallada y profesional, con extension equivalente a MINIMO 20 paginas A4 en el visor de la plataforma. No entregues un resumen ni una estructura ligera.
+Si el JSON DE ENTRADA incluye mandatory_consultant_instructions, esos comentarios del consultor tienen prioridad maxima. Debes aplicarlos como requerimientos obligatorios de reprocesamiento, hacer visible el cambio en el documento final y no tratarlos como observaciones opcionales.
+La guia debe incluir al menos 10 capitulos sustantivos. Cada capitulo debe tener una introduccion de minimo 120 palabras y minimo 3 secciones desarrolladas.
+Cada seccion debe contener minimo 2 parrafos narrativos de mas de 70 palabras cada uno, items accionables con mas de 70 palabras por item y, cuando aplique, una tabla con encabezados claros y minimo 4 filas de datos concretos.
 Cada capitulo debe desarrollar el tema con profundidad consultiva y cada seccion debe contener explicaciones amplias, accionables y contextualizadas para la organizacion evaluada.
 Debes preservar y desarrollar toda la informacion relevante recibida en el JSON de entrada: hallazgos, brechas, riesgos, metricas, scores, dimensiones, fases, actividades, entradas, salidas, roles, responsabilidades, criterios, dependencias, artefactos, KPIs, formulas, umbrales, responsables, recomendaciones y acciones. No omitas datos utiles para el cliente ni los compactes en una frase general.
 Puedes excluir campos tecnicos, metadatos de ejecucion, identificadores internos, timestamps, nombres de llaves JSON, trazas de versionado y cualquier dato que solo sirva para procesamiento del sistema. Todo contenido de negocio, diagnostico, gestion, metodologia o implementacion debe quedar visible y organizado en el informe.
-Cada parrafo, item y subitem debe superar las 40 palabras. En cada uno explica que significa, por que es importante, como se aplica en la PMO, que decisiones habilita y que riesgos reduce.
-Si produces listas dentro de items, subitems, riesgos, artefactos, criterios, roles, procesos, metricas o recomendaciones, cada elemento de esa lista tambien debe superar las 40 palabras y debe leerse como un parrafo profesional completo.
-Evita frases genericas, definiciones cortas y bullets de una sola linea. El resultado total debe tener una extension grande y un nivel de detalle propio de una guia metodologica corporativa lista para revision ejecutiva.` : "";
+Cada parrafo, item y subitem debe superar las 70 palabras. En cada uno explica que significa, por que es importante, como se aplica en la PMO, que decisiones habilita y que riesgos reduce.
+Si produces listas dentro de items, subitems, riesgos, artefactos, criterios, roles, procesos, metricas o recomendaciones, cada elemento de esa lista tambien debe superar las 70 palabras y debe leerse como un parrafo profesional completo.
+Evita frases genericas, definiciones cortas, placeholders y bullets de una sola linea. El resultado total debe tener una extension grande y un nivel de detalle propio de una guia metodologica corporativa lista para revision ejecutiva.
+Antes de entregar el JSON, verifica internamente que la respuesta cumple: minimo 20 paginas equivalentes, minimo 10 capitulos, minimo 3 secciones por capitulo, minimo 2 parrafos por seccion y tablas con datos cuando correspondan.` : "";
 
   const enforceJsonInstruction = `
 
@@ -244,7 +264,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     contents: [{ role: "user", parts }],
     generationConfig: {
       temperature: agentConfig?.temperatura ?? 1,
-      maxOutputTokens: phaseNumber === 7 ? 32768 : undefined,
+      maxOutputTokens: phaseNumber === 7 ? 65536 : undefined,
       responseMimeType: "application/json",
     }
   });
@@ -308,11 +328,13 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     return { diagnosis: null, processingTime, cancelled: true };
   }
 
+  const commentText = extractCommentText(comments);
   let diagnosisToSave = phaseNumber === 3
     ? withCompletedPhase3Items(diagnosis, inputEnvelope, csvTextsForPhase3)
     : diagnosis;
 
   if (phaseNumber === 7) {
+    const previousFromRequest = extractCurrentGuideForRevision(comments);
     const { data: previousPhase7 } = await supabase
       .from("fases_estado")
       .select("datos_consolidados")
@@ -320,7 +342,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
       .eq("numero_fase", 7)
       .maybeSingle();
 
-    const previous = previousPhase7?.datos_consolidados as any;
+    const previous = previousFromRequest ?? (previousPhase7?.datos_consolidados as any);
     const previousVersions = Array.isArray(previous?._versions) ? previous._versions : [];
     const versionNumber = previousVersions.length + 1;
     const generatedAt = new Date().toISOString();
@@ -329,7 +351,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
       number: versionNumber,
       generatedAt,
       status: versionNumber > 1 ? "revisado" : "generado",
-      comment: typeof comments === "string" ? comments : null,
+      comment: commentText,
       data: diagnosis,
     };
 
@@ -338,7 +360,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
       _versions: [...previousVersions, versionEntry],
       _latest_version: versionNumber,
       _generated_at: generatedAt,
-      _last_comment: typeof comments === "string" ? comments : null,
+      _last_comment: commentText,
     };
   }
 
@@ -433,6 +455,26 @@ serve(async (req) => {
       }
     }
 
+    let commentsForAgent: unknown = resolvedComments;
+
+    if (phaseNumber === 7 && resolvedComments) {
+      const { data: existingPhase7 } = await supabase
+        .from("fases_estado")
+        .select("datos_consolidados")
+        .eq("proyecto_id", projectId)
+        .eq("numero_fase", 7)
+        .maybeSingle();
+
+      const existingGuide = existingPhase7?.datos_consolidados as any;
+      if (hasMeaningfulData(existingGuide) && !existingGuide?._error) {
+        commentsForAgent = {
+          comments: extractCommentText(resolvedComments),
+          current_guide_for_revision: existingGuide,
+          latest_version: existingGuide?._latest_version ?? null,
+        };
+      }
+    }
+
     let runId: string | undefined;
 
     if (phaseNumber === 4 && iteration <= 1 && !resolvedComments) {
@@ -504,7 +546,7 @@ serve(async (req) => {
         projectId,
         phaseNumber,
         iteration,
-        resolvedComments,
+        commentsForAgent,
         externalFileUrl,
         extraFileUrls,
         runId

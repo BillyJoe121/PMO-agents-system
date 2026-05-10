@@ -15,6 +15,7 @@ import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import EntrevistasDiagnosisView from './entrevistas/EntrevistasDiagnosisView';
 import { ConfirmModal, DetailPanel, EmptyStatePanel, FormPanel, type PanelMode } from './entrevistas/EntrevistasPanels';
+import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 // Using Entrevista from hook now
 
@@ -22,7 +23,7 @@ import { ConfirmModal, DetailPanel, EmptyStatePanel, FormPanel, type PanelMode }
 export default function EntrevistasModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus } = useApp();
+  const { getProject, updatePhaseStatus, isLoading } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -339,7 +340,11 @@ export default function EntrevistasModule() {
     }
   };
 
-  if (!project) return null;
+  if (!project) {
+    return isLoading
+      ? <LoadingRouteState message="Cargando el proyecto y las entrevistas..." />
+      : <MissingProjectState />;
+  }
 
   if (isLoadingData) {
     return (
