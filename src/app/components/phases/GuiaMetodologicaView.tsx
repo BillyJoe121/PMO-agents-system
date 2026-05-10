@@ -24,10 +24,10 @@ import type { ElementType } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Download, FileText, Clock, RotateCcw, Loader2,
-  CheckCircle2, Send, Brain, ChevronRight, Sparkles, MessageSquare,
+  FileText, Clock, RotateCcw, Loader2,
+  CheckCircle2, Send, Brain, ChevronRight, MessageSquare,
   BookOpen, Shield, BarChart2, Users, Lightbulb,
-  ExternalLink, AlertCircle, GitCommitHorizontal, Circle,
+  AlertCircle, GitCommitHorizontal, Circle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
@@ -506,13 +506,13 @@ function ProcessingView({
           />
         </div>
 
-        <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[#5454e9] mb-2" style={{ fontWeight: 500 }}>Procesando</p>
         <h2 className="text-neutral-900 tracking-tight mb-2" style={{ fontWeight: 500, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>
           {isAdjustment ? 'Revisando la guía' : 'Generando la guía metodológica'}
         </h2>
-        <p className="text-neutral-500 text-[13px] max-w-md text-center leading-relaxed mb-6">
+        <p className="text-[#5454e9] text-[13px] max-w-md text-center leading-relaxed mb-6">
           {isAdjustment
-            ? 'El Agente 7 está incorporando los ajustes del consultor y generando una nueva versión.'
+            ? 'El Agente está incorporando los ajustes del consultor y generando una nueva versión.'
             : 'La guía se está construyendo de acuerdo al enfoque aprobado en la Fase 6.'}
         </p>
 
@@ -570,21 +570,6 @@ function ProcessingView({
         </p>
       </motion.div>
     </AnimatePresence>
-  );
-}
-
-/** RF-F7-05 — Version indicator badge */
-function VersionBadge({ version }: { version: DocVersion }) {
-  const fmt = new Date(version.generatedAt).toLocaleString('es-CO', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
-  return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${version.status === 'revisado' ? 'bg-neutral-800 border-neutral-800 text-white' : 'bg-gray-100 border-gray-200 text-gray-500'}`}
-      style={{ fontWeight: 500 }}>
-      {version.status === 'revisado' ? <RotateCcw size={10} /> : <Sparkles size={10} />}
-      Versión {version.number} — {version.status === 'revisado' ? `revisada el ${fmt}` : `generada el ${fmt}`}
-      {version.comment && <span className="opacity-60">· con comentarios del consultor</span>}
-    </div>
   );
 }
 
@@ -1219,26 +1204,6 @@ export default function GuiaMetodologicaView() {
     return true;
   }, []);
 
-  // ── Handlers (declared before early returns to respect Rules of Hooks) ────
-  // useCallback must be called unconditionally on every render
-  const handleDownload = useCallback(() => {
-    if (!currentVersion || !project || chapters.length === 0) return;
-    const html = generateDownloadHTML(chapters, project.companyName, pmoType, currentVersion);
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `Guia-Metodologica-${project.companyName.replace(/\s+/g, '-')}-v${currentVersion.number}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success('Descarga iniciada', {
-      description: 'Abra el archivo .html en su navegador y use "Imprimir → Guardar como PDF" para generar el PDF.',
-    });
-    // TODO: En producción → descargar PDF desde Supabase Storage signedUrl
-  }, [chapters, currentVersion, project, pmoType]);
-
   // ── RF-F7-01: Auto-trigger on mount ──────────────────────────────────────
   const startPolling = useCallback((startedAt = Date.now(), forceRestart = false) => {
     if (!projectId) return;
@@ -1375,6 +1340,7 @@ export default function GuiaMetodologicaView() {
         setIsAdjusting(false);
         transientRetryCountRef.current = 0;
         setView(data.estado_visual === 'completado' ? 'approved' : 'results');
+        updatePhaseStatus(projectId, 7, data.estado_visual as any);
         playAgentSuccess();
         toast.success('Agente 7 genero la guia metodologica', {
           description: 'El documento quedo listo para revision.',
@@ -1671,7 +1637,7 @@ export default function GuiaMetodologicaView() {
 
   // ── Render: results & approved (split layout) ─────────────────────────────
   return (
-    <div className="h-screen bg-[#f7f8ff] flex flex-col overflow-hidden">
+    <div className="h-screen bg-[#f7f8ff] flex flex-col overflow-hidden print:block print:h-auto print:overflow-visible">
       <PhaseHeader
         projectId={projectId!}
         companyName={project.companyName}
@@ -1680,53 +1646,20 @@ export default function GuiaMetodologicaView() {
         eyebrow={isCompleted ? 'Completada' : undefined}
       />
 
-      <div className="flex-1 min-h-0 grid grid-cols-12 overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] overflow-hidden print:block print:h-auto print:overflow-visible">
 
         {/* ── Left: Document Viewer 70% ── */}
-        <div className="col-span-8 min-h-0 flex flex-col border-r border-gray-200 overflow-hidden">
-
-          <div className="bg-white border-b border-neutral-200/60 px-5 py-3 flex items-center justify-between flex-shrink-0">
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>Documento</p>
-              <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>
-                Guía metodológica — {project.companyName}
-              </p>
-              {currentVersion && (
-                <div className="mt-1">
-                  <VersionBadge version={currentVersion} />
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={handleDownload}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[12px] hover:bg-neutral-50 transition-colors"
-                style={{ fontWeight: 500 }}>
-                <Download size={11} strokeWidth={1.75} /> Descargar
-              </button>
-              <button
-                onClick={() => {
-                  const win = window.open('', '_blank');
-                  if (!win || !currentVersion) return;
-                  win.document.write(generateDownloadHTML(chapters, project.companyName, pmoType, currentVersion));
-                  win.document.close();
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-neutral-200/80 rounded-full text-neutral-600 text-[12px] hover:bg-neutral-50 transition-colors"
-                style={{ fontWeight: 500 }}>
-                <ExternalLink size={11} strokeWidth={1.75} /> Abrir en pestaña
-              </button>
-            </div>
-          </div>
+        <div className="min-h-0 flex flex-col bg-[#f2f3f7] overflow-hidden print:block print:h-auto print:overflow-visible">
 
           {/* Document canvas */}
           {/* RF-F7-03: Integrar iframe apuntando a la signedUrl de Supabase Storage (PDF real del Agente 7) */}
-          <div className="flex-1 min-h-0 bg-neutral-100 overflow-y-auto overscroll-contain p-6 relative">
+          <div className="flex-1 min-h-0 bg-[#f2f3f7] overflow-y-auto overscroll-contain p-4 lg:p-6 relative print:block print:h-auto print:overflow-visible print:p-0">
 
             {/* Adjustment overlay */}
             <AnimatePresence>
               {isAdjusting && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-10 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                  className="absolute inset-0 z-10 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center print:hidden">
                   <Loader2 size={36} className="text-white animate-spin mb-4" />
                   <p className="text-white text-sm" style={{ fontWeight: 600 }}>Enviando ajustes al Agente 7…</p>
                   <p className="text-gray-300 text-xs mt-1">Preparando nueva versión del documento</p>
@@ -1735,7 +1668,7 @@ export default function GuiaMetodologicaView() {
             </AnimatePresence>
 
             {currentVersion && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="print:h-auto print:overflow-visible">
                 <DocumentRenderer
                   chapters={chapters}
                   org={project.companyName}
@@ -1748,15 +1681,24 @@ export default function GuiaMetodologicaView() {
         </div>
 
         {/* ── Right: Control panel 30% — fully static, no internal scroll ── */}
-        <div className="col-span-4 min-h-0 flex flex-col bg-white overflow-hidden">
+        <div className="min-h-0 flex flex-col bg-[#fbfbff] border-l border-[#5454e9]/15 overflow-hidden print:hidden">
 
-          <div className="px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="px-5 pt-5 pb-4 flex-shrink-0">
             <div className="flex items-center gap-2 mb-3">
-              <Clock size={12} className="text-neutral-400" strokeWidth={1.75} />
-              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Historial de versiones</p>
-              <span className="ml-auto text-[11px] text-neutral-400 tabular-nums">{versions.length}</span>
+              <div className="w-8 h-8 rounded-xl bg-[#5454e9] text-white flex items-center justify-center">
+                <Clock size={14} strokeWidth={1.85} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[#3838b8]" style={{ fontWeight: 850 }}>Historial de versiones</p>
+                <p className="text-[11px] text-neutral-500">{versions.length} versiones disponibles</p>
+              </div>
+              {currentVersion && (
+                <span className="ml-auto rounded-full bg-[#e4eb60]/60 px-2.5 py-1 text-[11px] text-neutral-800 tabular-nums" style={{ fontWeight: 850 }}>
+                  v{currentVersion.number}
+                </span>
+              )}
             </div>
-            <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5">
+            <div className="space-y-2 max-h-[190px] overflow-y-auto pr-0.5">
               {versions.map((v, idx) => (
                 <button
                   key={v.number}
@@ -1766,21 +1708,21 @@ export default function GuiaMetodologicaView() {
                   }}
                   className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
                     currentVersionIdx === idx
-                      ? 'border-neutral-300 bg-neutral-50'
-                      : 'border-neutral-200/60 hover:border-neutral-300 hover:bg-neutral-50/60'
+                      ? 'border-[#5454e9]/25 bg-[#5454e9]/[0.06]'
+                      : 'border-neutral-200/70 bg-white hover:border-[#5454e9]/20 hover:bg-[#5454e9]/[0.035]'
                   }`}
                 >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5 tabular-nums"
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[11px] flex-shrink-0 mt-0.5 tabular-nums"
                     style={currentVersionIdx === idx
-                      ? { background: '#5454e9', color: '#fff', fontWeight: 600 }
-                      : { background: '#f5f5f5', color: '#404040', fontWeight: 600 }}>
+                      ? { background: '#5454e9', color: '#fff', fontWeight: 850 }
+                      : { background: '#f3f4f6', color: '#404040', fontWeight: 750 }}>
                     {v.number}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-neutral-900 text-[12px]" style={{ fontWeight: 500 }}>
+                    <p className="text-neutral-900 text-[12px]" style={{ fontWeight: 800 }}>
                       Versión {v.number} · {v.status === 'revisado' ? 'Revisada' : 'Original'}
                     </p>
-                    <p className="text-neutral-400 text-[11px] mt-0.5 tabular-nums">
+                    <p className="text-neutral-500 text-[11px] mt-0.5 tabular-nums">
                       {new Date(v.generatedAt).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </p>
                     {v.comment && (
@@ -1788,7 +1730,7 @@ export default function GuiaMetodologicaView() {
                     )}
                   </div>
                   {currentVersionIdx === idx && (
-                    <CheckCircle2 size={12} className="text-neutral-900 flex-shrink-0 mt-1" strokeWidth={1.75} />
+                    <CheckCircle2 size={13} className="text-[#5454e9] flex-shrink-0 mt-1" strokeWidth={1.9} />
                   )}
                 </button>
               ))}
@@ -1801,12 +1743,14 @@ export default function GuiaMetodologicaView() {
           <hr className="border-neutral-200/60 flex-shrink-0" />
 
           {/* RF-F7-04: Adjustment panel — fills remaining height */}
-          <div className="flex-1 px-5 py-4 flex flex-col overflow-hidden min-h-0">
+          <div className="flex-1 px-5 pb-4 flex flex-col overflow-hidden min-h-0">
             {!isCompleted ? (
-              <>
+              <div className="rounded-2xl border border-neutral-200/80 bg-white p-4 flex-1 min-h-0 flex flex-col">
                 <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
-                  <MessageSquare size={12} className="text-neutral-400" strokeWidth={1.75} />
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>
+                  <div className="w-8 h-8 rounded-xl bg-[#865cf0]/10 text-[#6a45d8] flex items-center justify-center">
+                    <MessageSquare size={14} strokeWidth={1.85} />
+                  </div>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-700" style={{ fontWeight: 850 }}>
                     Solicitar ajustes
                   </p>
                 </div>
@@ -1817,7 +1761,7 @@ export default function GuiaMetodologicaView() {
                   value={adjustText}
                   onChange={e => setAdjustText(e.target.value)}
                   placeholder="Ej: En el capítulo 3, amplía las ceremonias ágiles con ejemplos de la industria financiera…"
-                  className="flex-1 min-h-0 w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400"
+                  className="flex-1 min-h-[180px] w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none focus:border-[#865cf0]/45 focus:ring-4 focus:ring-[#865cf0]/10 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400"
                 />
                 <p className="text-neutral-400 text-[11px] text-right mt-1 mb-3 flex-shrink-0 tabular-nums">{adjustText.length} caracteres</p>
                 <div className="flex gap-2 flex-shrink-0">
@@ -1825,8 +1769,8 @@ export default function GuiaMetodologicaView() {
                     whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                     onClick={handleRequestAdjustments}
                     disabled={isAdjusting || !adjustText.trim()}
-                    className="flex-1 py-2.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-neutral-50 transition-all"
-                    style={{ fontWeight: 500 }}
+                    className="flex-1 py-2.5 rounded-xl border border-[#865cf0]/25 text-[#6a45d8] bg-[#865cf0]/[0.06] text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-[#865cf0]/10 transition-all"
+                    style={{ fontWeight: 750 }}
                   >
                     {isAdjusting
                       ? <><Loader2 size={12} className="animate-spin" strokeWidth={1.75} />Enviando…</>
@@ -1836,14 +1780,14 @@ export default function GuiaMetodologicaView() {
                     whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                     onClick={handleReprocess}
                     disabled={isAdjusting || !adjustText.trim()}
-                    className="flex-1 py-2.5 rounded-full border border-neutral-900 text-neutral-900 text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-neutral-50 transition-all"
-                    style={{ fontWeight: 500 }}
+                    className="flex-1 py-2.5 rounded-xl border border-[#5454e9]/30 text-white bg-[#5454e9] text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-[#4747cf] transition-all"
+                    style={{ fontWeight: 750, boxShadow: '0 12px 26px -18px rgba(84,84,233,0.75)' }}
                   >
                     <RotateCcw size={12} strokeWidth={1.75} />
                     Reprocesar
                   </motion.button>
                 </div>
-              </>
+              </div>
             ) : (
               <div className="rounded-2xl border border-neutral-200/70 bg-white p-5">
                 <div className="flex items-center gap-2 mb-3">
@@ -1865,14 +1809,14 @@ export default function GuiaMetodologicaView() {
                     onChange={e => setAdjustText(e.target.value)}
                     placeholder="Ej: Ajusta el capítulo de implementación para un plazo de 90 días…"
                     rows={3}
-                    className="w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[12px] outline-none focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400 mb-2"
+                    className="w-full px-3 py-2.5 border border-neutral-200/80 rounded-xl text-[12px] outline-none focus:border-[#5454e9]/45 focus:ring-4 focus:ring-[#5454e9]/10 transition-all resize-none leading-relaxed bg-white placeholder:text-neutral-400 mb-2"
                   />
                   <motion.button
                     whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                     onClick={handleReprocess}
                     disabled={isAdjusting || !adjustText.trim()}
-                    className="w-full py-2 rounded-full border border-neutral-900 text-neutral-900 text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-neutral-50 transition-all"
-                    style={{ fontWeight: 500 }}
+                    className="w-full py-2.5 rounded-xl border border-[#5454e9]/30 bg-[#5454e9] text-white text-[12px] flex items-center justify-center gap-1.5 disabled:opacity-50 hover:bg-[#4747cf] transition-all"
+                    style={{ fontWeight: 750 }}
                   >
                     <RotateCcw size={12} strokeWidth={1.75} />
                     Reprocesar guía metodológica
@@ -1883,15 +1827,15 @@ export default function GuiaMetodologicaView() {
           </div>
 
           {!isCompleted && (
-            <div className="px-4 pb-4 pt-3 border-t border-neutral-200/60 bg-white flex-shrink-0">
+            <div className="px-5 pb-5 pt-4 border-t border-[#5454e9]/10 bg-white flex-shrink-0">
               <p className="text-neutral-500 text-[11px] text-center mb-3 leading-relaxed">
                 Al aprobar, la Fase 7 se completará y la Fase 8 se desbloqueará.
               </p>
               <motion.button
                 whileHover={{ y: -1 }} whileTap={{ y: 0 }}
                 onClick={() => setShowApprove(true)}
-                className="w-full py-3 rounded-full text-white text-[13px] flex items-center justify-center gap-2 transition-all"
-                style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+                className="w-full py-3 rounded-xl text-white text-[13px] flex items-center justify-center gap-2 transition-all"
+                style={{ background: '#5454e9', fontWeight: 850, boxShadow: '0 14px 28px -18px rgba(84,84,233,0.8)' }}
               >
                 <CheckCircle2 size={13} strokeWidth={1.75} />
                 Aprobar guía metodológica
@@ -1901,19 +1845,19 @@ export default function GuiaMetodologicaView() {
 
           {/* Navegación entre fases (flechas) */}
           {isCompleted && (
-            <div className="px-4 pb-4 pt-3 border-t border-neutral-200/60 bg-white flex-shrink-0">
+            <div className="px-5 pb-5 pt-4 border-t border-[#5454e9]/10 bg-white flex-shrink-0">
               <div className="flex gap-2">
                 <button
                   onClick={() => navigate(`/dashboard/project/${projectId}/phase/6`)}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-neutral-700 text-[12px] bg-white border border-neutral-200/80 hover:bg-neutral-50 transition-all"
-                  style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-neutral-700 text-[12px] bg-white border border-neutral-200/80 hover:bg-neutral-50 transition-all"
+                  style={{ fontWeight: 750, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
                 >
                   ← Fase 6
                 </button>
                 <button
                   onClick={() => navigate(`/dashboard/project/${projectId}/phase/8`)}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-white text-[12px] transition-all"
-                  style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-[12px] transition-all"
+                  style={{ background: '#5454e9', fontWeight: 750, boxShadow: '0 12px 26px -18px rgba(84,84,233,0.8)' }}
                 >
                   Fase 8 →
                 </button>

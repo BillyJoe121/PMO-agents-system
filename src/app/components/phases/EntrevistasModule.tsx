@@ -1,786 +1,23 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Plus, Pencil, Trash2, X, Save, Loader2, AlertTriangle, Send,
-  User, Briefcase, FileText, CheckCircle2, MessageSquare, Sparkles, ChevronDown,
-  Calendar, Clock, MousePointerClick, Upload, Paperclip, FileUp, Download
+  Plus, Trash2, Loader2, User, Briefcase, MessageSquare, ChevronDown,
+  Paperclip, FileUp, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
 import { useApp } from '../../context/AppContext';
-import { useEntrevistas, type EntrevistaLocal as Entrevista, type EntrevistasDiagnosis } from '../../hooks/useEntrevistas';
+import { useEntrevistas, type EntrevistaLocal as Entrevista } from '../../hooks/useEntrevistas';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
+import EntrevistasDiagnosisView from './entrevistas/EntrevistasDiagnosisView';
+import { ConfirmModal, DetailPanel, EmptyStatePanel, FormPanel, type PanelMode } from './entrevistas/EntrevistasPanels';
 
 // Using Entrevista from hook now
 
-// ---------------------------------------------------------------------------
-// Panel mode type
-// ---------------------------------------------------------------------------
-type PanelMode = 'empty' | 'detail' | 'edit' | 'new';
-
-// ---------------------------------------------------------------------------
-// Confirm Modal
-// ---------------------------------------------------------------------------
-interface ConfirmModalProps {
-  open: boolean;
-  count: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-  isLoading: boolean;
-}
-
-function ConfirmModal({ open, count, onCancel, onConfirm, isLoading }: ConfirmModalProps) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onCancel} className="absolute inset-0 bg-neutral-900/30 backdrop-blur-sm" />
-          <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="relative bg-white rounded-2xl w-full max-w-md z-10 p-6 border border-neutral-200/70" style={{ boxShadow: '0 24px 64px -16px rgba(0,0,0,0.18)' }}>
-            <div className="flex items-start gap-4 mb-6">
-              <div>
-                <h3 className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>¿Enviar al Agente 2?</h3>
-                <p className="text-neutral-500 text-[13px] leading-relaxed">
-                  Se enviarán <span className="text-neutral-900" style={{ fontWeight: 500 }}>{count} entrevistas</span> al Agente 2 para análisis consolidado. La edición quedará bloqueada una vez confirmado.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
-                Cancelar
-              </button>
-              <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
-                style={{ background: '#5454e9', fontWeight: 500 }}>
-                {isLoading ? <><Loader2 size={13} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Confirmar</>}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Empty State Panel
-// ---------------------------------------------------------------------------
-function EmptyStatePanel() {
-  return (
-    <motion.div
-      key="empty"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col items-center justify-center h-full min-h-[420px] text-center px-8"
-    >
-      <div className="w-14 h-14 rounded-2xl bg-neutral-50 border border-neutral-200/80 flex items-center justify-center mb-5">
-        <MousePointerClick size={20} className="text-neutral-400" strokeWidth={1.5} />
-      </div>
-      <p className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.005em' }}>Selecciona una entrevista</p>
-      <p className="text-neutral-500 text-[13px] leading-relaxed max-w-xs">
-        Haz clic en cualquier entrevistado de la lista para ver el contenido completo aquí.
-      </p>
-      <div className="mt-6 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-dashed border-neutral-200">
-        <Plus size={12} className="text-neutral-400" strokeWidth={1.75} />
-        <span className="text-neutral-400 text-[11px]">O crea una nueva con el botón de la izquierda</span>
-      </div>
-    </motion.div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Detail Panel
-// ---------------------------------------------------------------------------
-interface DetailPanelProps {
-  entrevista: Entrevista;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
-function DetailPanel({ entrevista, onEdit, onDelete }: DetailPanelProps) {
-  return (
-    <motion.div
-      key={`detail-${entrevista.id}`}
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -12 }}
-      className="flex flex-col h-full"
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="w-11 h-11 rounded-xl bg-neutral-900 flex items-center justify-center flex-shrink-0">
-            <User size={16} className="text-white" strokeWidth={1.75} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-neutral-900 tracking-tight truncate" style={{ fontWeight: 500, fontSize: '1.0625rem', letterSpacing: '-0.01em' }}>
-              {entrevista.nombre}
-            </h2>
-            <div className="flex items-center gap-2 mt-1 text-[12px]">
-              <span className="flex items-center gap-1.5 text-neutral-500">
-                <Briefcase size={11} strokeWidth={1.75} />
-                {entrevista.cargo}
-              </span>
-              {entrevista.area && <><span className="text-neutral-300">·</span><span className="text-neutral-400">{entrevista.area}</span></>}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={onEdit}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[12px] hover:border-neutral-300 hover:bg-neutral-50 transition-all"
-            style={{ fontWeight: 500 }}
-          >
-            <Pencil size={11} strokeWidth={1.75} />
-            Editar
-          </button>
-          <button
-            onClick={onDelete}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-rose-100 text-rose-600 text-[12px] hover:bg-rose-50 hover:border-rose-200 transition-all"
-            style={{ fontWeight: 500 }}
-          >
-            <Trash2 size={11} strokeWidth={1.75} />
-            Eliminar
-          </button>
-        </div>
-      </div>
-
-      {/* Metadata strip */}
-      <div className="flex items-center gap-4 mb-6 pb-6 border-b border-neutral-100 text-[11px] text-neutral-400">
-        <div className="flex items-center gap-1.5">
-          <Calendar size={11} strokeWidth={1.75} />
-          <span>Registrada · <span className="text-neutral-700 tabular-nums" style={{ fontWeight: 500 }}>{entrevista.createdAt}</span></span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Clock size={11} strokeWidth={1.75} />
-          <span className="tabular-nums"><span className="text-neutral-700" style={{ fontWeight: 500 }}>{entrevista.notas.length}</span> caracteres</span>
-        </div>
-      </div>
-
-      {entrevista.fileName && (
-        <div className="mb-6">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-2.5" style={{ fontWeight: 500 }}>Archivo adjunto</p>
-          <button
-            onClick={async () => {
-              try {
-                let url = entrevista.storagePath || '';
-                if (url && url.includes('token=')) {
-                  const match = url.match(/documentos-pmo\/(.+?)(?:\?token=|$)/);
-                  if (match && match[1]) {
-                    const rawPath = decodeURIComponent(match[1]);
-                    const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(rawPath, 3600);
-                    if (data?.signedUrl) url = data.signedUrl;
-                  }
-                }
-                if (url) {
-                  window.open(url, '_blank', 'noopener,noreferrer');
-                }
-              } catch (err) {
-                console.error('Error al abrir archivo:', err);
-              }
-            }}
-            className="inline-flex items-center gap-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors w-full group text-left"
-          >
-            <div className="w-8 h-8 rounded-lg bg-white border border-indigo-100/50 flex items-center justify-center flex-shrink-0 group-hover:border-indigo-200 transition-colors">
-              <FileText size={14} className="text-indigo-500" strokeWidth={1.75} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>{entrevista.fileName}</p>
-              <p className="text-indigo-500 text-[11px]">Ver documento original ↗</p>
-            </div>
-          </button>
-        </div>
-      )}
-
-      {/* Notes body */}
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-3">
-          <FileText size={12} className="text-neutral-400" strokeWidth={1.75} />
-          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 500 }}>
-            Notas / Transcripción
-          </p>
-        </div>
-        <div className="bg-neutral-50 rounded-xl border border-neutral-200/70 p-4 min-h-[200px]">
-          <p className="text-neutral-700 text-[13px] leading-relaxed whitespace-pre-wrap">
-            {entrevista.notas}
-          </p>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Form Panel (New / Edit)
-// ---------------------------------------------------------------------------
-interface FormPanelProps {
-  mode: 'new' | 'edit';
-  formData: { nombre: string; cargo: string; area: string; notas: string };
-  formErrors: Record<string, string>;
-  onChange: (field: string, value: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}
-
-function FormPanel({ mode, formData, formErrors, onChange, onSave, onCancel }: FormPanelProps) {
-  const isBanco = formData.cargo === 'No aplica' && formData.area === 'No aplica';
-  const title = mode === 'edit' 
-    ? (isBanco ? `Editando Banco: ${formData.nombre || 'Documento'}` : `Editando: ${formData.nombre || 'Entrevista'}`) 
-    : (isBanco ? 'Nuevo Banco de Entrevistas' : 'Nueva Entrevista');
-
-  // ---- File upload state ----
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [attachedFile, setAttachedFile] = useState<{ name: string; size: number; parsed: boolean } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isReading, setIsReading] = useState(false);
-
-  const READABLE_TYPES = ['text/csv'];
-  const ACCEPTED = '.csv,.pdf';
-
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const processFile = (file: File) => {
-    if (file.name.match(/\.(pdf)$/i)) {
-      // Es un PDF, lo adjuntamos para enviarlo al agente directamente
-      setAttachedFile({ name: file.name, size: file.size, parsed: false });
-      onChange('file', file);
-      toast.success('Archivo PDF adjuntado para análisis');
-      return;
-    }
-
-    if (!READABLE_TYPES.includes(file.type) && !file.name.match(/\.(csv)$/i)) {
-      toast.error('Formato no permitido', { description: 'Sube un archivo .pdf o .csv.' });
-      return;
-    }
-
-    setIsReading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      onChange('notas', text);
-      setAttachedFile({ name: file.name, size: file.size, parsed: true });
-      setIsReading(false);
-      toast.success('Texto extraído correctamente');
-    };
-    reader.onerror = () => {
-      toast.error('Error al leer el archivo');
-      setIsReading(false);
-    };
-    reader.readAsText(file);
-  };
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processFile(file);
-    // Reset so same file can be re-selected
-    e.target.value = '';
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) processFile(file);
-  };
-
-  const handleRemoveFile = () => {
-    setAttachedFile(null);
-    onChange('file', null);
-  };
-
-  return (
-    <motion.div
-      key={`form-${mode}`}
-      initial={{ opacity: 0, x: 12 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -12 }}
-      className="flex flex-col h-full"
-    >
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.005em' }}>{title}</h3>
-        <button
-          onClick={onCancel}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
-        >
-          <X size={14} strokeWidth={1.75} />
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-4 flex-1">
-        {/* Nombre */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-            {isBanco ? <FileUp size={11} strokeWidth={1.75} /> : <User size={11} strokeWidth={1.75} />} 
-            {isBanco ? 'Nombre del documento o lote' : 'Nombre del entrevistado'}
-          </label>
-          <input
-            type="text"
-            value={formData.nombre}
-            onChange={e => onChange('nombre', e.target.value)}
-            placeholder={isBanco ? 'Ej: Transcripciones Grupo Operaciones' : 'Ej: Juan Carlos Restrepo'}
-            className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
-              ${formErrors.nombre ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
-            `}
-          />
-          {formErrors.nombre && <p className="text-rose-500 text-[11px]">{formErrors.nombre}</p>}
-        </div>
-
-        {/* Cargo + Área */}
-        {!isBanco && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-                <Briefcase size={11} strokeWidth={1.75} /> Cargo / Rol
-              </label>
-              <input
-                type="text"
-                value={formData.cargo}
-                onChange={e => onChange('cargo', e.target.value)}
-                placeholder="Ej: Gerente de Operaciones"
-                className={`w-full px-3.5 py-2.5 border rounded-xl text-[13px] outline-none transition-all bg-white placeholder:text-neutral-400
-                  ${formErrors.cargo ? 'border-rose-400 focus:ring-4 focus:ring-rose-100' : 'border-neutral-200/80 focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100'}
-                `}
-              />
-              {formErrors.cargo && <p className="text-rose-500 text-[11px]">{formErrors.cargo}</p>}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Área / Departamento</label>
-              <input
-                type="text"
-                value={formData.area}
-                onChange={e => onChange('area', e.target.value)}
-                placeholder="Ej: TI, Finanzas…"
-                className="w-full px-3.5 py-2.5 border border-neutral-200/80 rounded-xl text-[13px] outline-none transition-all bg-white focus:border-neutral-300 focus:ring-4 focus:ring-neutral-100 placeholder:text-neutral-400"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Notes + Upload */}
-        <div className="flex flex-col gap-1.5 flex-1">
-          {/* Label row */}
-          <div className="flex items-center justify-between">
-            <label className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 flex items-center gap-1.5" style={{ fontWeight: 500 }}>
-              <FileText size={11} strokeWidth={1.75} /> Notas / Transcripción
-            </label>
-            {/* Upload button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-500 hover:text-neutral-900 hover:bg-neutral-50 transition-all text-[11px]"
-              style={{ fontWeight: 500 }}
-            >
-              <FileUp size={11} strokeWidth={1.75} />
-              Cargar transcripción
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPTED}
-              className="hidden"
-              onChange={handleFileInput}
-            />
-          </div>
-
-          {/* Attached file badge */}
-          <AnimatePresence>
-            {attachedFile && (
-              <motion.div
-                initial={{ opacity: 0, y: -4, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: -4, height: 0 }}
-                className="overflow-hidden"
-              >
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${attachedFile.parsed
-                  ? 'bg-green-50 border-green-200 text-green-700'
-                  : 'bg-amber-50 border-amber-200 text-amber-700'
-                  }`}>
-                  <Paperclip size={11} className="flex-shrink-0" />
-                  <span className="flex-1 truncate" style={{ fontWeight: 500 }}>{attachedFile.name}</span>
-                  <span className="opacity-60 flex-shrink-0">{formatSize(attachedFile.size)}</span>
-                  {attachedFile.parsed ? (
-                    <span className="flex-shrink-0 opacity-70">· Texto extraído con éxito</span>
-                  ) : (
-                    <span className="flex-shrink-0 opacity-70 text-indigo-600">· PDF Adjunto para Agente</span>
-                  )}
-                  <button
-                    onClick={handleRemoveFile}
-                    className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center hover:opacity-70 transition-opacity"
-                  >
-                    <X size={10} />
-                  </button>
-                </div>
-                {!attachedFile.parsed && (
-                  <p className="text-indigo-600 text-[11px] mt-1.5 pl-1 leading-relaxed">
-                    El agente 1 analizará este PDF automáticamente junto con las notas adicionales que escribas.
-                  </p>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Dropzone + Textarea */}
-          <div
-            className={`relative flex-1 rounded-xl border transition-all ${isDragging
-              ? 'border-neutral-400 bg-neutral-50'
-              : formErrors.notas
-                ? 'border-rose-400'
-                : 'border-neutral-200/80'
-              }`}
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-          >
-            {/* Drag overlay */}
-            <AnimatePresence>
-              {isDragging && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-10 rounded-xl flex flex-col items-center justify-center gap-2 bg-zinc-50/95 pointer-events-none"
-                >
-                  <Upload size={22} className="text-zinc-500" />
-                  <p className="text-zinc-600 text-sm" style={{ fontWeight: 600 }}>Suelta el archivo aquí</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Loading overlay */}
-            <AnimatePresence>
-              {isReading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-10 rounded-xl flex flex-col items-center justify-center gap-2 bg-white/90"
-                >
-                  <Loader2 size={20} className="text-zinc-500 animate-spin" />
-                  <p className="text-zinc-500 text-xs">Leyendo archivo…</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <textarea
-              value={formData.notas}
-              onChange={e => onChange('notas', e.target.value)}
-              placeholder="Escriba o pegue aquí la transcripción, o arrastre un archivo .csv sobre este campo…"
-              rows={8}
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-y bg-white leading-relaxed border-0 focus:ring-0"
-            />
-          </div>
-
-          {formErrors.notas && <p className="text-red-500 text-xs">{formErrors.notas}</p>}
-          <div className="flex items-center justify-between">
-            <p className="text-neutral-400 text-xs flex items-center gap-1">
-              <Upload size={10} />
-              Soporta archivos .pdf o .csv
-            </p>
-            <p className="text-neutral-400 text-xs">{formData.notas.length} caracteres</p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={onCancel}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-neutral-200/80 text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors"
-            style={{ fontWeight: 500 }}
-          >
-            <X size={13} /> Cancelar
-          </button>
-          <motion.button
-            whileHover={{ y: -1 }} whileTap={{ y: 0 }}
-            onClick={onSave}
-            className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-full text-white text-[13px] transition-all"
-            style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
-          >
-            <Save size={13} />
-            {mode === 'edit' ? 'Actualizar entrevista' : 'Guardar entrevista'}
-          </motion.button>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-const EMPTY_VALUE = 'N/A';
-
-function valueOrEmpty(value: unknown) {
-  if (value === null || value === undefined || value === '') return EMPTY_VALUE;
-  if (typeof value === 'boolean') return value ? 'Si' : 'No';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
-  return String(value);
-}
-
-function normalizeList(items?: unknown[]) {
-  return Array.isArray(items) && items.length > 0 ? items.map(valueOrEmpty) : [EMPTY_VALUE];
-}
-
-function DiagnosisCard({ title, children, muted = false }: { title: string; children: ReactNode; muted?: boolean }) {
-  return (
-    <div className={`rounded-2xl border border-neutral-200/70 ${muted ? 'bg-neutral-50' : 'bg-white'} p-6`} style={{ boxShadow: muted ? undefined : '0 1px 2px rgba(0,0,0,0.02)' }}>
-      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>{title}</p>
-      {children}
-    </div>
-  );
-}
-
-function EmptyAwareList({ items }: { items?: unknown[] }) {
-  return (
-    <ul className="space-y-2">
-      {normalizeList(items).map((item, i) => (
-        <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
-          <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
-          <span>{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function KeyValueGrid({ rows }: { rows: { label: string; value: unknown }[] }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {rows.map((row) => (
-        <div key={row.label} className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>{row.label}</p>
-          <p className="text-neutral-800 text-[13px] leading-relaxed">{valueOrEmpty(row.value)}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function BadgeList({ items }: { items?: unknown[] }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {normalizeList(items).map((item, i) => (
-        <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-neutral-700 text-[11px]" style={{ fontWeight: 500 }}>
-          {item}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function Agent2DiagnosisView({ diagnosis }: { diagnosis: EntrevistasDiagnosis }) {
-  const d = diagnosis;
-  const dimensiones = [
-    ['inicio', 'Inicio'],
-    ['planeacion', 'Planeacion'],
-    ['ejecucion', 'Ejecucion'],
-    ['monitoreo_control', 'Monitoreo y control'],
-    ['cierre', 'Cierre'],
-  ] as const;
-
-  return (
-    <div className="flex flex-col gap-5">
-      <DiagnosisCard title="Diagnostico - Agente 2 · Entrevistas">
-        <div className="flex items-center gap-2.5 mb-5">
-          <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
-            <Sparkles size={13} strokeWidth={1.75} />
-          </div>
-          <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Respuesta consolidada</span>
-        </div>
-        <p className="text-neutral-700 text-[14px] leading-relaxed mb-6">{valueOrEmpty(d.summary)}</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Entrevistados analizados</p>
-            <p className="text-neutral-900 text-xl" style={{ fontWeight: 500 }}>{valueOrEmpty(d.numero_entrevistados)}</p>
-          </div>
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Advertencia fuente unica</p>
-            <p className="text-neutral-900 text-xl" style={{ fontWeight: 500 }}>{valueOrEmpty(d.advertencia_fuente_unica)}</p>
-          </div>
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Nivel formalizacion</p>
-            <p className="text-neutral-900 text-[13px] leading-relaxed" style={{ fontWeight: 500 }}>{valueOrEmpty(d.insumos_para_agente_4?.nivel_general_formalizacion)}</p>
-          </div>
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Contexto organizacional">
-        <KeyValueGrid rows={[
-          { label: 'Sector', value: d.contexto_organizacional?.sector },
-          { label: 'Tamano aproximado', value: d.contexto_organizacional?.tamanio_aproximado },
-          { label: 'Cultura visible', value: d.contexto_organizacional?.cultura_visible },
-        ]} />
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Roles identificados">
-        <BadgeList items={d.roles_identificados} />
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Calidad del input">
-        <div className="space-y-5">
-          <KeyValueGrid rows={[{ label: 'Sesgo por rol', value: d.calidad_input?.sesgo_por_rol }]} />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Vacios tematicos</p><EmptyAwareList items={d.calidad_input?.vacios_tematicos} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Ambiguedades</p><EmptyAwareList items={d.calidad_input?.ambiguedades} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Superficialidad</p><EmptyAwareList items={d.calidad_input?.superficialidad} /></div>
-          </div>
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Hallazgos clave">
-        <EmptyAwareList items={d.key_findings} />
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Temas recurrentes">
-        <div className="space-y-3">
-          {(d.recurring_themes?.length ? d.recurring_themes : [{ theme: EMPTY_VALUE, frequency: EMPTY_VALUE, mentioned_by: [] }]).map((theme, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <p className="text-neutral-900 text-[13px] mb-2" style={{ fontWeight: 600 }}>{valueOrEmpty(theme.theme)}</p>
-              <KeyValueGrid rows={[
-                { label: 'Frecuencia', value: theme.frequency },
-                { label: 'Mencionado por', value: normalizeList(theme.mentioned_by).join(', ') },
-              ]} />
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Dimensiones base">
-        <div className="space-y-4">
-          {dimensiones.map(([key, label]) => {
-            const dim = d.dimensiones_base?.[key];
-            return (
-              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-5">
-                <p className="text-neutral-900 text-[13px] mb-4" style={{ fontWeight: 600 }}>{label}</p>
-                <KeyValueGrid rows={[
-                  { label: 'Nivel formalidad', value: dim?.nivel_formalidad },
-                  { label: 'Tipo gestion', value: dim?.tipo_gestion },
-                  { label: 'Confianza', value: dim?.confianza },
-                  { label: 'Recurrencia', value: dim?.recurrencia },
-                ]} />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Practicas reales</p><EmptyAwareList items={dim?.practicas_reales} /></div>
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Evidencias</p><EmptyAwareList items={dim?.evidencias} /></div>
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Herramientas</p><EmptyAwareList items={dim?.herramientas} /></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Voces criticas" muted>
-        <div className="space-y-3">
-          {(d.critical_voices?.length ? d.critical_voices : [{ interview_id: EMPTY_VALUE, interviewee_name: EMPTY_VALUE, relevance: EMPTY_VALUE, key_insight: EMPTY_VALUE }]).map((voice, i) => (
-            <div key={i} className="p-5 bg-white rounded-xl border border-neutral-200/70">
-              <p className="text-neutral-900 text-[13px] mb-1.5" style={{ fontWeight: 600 }}>{valueOrEmpty(voice.interviewee_name)}</p>
-              <p className="text-neutral-700 text-[13px] leading-relaxed mb-3">{valueOrEmpty(voice.key_insight)}</p>
-              <BadgeList items={[`ID: ${valueOrEmpty(voice.interview_id)}`, `Relevancia: ${valueOrEmpty(voice.relevance)}`]} />
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Patrones organizacionales">
-        <div className="space-y-3">
-          {(d.patrones_organizacionales?.length ? d.patrones_organizacionales : [{ nombre: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimensiones_donde_se_observa: [] }]).map((patron, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 600 }}>{valueOrEmpty(patron.nombre)}</p>
-              <p className="text-neutral-700 text-[13px] leading-relaxed mb-3">{valueOrEmpty(patron.descripcion)}</p>
-              <BadgeList items={patron.dimensiones_donde_se_observa} />
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Tensiones">
-        <div className="space-y-3">
-          {(d.tensiones?.length ? d.tensiones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, evidencia: EMPTY_VALUE, intensidad: EMPTY_VALUE, roles_involucrados: [] }]).map((tension, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <KeyValueGrid rows={[
-                { label: 'Tipo', value: tension.tipo },
-                { label: 'Intensidad', value: tension.intensidad },
-                { label: 'Descripcion', value: tension.descripcion },
-                { label: 'Evidencia', value: tension.evidencia },
-              ]} />
-              <div className="mt-3"><BadgeList items={tension.roles_involucrados} /></div>
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Brechas">
-        <div className="space-y-3">
-          {(d.brechas?.length ? d.brechas : [{ dimension_o_fase: EMPTY_VALUE, descripcion: EMPTY_VALUE, evidencia_o_ausencia: EMPTY_VALUE, impacto_potencial: EMPTY_VALUE }]).map((brecha, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <KeyValueGrid rows={[
-                { label: 'Dimension o fase', value: brecha.dimension_o_fase },
-                { label: 'Descripcion', value: brecha.descripcion },
-                { label: 'Evidencia o ausencia', value: brecha.evidencia_o_ausencia },
-                { label: 'Impacto potencial', value: brecha.impacto_potencial },
-              ]} />
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Limitaciones">
-        <div className="space-y-3">
-          {(d.limitaciones?.length ? d.limitaciones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimensiones_afectadas: [] }]).map((limitacion, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <KeyValueGrid rows={[
-                { label: 'Tipo', value: limitacion.tipo },
-                { label: 'Descripcion', value: limitacion.descripcion },
-              ]} />
-              <div className="mt-3"><BadgeList items={limitacion.dimensiones_afectadas} /></div>
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Recomendaciones" muted>
-        <EmptyAwareList items={d.recommendations} />
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Insumos para agente 4">
-        <div className="space-y-5">
-          <KeyValueGrid rows={[{ label: 'Nivel general formalizacion', value: d.insumos_para_agente_4?.nivel_general_formalizacion }]} />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Patrones clave resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.patrones_clave_resumen} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Brechas criticas resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.brechas_criticas_resumen} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores predictivos</p><EmptyAwareList items={d.insumos_para_agente_4?.indicadores_predictivos} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores agilidad</p><EmptyAwareList items={d.insumos_para_agente_4?.indicadores_agilidad} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Indicadores hibridos</p><EmptyAwareList items={d.insumos_para_agente_4?.indicadores_hibridos} /></div>
-          </div>
-        </div>
-      </DiagnosisCard>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Mock agent diagnosis (used in completed view)
-// ---------------------------------------------------------------------------
-const MOCK_AGENT_DIAGNOSIS = {
-  hallazgos: [
-    'Existe una percepción generalizada de falta de estandarización en la gestión de proyectos.',
-    'La comunicación entre áreas estratégicas y operativas presenta brechas significativas.',
-    'El 80% de los entrevistados reporta duplicidad de esfuerzos en proyectos interdepartamentales.',
-    'Hay disposición alta hacia la implementación de una PMO formal según los directivos.',
-  ],
-  temas: ['Gobernanza', 'Comunicación', 'Estandarización', 'Cultura organizacional', 'Recursos'],
-  analisis: 'Basado en el análisis de las entrevistas, la organización presenta madurez organizacional en etapa de estandarización (Nivel 2-3 en escala CMMI). Los hallazgos indican una necesidad urgente de establecer un marco de gobernanza de proyectos con roles claros y métricas compartidas.',
-};
-
-// ---------------------------------------------------------------------------
-// Main component
 // ---------------------------------------------------------------------------
 export default function EntrevistasModule() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -820,6 +57,7 @@ export default function EntrevistasModule() {
   const [isSending, setIsSending]           = useState(false);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [registeredExpanded, setRegisteredExpanded] = useState(false);
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
 
@@ -1135,11 +373,11 @@ export default function EntrevistasModule() {
             <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
             </div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[#5454e9] mb-2" style={{ fontWeight: 500 }}>Procesando</p>
             <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
               Consolidando entrevistas
             </h2>
-            <p className="text-neutral-500 text-[13px] mt-2">El Agente está analizando los registros…</p>
+            <p className="text-[#5454e9] text-[13px] mt-2">El Agente está analizando los registros…</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1189,112 +427,22 @@ export default function EntrevistasModule() {
             <div className="flex flex-col gap-5">
 
               {/* Agent diagnosis */}
-              {diagnosis && <Agent2DiagnosisView diagnosis={diagnosis} />}
-              {false && diagnosis && (
-                <div className="flex flex-col gap-5">
-
-                  {/* Top Summary Card */}
-                  <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                    <div className="flex items-center gap-2.5 mb-5">
-                      <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
-                        <Sparkles size={13} strokeWidth={1.75} />
-                      </div>
-                      <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Diagnóstico — Agente 1 · Entrevistas</span>
-                    </div>
-
-                    <p className="text-neutral-700 text-[14px] leading-relaxed mb-6">
-                      {diagnosis.summary || 'El Agente 1 ha consolidado los hallazgos de las entrevistas.'}
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      {diagnosis.numero_entrevistados !== undefined && (
-                        <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-100 flex flex-col justify-center">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>Entrevistados Analizados</p>
-                          <p className="text-neutral-900 text-xl" style={{ fontWeight: 500 }}>{typeof diagnosis.numero_entrevistados === 'number' ? Number(diagnosis.numero_entrevistados.toFixed(1)) : diagnosis.numero_entrevistados}</p>
-                        </div>
-                      )}
-                      {diagnosis.advertencia_fuente_unica && (
-                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex flex-col justify-center">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-amber-600 mb-1" style={{ fontWeight: 500 }}>Advertencia</p>
-                          <p className="text-amber-800 text-[12px] leading-relaxed">Fuente única detectada. Perspectiva limitada de la organización.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Recurring Themes */}
-                  {diagnosis.recurring_themes && diagnosis.recurring_themes.length > 0 && (
-                    <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Temas Recurrentes</p>
-                      <div className="space-y-4">
-                        {diagnosis.recurring_themes.map((theme, i) => (
-                          <div key={i} className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
-                            <p className="text-neutral-900 text-[13px] mb-1" style={{ fontWeight: 500 }}>{theme.theme}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <span className="px-2 py-0.5 rounded bg-neutral-100 text-neutral-600 text-[10px]" style={{ fontWeight: 500 }}>{theme.frequency}</span>
-                              <span className="text-neutral-400 text-[11px] truncate">Por: {theme.mentioned_by.join(', ')}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Key Findings */}
-                  {diagnosis.key_findings && diagnosis.key_findings.length > 0 && (
-                    <div className="rounded-2xl border border-neutral-200/70 bg-white p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Hallazgos Clave</p>
-                      <ul className="space-y-3">
-                        {diagnosis.key_findings.map((finding, i) => (
-                          <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
-                            <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-900 flex-shrink-0" />
-                            {finding}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Critical Voices */}
-                  {diagnosis.critical_voices && diagnosis.critical_voices.length > 0 && (
-                    <div className="rounded-2xl border border-neutral-200/70 bg-neutral-50/50 p-6">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>Voces Críticas</p>
-                      <div className="space-y-4">
-                        {diagnosis.critical_voices.map((voice, i) => (
-                          <div key={i} className="p-5 bg-white rounded-xl border border-neutral-200/70">
-                            <p className="text-neutral-900 text-[13px] mb-1.5" style={{ fontWeight: 600 }}>{voice.interviewee_name}</p>
-                            <p className="text-neutral-700 text-[13px] leading-relaxed mb-3">"{voice.key_insight}"</p>
-                            <span className="inline-block px-2.5 py-1 bg-neutral-50 border border-neutral-100 text-neutral-500 rounded-md text-[10px]" style={{ fontWeight: 500 }}>Relevancia: {voice.relevance}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Recomendaciones */}
-                  {diagnosis.recommendations && diagnosis.recommendations.length > 0 && (
-                    <div className="rounded-2xl border border-neutral-200/70 bg-neutral-50 p-6">
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>Recomendaciones</p>
-                      <ul className="space-y-3">
-                        {diagnosis.recommendations.map((rec, i) => (
-                          <li key={i} className="flex items-start gap-3 text-neutral-700 text-[13px] leading-relaxed">
-                            <div className="w-1.5 h-1.5 rounded-full bg-neutral-400 mt-2 flex-shrink-0" />
-                            {rec}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                </div>
-              )}
-
+              {diagnosis && <EntrevistasDiagnosisView diagnosis={diagnosis} />}
               {/* Read-only accordion list */}
-              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>Entrevistas registradas</h3>
-                  <div className="flex items-center gap-3">
+              <div className="bg-white rounded-2xl border border-neutral-200/70 overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                <div className={`px-6 py-4 flex items-center justify-between gap-4 hover:bg-neutral-50 transition-colors ${registeredExpanded ? 'border-b border-neutral-100' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => setRegisteredExpanded((open) => !open)}
+                    className="flex items-center gap-2 min-w-0 text-left flex-1"
+                  >
+                    <MessageSquare size={13} className="text-neutral-500 flex-shrink-0" strokeWidth={1.75} />
+                    <h3 className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>Entrevistas registradas</h3>
+                    <span className="text-[11px] text-neutral-400 tabular-nums flex-shrink-0">{entrevistas.length}</span>
+                  </button>
+                  <div className="flex items-center gap-3 flex-shrink-0">
                     <button
+                      type="button"
                       onClick={handleDownloadZip}
                       disabled={isDownloadingZip}
                       className="flex items-center gap-1.5 text-[11px] text-neutral-500 hover:text-neutral-900 transition-colors disabled:opacity-50"
@@ -1303,46 +451,65 @@ export default function EntrevistasModule() {
                       {isDownloadingZip ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                       Descargar todo
                     </button>
-                    <span className="text-[11px] text-neutral-400 tabular-nums">{entrevistas.length}</span>
+                    <button
+                      type="button"
+                      onClick={() => setRegisteredExpanded((open) => !open)}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+                      title={registeredExpanded ? 'Ocultar entrevistas' : 'Mostrar entrevistas'}
+                    >
+                      <ChevronDown size={13} className={`transition-transform ${registeredExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
+                    </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  {entrevistas.map(e => (
-                    <div key={e.id}>
-                      <button
-                        onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
-                        className="w-full flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 text-left">
-                          <div className="w-8 h-8 rounded-full bg-white border border-neutral-200/80 flex items-center justify-center">
-                            <User size={13} className="text-neutral-700" strokeWidth={1.75} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>{e.nombre}</p>
-                              {e.fileName && (
-                                <span className="bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 border border-neutral-200/60">
-                                  <Paperclip size={10} /> PDF
-                                </span>
+                <AnimatePresence initial={false}>
+                  {registeredExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-6 space-y-2">
+                        {entrevistas.map(e => (
+                          <div key={e.id}>
+                            <button
+                              onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
+                              className="w-full flex items-center justify-between p-3 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 text-left">
+                                <div className="w-8 h-8 rounded-full bg-white border border-neutral-200/80 flex items-center justify-center">
+                                  <User size={13} className="text-neutral-700" strokeWidth={1.75} />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>{e.nombre}</p>
+                                    {e.fileName && (
+                                      <span className="bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 border border-neutral-200/60">
+                                        <Paperclip size={10} /> PDF
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-neutral-500 text-[11px]">{e.cargo} · {e.area}</p>
+                                </div>
+                              </div>
+                              <ChevronDown size={13} className={`text-neutral-400 transition-transform ${expandedId === e.id ? 'rotate-180' : ''}`} strokeWidth={1.75} />
+                            </button>
+                            <AnimatePresence>
+                              {expandedId === e.id && (
+                                <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+                                  <p className="text-neutral-700 text-[13px] p-4 leading-relaxed bg-neutral-50 rounded-b-xl border-t border-neutral-100 whitespace-pre-wrap">
+                                    {e.notas}
+                                  </p>
+                                </motion.div>
                               )}
-                            </div>
-                            <p className="text-neutral-500 text-[11px]">{e.cargo} · {e.area}</p>
+                            </AnimatePresence>
                           </div>
-                        </div>
-                        <ChevronDown size={13} className={`text-neutral-400 transition-transform ${expandedId === e.id ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-                      </button>
-                      <AnimatePresence>
-                        {expandedId === e.id && (
-                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-                            <p className="text-neutral-700 text-[13px] p-4 leading-relaxed bg-neutral-50 rounded-b-xl border-t border-neutral-100 whitespace-pre-wrap">
-                              {e.notas}
-                            </p>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  ))}
-                </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
             </div>

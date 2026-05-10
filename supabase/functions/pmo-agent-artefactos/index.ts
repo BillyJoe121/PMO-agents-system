@@ -12,65 +12,113 @@ const corsHeaders = {
 
 const DEFAULT_HIGH_MODEL = "gemini-3.1-pro-preview";
 const DEFAULT_LOW_MODEL = "gemini-flash-lite-latest";
+const DEFAULT_KIMI_MODEL = "kimi-k2.6";
 const DEFAULT_AI_MODEL_MODE = "high_with_fallback";
 
-type AiModelMode = "low" | "high_with_fallback";
+type AiModelMode = "low" | "high_with_fallback" | "kimi";
+type AiProvider = "gemini" | "kimi";
 
 interface AiModelSettings {
   mode: AiModelMode;
   high_model: string;
   low_model: string;
+  kimi_model: string;
 }
 
-interface GeminiAttemptError {
+interface AiModelCandidate {
+  provider: AiProvider;
+  model: string;
+}
+
+interface AiAttemptError {
+  provider: AiProvider;
   model: string;
   message: string;
   status?: number;
 }
 
-interface GeminiTextResult {
+interface AiTextResult {
   text: string;
+  provider: AiProvider;
   model: string;
   attemptedModels: string[];
-  errors: GeminiAttemptError[];
+  errors: AiAttemptError[];
   fallbackUsed: boolean;
 }
 
 function normalizeAiModelSettings(row?: Partial<AiModelSettings> | null): AiModelSettings {
-  const mode = row?.mode === "low" ? "low" : DEFAULT_AI_MODEL_MODE;
+  const rawMode = String(row?.mode ?? "").trim().toLowerCase();
+  const mode = rawMode === "low" || rawMode === "kimi" ? rawMode : DEFAULT_AI_MODEL_MODE;
   return {
     mode,
     high_model: row?.high_model || DEFAULT_HIGH_MODEL,
     low_model: row?.low_model || DEFAULT_LOW_MODEL,
+    kimi_model: row?.kimi_model || DEFAULT_KIMI_MODEL,
   };
 }
 
-async function getAiModelSettings(supabase: ReturnType<typeof createClient>): Promise<AiModelSettings> {
+async function getAiModelSettings(supabase: any): Promise<AiModelSettings> {
   const { data, error } = await supabase
     .from("ai_model_settings")
-    .select("mode, high_model, low_model")
+    .select("mode, high_model, low_model, kimi_model")
     .eq("id", "global")
     .maybeSingle();
 
   if (error) {
-    console.warn("[pmo-agent-artefactos] No se pudo leer ai_model_settings; usando defaults.", error.message);
-    return normalizeAiModelSettings(null);
+    console.warn("[pmo-agent-artefactos] No se pudo leer ai_model_settings con kimi_model; intentando esquema legacy.", error.message);
+    const fallback = await supabase
+      .from("ai_model_settings")
+      .select("mode, high_model, low_model")
+      .eq("id", "global")
+      .maybeSingle();
+
+    if (fallback.error) {
+      console.warn("[pmo-agent-artefactos] No se pudo leer ai_model_settings; usando defaults.", fallback.error.message);
+      return normalizeAiModelSettings(null);
+    }
+
+    return normalizeAiModelSettings(fallback.data as Partial<AiModelSettings> | null);
   }
 
   return normalizeAiModelSettings(data as Partial<AiModelSettings> | null);
 }
 
 function getModelCandidates(settings: AiModelSettings) {
-  const models = settings.mode === "low"
-    ? [settings.low_model]
-    : [settings.high_model, settings.low_model];
+  const candidates: AiModelCandidate[] = settings.mode === "kimi"
+    ? [{ provider: "kimi", model: settings.kimi_model }]
+    : settings.mode === "low"
+      ? [
+          { provider: "gemini", model: settings.low_model },
+          { provider: "kimi", model: settings.kimi_model },
+        ]
+      : [
+          { provider: "gemini", model: settings.high_model },
+          { provider: "gemini", model: settings.low_model },
+          { provider: "kimi", model: settings.kimi_model },
+        ];
 
-  return [...new Set(models.filter(Boolean))];
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.provider}:${candidate.model}`;
+    if (!candidate.model || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-function shouldTryNextGeminiModel(status: number | undefined, isLastModel: boolean) {
+function shouldTryNextModel(status: number | undefined, isLastModel: boolean) {
   if (isLastModel) return false;
   return status === undefined || [400, 404, 429, 500, 502, 503, 504].includes(status);
+}
+
+async function readResponseData(response: Response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw_text: text };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -222,13 +270,13 @@ Responde ÚNICAMENTE con un JSON válido con la siguiente estructura, sin texto 
 // ─────────────────────────────────────────────────────────────────────────────
 // Llamada a Gemini API directamente via REST
 // ─────────────────────────────────────────────────────────────────────────────
-async function callGemini(
+async function callAi(
   prompt: string,
-  apiKey: string,
-  models: string[],
+  apiKeys: { gemini: string; kimi: string },
+  candidates: AiModelCandidate[],
   temperature?: number
-): Promise<GeminiTextResult> {
-  const body = {
+): Promise<AiTextResult> {
+  const geminiBody = {
     contents: [
       {
         role: "user",
@@ -236,68 +284,93 @@ async function callGemini(
       },
     ],
     generationConfig: {
-      temperature: temperature ?? 0.2,
+      temperature: temperature ?? 1,
       responseMimeType: "application/json",
     },
   };
 
-  const errors: GeminiAttemptError[] = [];
+  const errors: AiAttemptError[] = [];
   const attemptedModels: string[] = [];
 
-  for (let index = 0; index < models.length; index += 1) {
-    const model = models[index];
-    attemptedModels.push(model);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index];
+    const attemptId = `${candidate.provider}:${candidate.model}`;
+    attemptedModels.push(attemptId);
 
     try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const apiKey = candidate.provider === "kimi" ? apiKeys.kimi : apiKeys.gemini;
+      if (!apiKey) throw new Error(`Falta API key para ${candidate.provider}`);
 
-      const json = await res.json();
+      const res = candidate.provider === "kimi"
+        ? await fetch("https://api.moonshot.ai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: candidate.model,
+              messages: [{ role: "user", content: prompt }],
+              max_completion_tokens: 8192,
+              response_format: { type: "json_object" },
+              thinking: { type: "disabled" },
+              stream: false,
+            }),
+          })
+        : await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${candidate.model}:generateContent?key=${apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(geminiBody),
+          });
+
+      const json = await readResponseData(res);
 
       if (res.ok) {
+        const text = candidate.provider === "kimi"
+          ? json?.choices?.[0]?.message?.content ?? ""
+          : json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
         return {
-          text: json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "",
-          model,
+          text,
+          provider: candidate.provider,
+          model: candidate.model,
           attemptedModels,
           errors,
           fallbackUsed: index > 0,
         };
       }
 
-      const message = json?.error?.message || json?.error?.status || JSON.stringify(json);
-      errors.push({ model, status: res.status, message });
+      const message = candidate.provider === "kimi"
+        ? json?.error?.message || json?.error?.type || json?.raw_text || JSON.stringify(json)
+        : json?.error?.message || json?.error?.status || JSON.stringify(json);
+      errors.push({ provider: candidate.provider, model: candidate.model, status: res.status, message });
 
-      if (!shouldTryNextGeminiModel(res.status, index === models.length - 1)) {
-        throw new Error(`Gemini API error ${res.status} (${model}): ${message}`);
+      if (!shouldTryNextModel(res.status, index === candidates.length - 1)) {
+        throw new Error(`${candidate.provider} API error ${res.status} (${candidate.model}): ${message}`);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Error desconocido llamando a Gemini";
-      const alreadyLogged = errors.some(e => e.model === model && e.message === message);
-      if (!alreadyLogged) errors.push({ model, message });
+      const message = error instanceof Error ? error.message : "Error desconocido llamando al modelo";
+      const alreadyLogged = errors.some(e => e.provider === candidate.provider && e.model === candidate.model && e.message === message);
+      if (!alreadyLogged) errors.push({ provider: candidate.provider, model: candidate.model, message });
 
-      const latestStatus = [...errors].reverse().find(e => e.model === model)?.status;
-      if (latestStatus !== undefined && !shouldTryNextGeminiModel(latestStatus, index === models.length - 1)) {
+      const latestStatus = [...errors].reverse().find(e => e.provider === candidate.provider && e.model === candidate.model)?.status;
+      if (latestStatus !== undefined && !shouldTryNextModel(latestStatus, index === candidates.length - 1)) {
         throw error;
       }
 
-      if (index === models.length - 1) {
+      if (index === candidates.length - 1) {
         throw new Error(
-          `Gemini falló en todos los modelos (${attemptedModels.join(", ")}). Último error: ${message}`
+          `Fallaron todos los modelos configurados (${attemptedModels.join(", ")}). Ultimo error: ${message}`
         );
       }
     }
   }
 
-  throw new Error("No hay modelos configurados para Gemini.");
+  throw new Error("No hay modelos configurados.");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Extrae y serializa el contenido de la Fase 7 como texto plano
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 function extractFase7Content(agentData: any): string {
   if (!agentData) return "";
   if (typeof agentData === "string") {
@@ -395,11 +468,10 @@ serve(async (req: Request) => {
 
     supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const geminiApiKey = Deno.env.get("GOOGLE_API_KEY") || Deno.env.get("GEMINI_API_KEY");
-
-    if (!geminiApiKey) {
-      throw new Error("Falta la configuración de la API Key (GOOGLE_API_KEY o GEMINI_API_KEY) en los secretos de Supabase.");
-    }
+    const apiKeys = {
+      gemini: Deno.env.get("GOOGLE_API_KEY") || Deno.env.get("GEMINI_API_KEY") || "",
+      kimi: Deno.env.get("MOONSHOT_API_KEY") || Deno.env.get("KIMI_API_KEY") || "",
+    };
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -446,11 +518,11 @@ serve(async (req: Request) => {
 
     // ── 4. Construir prompt y llamar a Gemini ─────────────────────────────────
     const prompt = buildPrompt(fase7Content, agentConfig?.prompt_sistema);
-    const geminiResponse = await callGemini(
-      prompt, 
-      geminiApiKey, 
+    const geminiResponse = await callAi(
+      prompt,
+      apiKeys,
       modelsToTry,
-      agentConfig?.temperatura ? Number(agentConfig.temperatura) : 0.2
+      agentConfig?.temperatura ? Number(agentConfig.temperatura) : 1
     );
 
     // ── 5. Parsear la respuesta JSON ──────────────────────────────────────────
@@ -505,6 +577,8 @@ serve(async (req: Request) => {
         model_mode: modelSettings.mode,
         model_high: modelSettings.high_model,
         model_low: modelSettings.low_model,
+        model_kimi: modelSettings.kimi_model,
+        model_provider: geminiResponse.provider,
         model_used: geminiResponse.model,
         model_fallback_used: geminiResponse.fallbackUsed,
         attempted_models: geminiResponse.attemptedModels,

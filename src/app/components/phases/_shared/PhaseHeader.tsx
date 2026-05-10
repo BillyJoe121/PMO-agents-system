@@ -1,6 +1,6 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, X, Square, Loader2, RotateCcw, Download } from 'lucide-react';
+import { ArrowLeft, X, Square, Loader2, RotateCcw, Download, ChevronDown, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { useApp } from '../../../context/AppContext';
@@ -35,10 +35,26 @@ export default function PhaseHeader({
   const { cancel, isCancelling } = useCancelAgent(projectId, phaseNumber);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showReprocess, setShowReprocess] = useState(false);
+  const [showPdfMenu, setShowPdfMenu] = useState(false);
+  const pdfMenuRef = useRef<HTMLDivElement>(null);
 
   const project = getProject(projectId);
   const phase = project?.phases.find(p => p.number === phaseNumber);
   const isProcessing = phase?.status === 'procesando';
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (pdfMenuRef.current && !pdfMenuRef.current.contains(event.target as Node)) {
+        setShowPdfMenu(false);
+      }
+    }
+    if (showPdfMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPdfMenu]);
 
   const handleCancelClick = () => {
     if (isCancelling) return;
@@ -64,13 +80,13 @@ export default function PhaseHeader({
 
   return (
     <>
-      <div className="sticky top-0 z-20 bg-[#f7f8ff]/85 backdrop-blur-md border-b border-neutral-200/60 print:relative print:bg-transparent print:border-none print:pt-8 print:pb-4">
+      <div className="sticky top-0 z-20 bg-[#f7f8ff]/85 backdrop-blur-md border-b border-neutral-200/60 print:hidden">
         <div className="max-w-[1100px] mx-auto px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             {/* Back button */}
             <button
               onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="group inline-flex items-center gap-2 pl-2 pr-3.5 py-1.5 rounded-full bg-white border border-neutral-200/80 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 text-[13px] transition-all flex-shrink-0"
+              className="group inline-flex items-center gap-2 pl-2 pr-3.5 py-1.5 rounded-full bg-white border border-neutral-200/80 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 text-[13px] transition-all flex-shrink-0 print:hidden"
               style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
             >
               <span className="w-5 h-5 rounded-full bg-neutral-100 group-hover:bg-neutral-200 flex items-center justify-center transition-colors">
@@ -79,7 +95,7 @@ export default function PhaseHeader({
               <span className="truncate max-w-[160px]">{companyName}</span>
             </button>
 
-            <span className="text-neutral-300">/</span>
+            <span className="text-neutral-300 print:hidden">/</span>
 
             <div className="flex items-center gap-2 min-w-0">
               <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-white text-[10px] tabular-nums flex-shrink-0 ${phase?.status === 'completado' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.2)]' : 'bg-neutral-900'}`} style={{ fontWeight: 600 }}>
@@ -150,19 +166,105 @@ export default function PhaseHeader({
             {/* ── Botón Descargar PDF ── */}
             <AnimatePresence>
               {(phase?.status === 'completado' || (phase?.agentData && Object.keys(phase.agentData).length > 0)) && (
-                <motion.button
-                  key="download-btn"
+                <motion.div
+                  key="download-btn-group"
                   initial={{ opacity: 0, scale: 0.9, width: 0 }}
                   animate={{ opacity: 1, scale: 1, width: 'auto' }}
                   exit={{ opacity: 0, scale: 0.9, width: 0 }}
                   transition={{ duration: 0.18 }}
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] border bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800 transition-all flex-shrink-0 overflow-hidden"
-                  style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}
+                  className="relative flex-shrink-0"
+                  ref={pdfMenuRef}
                 >
-                  <Download size={13} strokeWidth={2} />
-                  Descargar PDF
-                </motion.button>
+                  <button
+                    onClick={() => setShowPdfMenu(!showPdfMenu)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] border bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800 transition-all overflow-hidden"
+                    style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}
+                  >
+                    <Download size={13} strokeWidth={2} />
+                    Descargar PDF
+                    <ChevronDown size={13} strokeWidth={2} className={`transition-transform duration-200 ${showPdfMenu ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  <AnimatePresence>
+                    {showPdfMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-[calc(100%+8px)] w-56 bg-white border border-neutral-200 rounded-xl shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] overflow-hidden z-50 flex flex-col"
+                      >
+                        <button
+                          onClick={() => {
+                            setShowPdfMenu(false);
+                            // Expand any height:0 overflow-hidden panels (collapsed accordions) before printing
+                            const collapsed = document.querySelectorAll<HTMLElement>('.overflow-hidden');
+                            const overrides: { el: HTMLElement; height: string; overflow: string; opacity: string }[] = [];
+                            collapsed.forEach(el => {
+                              const computed = window.getComputedStyle(el);
+                              if (parseFloat(computed.height) === 0) {
+                                overrides.push({ el, height: el.style.height, overflow: el.style.overflow, opacity: el.style.opacity });
+                                el.style.height = 'auto';
+                                el.style.overflow = 'visible';
+                                el.style.opacity = '1';
+                              }
+                            });
+                            window.print();
+                            // Restore original inline styles after print dialog closes
+                            overrides.forEach(({ el, height, overflow, opacity }) => {
+                              el.style.height = height;
+                              el.style.overflow = overflow;
+                              el.style.opacity = opacity;
+                            });
+                          }}
+                          className="flex flex-col items-start px-4 py-3 text-left hover:bg-neutral-50 transition-colors border-b border-neutral-100"
+                        >
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <FileText size={14} className="text-neutral-500" />
+                            <span className="text-[13px] text-neutral-900 font-semibold">Como en la Vista Actual</span>
+                          </div>
+                          <span className="text-[11px] text-neutral-500 leading-tight">Imprime exactamente el diseño gráfico que ves en pantalla.</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowPdfMenu(false);
+                            document.documentElement.classList.add('print-apa');
+                            
+                            // Expand any height:0 overflow-hidden panels (collapsed accordions) before printing
+                            const collapsed = document.querySelectorAll<HTMLElement>('.overflow-hidden');
+                            const overrides: { el: HTMLElement; height: string; overflow: string; opacity: string }[] = [];
+                            collapsed.forEach(el => {
+                              const computed = window.getComputedStyle(el);
+                              if (parseFloat(computed.height) === 0) {
+                                overrides.push({ el, height: el.style.height, overflow: el.style.overflow, opacity: el.style.opacity });
+                                el.style.height = 'auto';
+                                el.style.overflow = 'visible';
+                                el.style.opacity = '1';
+                              }
+                            });
+                            
+                            window.print();
+                            
+                            // Restore original inline styles after print dialog closes
+                            overrides.forEach(({ el, height, overflow, opacity }) => {
+                              el.style.height = height;
+                              el.style.overflow = overflow;
+                              el.style.opacity = opacity;
+                            });
+                            document.documentElement.classList.remove('print-apa');
+                          }}
+                          className="flex flex-col items-start px-4 py-3 text-left hover:bg-neutral-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <FileText size={14} className="text-neutral-500" />
+                            <span className="text-[13px] text-neutral-900 font-semibold">Como formato plano</span>
+                          </div>
+                          <span className="text-[11px] text-neutral-500 leading-tight">Genera un documento de texto estructurado y sobrio.</span>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               )}
             </AnimatePresence>
 

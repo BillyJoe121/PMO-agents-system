@@ -126,16 +126,19 @@ export function useDocumentacion(projectId: string) {
         .eq('proyecto_id', projectId);
 
       if (docsData) {
-        setDocumentos(docsData.map(d => ({
-          id: d.id,
-          name: d.nombre_personalizado || 'Documento',
-          size: (d.metadatos?.size_kb || 0) * 1024,
-          type: 'application/pdf',
-          category: d.categoria,
-          customCategory: '',
-          storagePath: d.storage_path,
-          dbId: d.id,
-        })));
+        setDocumentos(docsData.map(d => {
+          const isStandard = /^D(0[1-9]|1[0-1])$/.test(d.categoria);
+          return {
+            id: d.id,
+            name: d.nombre_personalizado || 'Documento',
+            size: (d.metadatos?.size_kb || 0) * 1024,
+            type: 'application/pdf',
+            category: isStandard ? d.categoria : 'D11',
+            customCategory: isStandard ? '' : d.categoria,
+            storagePath: d.storage_path,
+            dbId: d.id,
+          };
+        }));
       }
 
       // 2. Obtener diagnóstico de la fase 1
@@ -169,8 +172,11 @@ export function useDocumentacion(projectId: string) {
 
     try {
       for (const doc of documentos) {
-        // Si ya fue subido antes (tiene storagePath), lo reutilizamos
-        if (doc.storagePath) {
+        // Si ya fue subido antes (tiene storagePath), actualizamos su categoria en DB por si cambió y lo reutilizamos
+        if (doc.storagePath && doc.dbId) {
+          await supabase.from('documentos').update({
+            categoria: doc.category === 'D11' ? doc.customCategory : doc.category
+          }).eq('id', doc.dbId);
           enriched.push(doc);
           continue;
         }

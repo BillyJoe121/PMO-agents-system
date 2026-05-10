@@ -18,10 +18,8 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Loader2, CheckCircle2, ChevronLeft, ChevronRight,
-  RefreshCw, ThumbsUp, Send, AlertTriangle,
-  Clock, Sparkles, Target, AlertCircle, Layers, ClipboardList,
-  MessageSquare, Save, Download
+  Loader2, CheckCircle2,
+  Send, AlertCircle, Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
@@ -31,21 +29,7 @@ import { useSoundManager } from '../../hooks/useSoundManager';
 import { useMadurez } from '../../hooks/useMadurez';
 import MadurezSurveyPanel from './_shared/MadurezSurveyPanel';
 import { supabase } from '../../lib/supabase';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import MadurezDiagnosisView from './madurez/MadurezDiagnosisView';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,11 +102,11 @@ interface FullResults {
 // Constants
 // ---------------------------------------------------------------------------
 const MATURITY_LEVELS = [
-  { level: 1, name: 'Inicial',        color: '#737373', bg: '#f5f5f5', desc: 'Procesos ad-hoc y reactivos. Sin estandarización formal ni visibilidad.' },
-  { level: 2, name: 'En Desarrollo',  color: '#525252', bg: '#f5f5f5', desc: 'Algunos procesos definidos, pero aplicación inconsistente entre equipos.' },
-  { level: 3, name: 'Definido',       color: '#404040', bg: '#f5f5f5', desc: 'Procesos documentados y seguidos de manera consistente en la organización.' },
-  { level: 4, name: 'Gestionado',     color: '#262626', bg: '#f5f5f5', desc: 'Procesos medidos y controlados mediante métricas y tableros de indicadores.' },
-  { level: 5, name: 'Optimizado',     color: '#5454e9', bg: '#f5f5f5', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
+  { level: 1, name: 'Inicial',        color: '#64748b', bg: '#f8fafc', desc: 'Procesos ad-hoc y reactivos. Sin estandarización formal ni visibilidad.' },
+  { level: 2, name: 'En Desarrollo',  color: '#e9683b', bg: '#fff1eb', desc: 'Algunos procesos definidos, pero aplicación inconsistente entre equipos.' },
+  { level: 3, name: 'Definido',       color: '#9aa100', bg: '#fbfdd7', desc: 'Procesos documentados y seguidos de manera consistente en la organización.' },
+  { level: 4, name: 'Gestionado',     color: '#4cb979', bg: '#ecfdf3', desc: 'Procesos medidos y controlados mediante métricas y tableros de indicadores.' },
+  { level: 5, name: 'Optimizado',     color: '#5454e9', bg: '#eceeff', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
 ];
 
 // No local mock results are used in this module; all diagnostics come from fases_estado.
@@ -131,8 +115,8 @@ const MATURITY_LEVELS = [
 // PMO type config
 // ---------------------------------------------------------------------------
 const PMO_CONFIG = {
-  Ágil:       { color: '#5454e9', Icon: Layers,       label: 'Ágil' },
-  Híbrida:    { color: '#5454e9', Icon: Layers,  label: 'Híbrida' },
+  Ágil:       { color: '#4cb979', Icon: Layers,       label: 'Ágil' },
+  Híbrida:    { color: '#865cf0', Icon: Layers,  label: 'Híbrida' },
   Predictiva: { color: '#5454e9', Icon: Layers, label: 'Predictiva' },
 };
 
@@ -154,21 +138,8 @@ function parsePmoType(agentData?: any): PmoType {
 // Legacy inline components removed
 
 // ---------------------------------------------------------------------------
-// Version badge + Approve modal (shared pattern from Phase 4)
+// Approve modal (shared pattern from Phase 4)
 // ---------------------------------------------------------------------------
-function VersionBadge({ version, timestamp }: { version: DiagnosisVersion; timestamp: string }) {
-  const ts = new Date(timestamp);
-  const fmt = ts.toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${version === 'reprocesado' ? 'bg-neutral-900 border-neutral-900 text-white' : 'bg-gray-100 border-gray-200 text-gray-500'}`} style={{ fontWeight: 500 }}>
-      {version === 'reprocesado' ? <RefreshCw size={10} /> : <Sparkles size={10} />}
-      Diagnóstico {version === 'reprocesado' ? 'reprocesado' : 'original'}
-      <span className="opacity-50">·</span>
-      <Clock size={10} />{fmt}
-    </div>
-  );
-}
-
 function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
   open: boolean; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
 }) {
@@ -313,94 +284,6 @@ function buildRows(definitions: { key: string; label: string }[], map: Record<st
 function averageRows(rows: MaturityRow[]) {
   if (!rows.length) return 0;
   return Number((rows.reduce((sum, row) => sum + row.value, 0) / rows.length).toFixed(1));
-}
-
-function MaturityBISection({
-  title,
-  rows,
-  barColor,
-}: {
-  title: string;
-  rows: MaturityRow[];
-  barColor: string;
-}) {
-  const total = averageRows(rows);
-  const tableRows = [...rows, { key: 'total_general', label: 'Total general', value: total, maturity: formatMaturityLabel('', total) }];
-  const ticks = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
-
-  return (
-    <section className="mb-8 font-[Arial,Roboto,sans-serif]">
-      <div className="bg-neutral-700 text-white text-center py-2 px-4 text-[14px] font-bold tracking-wide">
-        {title}
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-[30%_40%_30%] gap-4 bg-white border border-neutral-300 border-t-0 p-4">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[12px] text-neutral-900">
-            <thead>
-              <tr className="bg-neutral-100">
-                <th className="border border-neutral-300 px-2.5 py-2 text-left font-bold">Etiquetas de fila</th>
-                <th className="border border-neutral-300 px-2.5 py-2 text-right font-bold">Promedio</th>
-                <th className="border border-neutral-300 px-2.5 py-2 text-left font-bold">Nivel Madurez</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableRows.map((row) => {
-                const isTotal = row.key === 'total_general';
-                return (
-                  <tr key={row.key} className={isTotal ? 'bg-neutral-200 font-bold' : 'bg-white'}>
-                    <td className="border border-neutral-300 px-2.5 py-2">{row.label}</td>
-                    <td className="border border-neutral-300 px-2.5 py-2 text-right tabular-nums">{formatOneDecimal(row.value)}</td>
-                    <td className="border border-neutral-300 px-2.5 py-2">{row.maturity}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} margin={{ top: 26, right: 12, left: 0, bottom: 58 }}>
-              <CartesianGrid stroke="#d9d9d9" vertical={false} />
-              <XAxis dataKey="label" interval={0} angle={-35} textAnchor="end" height={70} tick={{ fontSize: 11, fill: '#333' }} />
-              <YAxis domain={[1, 5]} ticks={ticks} tickFormatter={(value) => Number(value).toFixed(1)} tick={{ fontSize: 11, fill: '#333' }} />
-              <Bar dataKey="value" fill={barColor} isAnimationActive={false}>
-                <LabelList dataKey="value" position="top" formatter={(value: any) => formatOneDecimal(value)} style={{ fill: '#111', fontSize: 12, fontWeight: 700 }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={rows} margin={{ top: 20, right: 28, bottom: 20, left: 28 }}>
-              <PolarGrid stroke="#bdbdbd" />
-              <PolarAngleAxis dataKey="label" tick={{ fill: '#333', fontSize: 11 }} />
-              <PolarRadiusAxis angle={90} domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tickFormatter={(value) => Number(value).toFixed(1)} tick={{ fill: '#666', fontSize: 10 }} />
-              <Radar dataKey="value" stroke="#1F497D" strokeWidth={2.5} fill="transparent" dot={{ r: 3.5, fill: '#1F497D', stroke: '#1F497D' }} isAnimationActive={false}>
-                <LabelList dataKey="value" formatter={(value: any) => formatOneDecimal(value)} position="outside" style={{ fill: '#1F497D', fontSize: 11, fontWeight: 700 }} />
-              </Radar>
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MaturityBIDashboard({ results }: { results: FullResults }) {
-  const primary = results.predictiva ?? results.agil;
-  const domainMap = results.predictiva?.por_dominio ?? results.agil?.por_dominio ?? results.agil?.por_factor ?? primary?.por_dominio;
-  const phaseMap = results.predictiva?.por_fase ?? results.agil?.por_fase ?? primary?.por_fase;
-  const domainData = buildRows(domainRows, domainMap);
-  const focusAreaData = buildRows(focusAreaRows, phaseMap);
-
-  return (
-    <div className="mb-6">
-      <MaturityBISection title="Análisis de Madurez por Dominio" rows={domainData} barColor="#4CAF50" />
-      <MaturityBISection title="Análisis de Madurez por Área de Enfoque" rows={focusAreaData} barColor="#1565C0" />
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -576,86 +459,6 @@ function parseAgentResults(datos: any): FullResults | null {
 
 // ---------------------------------------------------------------------------
 // Main Module
-function AnalysisDetails({ results }: { results: FullResults }) {
-  if (!results.analisis_cruzado && !results.analisis_cualitativo && !results.top_gaps?.length) return null;
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-      {/* Top Gaps */}
-      {results.top_gaps && results.top_gaps.length > 0 && (
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-5 shadow-sm">
-          <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-4" style={{ fontWeight: 700 }}>Top Brechas Críticas</p>
-          <ul className="space-y-3">
-            {results.top_gaps.map((g, i) => (
-              <li key={i} className="flex items-center justify-between text-[13px] pb-3 border-b border-neutral-100 last:border-0 last:pb-0">
-                <span className="font-medium text-gray-700">{g.area}</span>
-                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                  g.severity === 'critical' ? 'bg-neutral-800 text-neutral-100' :
-                  g.severity === 'high' ? 'bg-neutral-200 text-neutral-700' :
-                  'bg-neutral-100 text-neutral-500'
-                }`}>
-                  {g.severity}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Analisis Cualitativo */}
-      {results.analisis_cualitativo && results.analisis_cualitativo.temas_recurrentes.length > 0 && (
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-5 shadow-sm">
-          <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-1" style={{ fontWeight: 700 }}>Análisis Cualitativo</p>
-          <p className="text-[10px] text-gray-400 mb-4 uppercase tracking-wider">{results.analisis_cualitativo.total_respuestas_abiertas} respuestas procesadas</p>
-          <ul className="space-y-4">
-            {results.analisis_cualitativo.temas_recurrentes.map((t, i) => (
-              <li key={i} className="text-[13px] border-l border-neutral-200 pl-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-bold text-gray-700">{t.tema}</span>
-                  <span className="text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-md font-medium">{t.frecuencia} menciones</span>
-                </div>
-                <p className="text-gray-500 leading-relaxed text-[12px]">{t.sintesis}</p>
-                {t.relacion_con_brechas && <p className="text-neutral-400 text-[11px] mt-1 italic">Relación: {t.relacion_con_brechas}</p>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Analisis Cruzado (Híbrido) */}
-      {results.analisis_cruzado?.aplica && (
-        <div className="lg:col-span-2 bg-neutral-50 rounded-2xl border border-neutral-200/70 p-6 shadow-sm text-neutral-800">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-1" style={{ fontWeight: 700 }}>Análisis Cruzado Híbrido</p>
-              <p className="text-lg font-bold text-neutral-900 tracking-tight">{results.analisis_cruzado.perfil}</p>
-            </div>
-            <div className="px-3 py-1.5 rounded-lg bg-white border border-neutral-200 shadow-sm">
-              <span className="text-[10px] uppercase tracking-wider text-neutral-400 block mb-0.5">Coherencia Metodológica</span>
-              <span className="font-bold text-[13px] text-neutral-700">{results.analisis_cruzado.coherencia}</span>
-            </div>
-          </div>
-          
-          {results.analisis_cruzado.tensiones && results.analisis_cruzado.tensiones.length > 0 && (
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3" style={{ fontWeight: 700 }}>Tensiones Identificadas</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {results.analisis_cruzado.tensiones.map((t, i) => (
-                  <div key={i} className="bg-white border border-neutral-200/80 rounded-xl p-4">
-                    <p className="font-medium text-neutral-800 text-[13px] mb-1.5">{t.tipo}</p>
-                    <p className="text-[12px] text-neutral-500 leading-relaxed mb-2">{t.descripcion}</p>
-                    <p className="text-[11px] text-neutral-400 italic">Impacto: {t.impacto}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 export default function MadurezModule() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -667,8 +470,32 @@ export default function MadurezModule() {
   const phase = project?.phases.find(p => p.number === 5);
   const phase4 = project?.phases.find(p => p.number === 4);
 
+  // ── Fresh Phase 4 data from DB to avoid stale AppContext race ──
+  // When the user reprocesses Phase 4 and immediately navigates to Phase 5,
+  // the AppContext may not have hydrated yet with the new Phase 4 result.
+  // We query the DB directly on mount so pmoType is always accurate.
+  const [freshPhase4Data, setFreshPhase4Data] = useState<any>(null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('fases_estado')
+        .select('datos_consolidados')
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', 4)
+        .maybeSingle();
+      if (data?.datos_consolidados) {
+        setFreshPhase4Data(data.datos_consolidados);
+      }
+    })();
+  }, [projectId]);
+
+  // Prefer fresh DB data over potentially stale AppContext data
+  const phase4AgentData = freshPhase4Data ?? phase4?.agentData;
+
   // Determine PMO type from Phase 4 result
-  const pmoType: PmoType = parsePmoType(phase4?.agentData);
+  const pmoType: PmoType = parsePmoType(phase4AgentData);
   const needsAgil = pmoType === 'Ágil' || pmoType === 'Híbrida';
   const needsPredictiva = pmoType === 'Predictiva' || pmoType === 'Híbrida';
 
@@ -819,6 +646,7 @@ export default function MadurezModule() {
           setResults(parsed);
           setIsReprocessing(false);
           setView('results');
+          updatePhaseStatus(projectId!, 5, data.estado_visual as any);
           playAgentSuccess();
           toast.success('Agente 5 completó el análisis de madurez', {
             description: `Nivel general: ${formatMaturityLabel(MATURITY_LEVELS[(parsed.overallLevel || 1) - 1]?.name, parsed.overallLevel || 1)} (${formatOneDecimal(parsed.overallScore)})`,
@@ -981,13 +809,6 @@ export default function MadurezModule() {
   // ── PMO type config ──
   const pmoCfg = PMO_CONFIG[pmoType];
   const { Icon: PmoIcon } = pmoCfg;
-  const summaryText = results?.summary?.trim()
-    || results?.recommendations?.slice(0, 2).join(' ')
-    || results?.analisis_cualitativo?.temas_recurrentes?.[0]?.sintesis
-    || 'Diagnostico generado por el Agente 5 con los insumos disponibles.';
-  const maturityCardGridClass = results?.predictiva && results?.agil
-    ? 'grid-cols-1 lg:grid-cols-2'
-    : 'grid-cols-1 max-w-[680px]';
 
   // ── Render ──
   return (
@@ -997,13 +818,6 @@ export default function MadurezModule() {
         companyName={project.companyName}
         phaseNumber={5}
         phaseName="Madurez de la PMO"
-        eyebrow={`PMO ${pmoType}`}
-        rightSlot={(
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px]"
-            style={{ borderColor: pmoCfg.color, color: pmoCfg.color, background: `${pmoCfg.color}10`, fontWeight: 500 }}>
-            <PmoIcon size={11} /> PMO {pmoType}
-          </div>
-        )}
         onReprocessed={async () => {
           // 1. Block downstream phases (6, 7…)
           await reprocessPhase(projectId!, 5);
@@ -1119,15 +933,15 @@ export default function MadurezModule() {
               >
                 <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
               </div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[#5454e9] mb-2" style={{ fontWeight: 500 }}>
                 Procesando
               </p>
               <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
                 {isReprocessing ? 'Re-procesando diagnóstico' : 'Analizando madurez'}
               </h2>
-              <p className="text-neutral-500 text-[13px] mt-2 max-w-sm text-center">
+              <p className="text-[#5454e9] text-[13px] mt-2 max-w-sm text-center">
                 {isReprocessing
-                  ? 'El Agente 5 está incorporando el comentario del consultor y recalibrando el diagnóstico de madurez…'
+                  ? 'El Agente está incorporando el comentario del consultor y recalibrando el diagnóstico de madurez…'
                   : `Procesando las encuestas de madurez ${pmoType === 'Híbrida' ? 'Predictiva y Ágil' : pmoType} para determinar el nivel actual…`}
               </p>
             </motion.div>
@@ -1135,135 +949,30 @@ export default function MadurezModule() {
 
           {/* ── Results ── */}
           {view === 'results' && results && (
-            <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="mb-10 flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 5 · PMO {pmoType}</p>
-                  <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
-                    Diagnóstico de madurez
-                  </h1>
-                  <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
-                    El Agente 5 evaluó las dimensiones de madurez y consolidó el nivel global con recomendaciones por área.
-                  </p>
-                </div>
-                <VersionBadge version={results.version} timestamp={results.timestamp} />
-              </div>
-
-              <MaturityBIDashboard results={results} />
-
-              <div className="bg-white border border-neutral-300 p-4 mb-5 font-[Arial,Roboto,sans-serif]">
-                <p className="text-[12px] uppercase tracking-wide text-neutral-500 mb-2" style={{ fontWeight: 700 }}>Síntesis del diagnóstico</p>
-                <p className="text-neutral-700 text-[13px] leading-relaxed">{summaryText}</p>
-              </div>
-
-              <AnalysisDetails results={results} />
-
-              {/* Global Recommendations (for Hybrid it makes sense to show global recommendations here) */}
-              {results.recommendations && results.recommendations.length > 0 && (
-                <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-4" style={{ fontWeight: 700 }}>Recomendaciones Globales</p>
-                  <ul className="space-y-3">
-                    {results.recommendations.map((r, i) => (
-                      <li key={i} className="flex items-start gap-3 text-[13px] text-gray-700 leading-relaxed">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 text-neutral-600 mt-0.5" style={{ fontSize: '0.65rem', fontWeight: 700 }}>{i + 1}</span>
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* RF-F5-06: Comments */}
-              <div className="bg-white rounded-2xl border border-neutral-200/70 p-6">
-                <div className="flex items-center gap-2 mb-1">
-                  <MessageSquare size={15} className="text-gray-500" />
-                  <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Comentarios del consultor</h3>
-                </div>
-                <p className="text-gray-400 text-xs mb-3">
-                  Agregue observaciones o contexto adicional. Puede guardar el comentario o re-procesar el diagnóstico incorporándolo.
-                </p>
-                {savedComment && (
-                  <div className="mb-3 px-3 py-2.5 rounded-xl bg-neutral-50 border border-neutral-200/70 text-[13px] text-neutral-600">
-                    <p className="text-gray-400 text-xs mb-1" style={{ fontWeight: 600 }}>Último comentario guardado</p>
-                    <p className="leading-relaxed">{savedComment}</p>
-                  </div>
-                )}
-                <textarea value={comment} onChange={e => setComment(e.target.value)}
-                  placeholder="Ej: El área de manufactura tiene un nivel de madurez distinto al resto de la organización. Sus procesos predictivos están más avanzados debido a la regulación ISO aplicable..."
-                  rows={4}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-y leading-relaxed bg-white mb-3" />
-                <div className="flex items-center gap-3">
-                  <button onClick={handleSaveComment} disabled={isSavingComment || !comment.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                    style={{ fontWeight: 500 }}>
-                    {isSavingComment ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Guardar comentario
-                  </button>
-                  <button onClick={handleReprocess} disabled={!comment.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:opacity-80"
-                    style={{ borderColor: pmoCfg.color, color: pmoCfg.color, background: `${pmoCfg.color}10`, fontWeight: 500 }}>
-                    <RefreshCw size={13} /> Re-procesar con comentario
-                  </button>
-                  <div className="flex-1" />
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                    onClick={() => setShowApproveModal(true)}
-                    className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-                    style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}>
-                    <ThumbsUp size={14} /> Aprobar diagnóstico de madurez
-                  </motion.button>
-                </div>
-              </div>
-            </motion.div>
+            <MadurezDiagnosisView
+              results={results}
+              pmoType={pmoType}
+              pmoColor={pmoCfg.color}
+              comment={comment}
+              savedComment={savedComment}
+              isSavingComment={isSavingComment}
+              isReprocessing={isReprocessing}
+              onCommentChange={setComment}
+              onSaveComment={handleSaveComment}
+              onReprocess={handleReprocess}
+              onApprove={() => setShowApproveModal(true)}
+            />
           )}
 
-          {/* ── Approved ── */}
           {view === 'approved' && results && (
-            <motion.div key="approved" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="mb-10">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 5 · PMO {pmoType}</p>
-                <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
-                  Diagnóstico aprobado
-                </h1>
-                <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
-                  El nivel de madurez ha sido validado y registrado como referencia para la guía metodológica.
-                </p>
-                <span className="inline-flex items-center gap-1.5 mt-4 text-neutral-900 text-[12px]" style={{ fontWeight: 600 }}>
-                  <CheckCircle2 size={13} /> Fase completada y aprobada
-                </span>
-              </div>
-
-              <MaturityBIDashboard results={results} />
-
-              <div className="bg-white border border-neutral-300 p-4 mb-5 font-[Arial,Roboto,sans-serif]">
-                <div className="flex items-center justify-between gap-4 mb-2">
-                  <p className="text-[12px] uppercase tracking-wide text-neutral-500" style={{ fontWeight: 700 }}>Síntesis del diagnóstico</p>
-                  {phase.completedAt && (
-                    <p className="text-neutral-500 text-xs flex items-center gap-1 justify-end">
-                      <CheckCircle2 size={10} className="text-neutral-900" /> Aprobado el {phase.completedAt}
-                    </p>
-                  )}
-                </div>
-                <p className="text-neutral-700 text-[13px] leading-relaxed">{summaryText}</p>
-              </div>
-
-              <AnalysisDetails results={results} />
-
-              {/* Global Recommendations */}
-              {results.recommendations && results.recommendations.length > 0 && (
-                <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-wider text-neutral-600 mb-4" style={{ fontWeight: 700 }}>Recomendaciones Globales</p>
-                  <ul className="space-y-3">
-                    {results.recommendations.map((r, i) => (
-                      <li key={i} className="flex items-start gap-3 text-[13px] text-gray-700 leading-relaxed">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 text-neutral-600 mt-0.5" style={{ fontSize: '0.65rem', fontWeight: 700 }}>{i + 1}</span>
-                        {r}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </motion.div>
+            <MadurezDiagnosisView
+              results={results}
+              pmoType={pmoType}
+              pmoColor={pmoCfg.color}
+              approved
+              completedAt={phase.completedAt}
+            />
           )}
-
         </AnimatePresence>
       </div>
 

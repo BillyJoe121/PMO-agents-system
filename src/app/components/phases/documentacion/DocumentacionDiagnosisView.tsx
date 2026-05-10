@@ -1,0 +1,449 @@
+import {
+  AlertCircle, AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Clock,
+  FileCheck2, FileSearch, Gauge, Layers3, Lightbulb, MessageSquare, ShieldAlert,
+  Sparkles, Target
+} from 'lucide-react';
+import type { AgentDiagnosis } from '../../../hooks/useDocumentacion';
+import {
+  EMPTY_VALUE,
+  levelTone,
+  normalizeList,
+  PhaseReportBadgeList,
+  PhaseReportEvidenceCard,
+  PhaseReportKeyValueGrid,
+  PhaseReportMetric,
+  PhaseReportMiniList,
+  PhaseReportProgressBar,
+  PhaseReportSection,
+  phaseReportToneStyles,
+  type PhaseReportTone,
+  valueOrEmpty,
+} from '../_shared/PhaseReportVisuals';
+
+const DOC_CATEGORIES = [
+  { value: 'D01', label: 'Organigrama' },
+  { value: 'D02', label: 'Artefactos de Gestion de proyectos' },
+  { value: 'D03', label: 'Plataformas y Sistemas' },
+  { value: 'D04', label: 'Listado de Proyectos' },
+  { value: 'D05', label: 'Proyecto mejor documentado' },
+  { value: 'D06', label: 'Resultados Estrategicos' },
+  { value: 'D07', label: 'Mapa de Procesos' },
+  { value: 'D08', label: 'Arquitectura Organizacional/TI' },
+  { value: 'D09', label: 'Metodologia de Proyectos' },
+  { value: 'D10', label: 'Portafolio de Productos/Servicios' },
+];
+
+function buildDocumentLookup(diagnosis: AgentDiagnosis) {
+  const byId: Record<string, string> = {};
+  const byCatalog: Record<string, string> = {};
+  for (const doc of diagnosis.estado_documentos ?? []) {
+    if (doc.document_id) byId[doc.document_id.toLowerCase()] = doc.nombre || doc.document_id;
+    if (doc.codigo_catalogo) {
+      const code = doc.codigo_catalogo.toUpperCase();
+      if (!byCatalog[code]) byCatalog[code] = doc.nombre || code;
+    }
+  }
+  return { byId, byCatalog };
+}
+
+function referenceName(value: unknown, lookup: ReturnType<typeof buildDocumentLookup>) {
+  const raw = valueOrEmpty(value);
+  const docId = raw.toLowerCase();
+  const catalog = raw.toUpperCase();
+  if (lookup.byId[docId]) return lookup.byId[docId];
+  if (lookup.byCatalog[catalog]) return lookup.byCatalog[catalog];
+  const category = DOC_CATEGORIES.find((item) => item.value === catalog);
+  if (category) return category.label;
+  return raw;
+}
+
+function textWithDocumentNames(value: unknown, lookup: ReturnType<typeof buildDocumentLookup>) {
+  return valueOrEmpty(value)
+    .replace(/\bdoc-\d{3}\b/gi, (match) => referenceName(match, lookup))
+    .replace(/\bD\d{2}\b/gi, (match) => referenceName(match, lookup));
+}
+
+function CoverageChart({ diagnosis }: { diagnosis: AgentDiagnosis }) {
+  const coverage = diagnosis.cobertura_documental;
+  const expected = Number(coverage?.total_esperado ?? 0);
+  const received = Number(coverage?.recibidos_completos ?? 0);
+  const missing = Number(coverage?.faltantes ?? 0);
+  const referenced = Number(coverage?.recibidos_referenciados ?? 0);
+  const expired = Number(coverage?.documentos_vencidos ?? 0);
+  const max = Math.max(expected, received, missing, referenced, expired, 1);
+
+  return (
+      <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-5">
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(132px,1fr))] gap-2.5">
+        <PhaseReportMetric label="Esperados" value={expected} tone="blue" icon={<Target size={15} />} />
+        <PhaseReportMetric label="Recibidos" value={received} tone="green" icon={<FileCheck2 size={15} />} />
+        <PhaseReportMetric label="Referenciados" value={referenced} tone="purple" icon={<ClipboardList size={15} />} />
+        <PhaseReportMetric label="Faltantes" value={missing} tone="orange" icon={<AlertTriangle size={15} />} />
+        <PhaseReportMetric label="Vencidos" value={expired} tone="red" icon={<Clock size={15} />} />
+      </div>
+      <div className="rounded-2xl border border-neutral-100 bg-neutral-50/70 p-4 space-y-3">
+        <PhaseReportProgressBar label="Documentos recibidos" value={received} max={max} tone="green" />
+        <PhaseReportProgressBar label="Faltantes" value={missing} max={max} tone="orange" />
+        <PhaseReportProgressBar label="Referenciados" value={referenced} max={max} tone="purple" />
+      </div>
+    </div>
+  );
+}
+
+function QualityPanel({ diagnosis, lookup }: { diagnosis: AgentDiagnosis; lookup: ReturnType<typeof buildDocumentLookup> }) {
+  const q = diagnosis.calidad_documental;
+  return (
+    <div className="space-y-4">
+      <PhaseReportKeyValueGrid compact rows={[
+        { label: 'Resultado', value: q?.resultado_consolidado, tone: levelTone(q?.resultado_consolidado) },
+        { label: 'Actualizacion', value: q?.actualizacion },
+        { label: 'Aplicabilidad', value: q?.aplicabilidad },
+        { label: 'Detalle', value: q?.nivel_detalle },
+        { label: 'Coherencia', value: q?.coherencia_entre_documentos },
+      ]} />
+      <div className="rounded-2xl bg-[#f7f8ff] border border-[#5454e9]/15 p-4">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-[#5454e9] mb-2" style={{ fontWeight: 800 }}>Justificacion</p>
+        <p className="text-neutral-700 text-[13px] leading-relaxed">{textWithDocumentNames(q?.justificacion, lookup)}</p>
+      </div>
+    </div>
+  );
+}
+
+function LifecycleCoverage({ diagnosis, lookup }: { diagnosis: AgentDiagnosis; lookup: ReturnType<typeof buildDocumentLookup> }) {
+  const ciclo = diagnosis.cobertura_ciclo_vida;
+  const dimensiones = [
+    ['inicio', 'Inicio'],
+    ['planeacion', 'Planeacion'],
+    ['ejecucion', 'Ejecucion'],
+    ['monitoreo_control', 'Monitoreo y control'],
+    ['cierre', 'Cierre'],
+  ] as const;
+  const missing = new Set((ciclo?.fases_faltantes ?? []).map((f) => String(f).toLowerCase()));
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
+        <div className="rounded-2xl border border-[#e4eb60]/50 bg-[#e4eb60]/25 p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-[#7a7f1e]" style={{ fontWeight: 800 }}>Completitud</p>
+          <p className="mt-2 text-[28px] tracking-tight text-[#7a7f1e]" style={{ fontWeight: 850 }}>{valueOrEmpty(ciclo?.completitud)}</p>
+          <div className="mt-3">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-500 mb-2" style={{ fontWeight: 700 }}>Fases faltantes</p>
+            <PhaseReportBadgeList items={ciclo?.fases_faltantes?.length ? ciclo.fases_faltantes : ['Sin faltantes reportados']} tone={ciclo?.fases_faltantes?.length ? 'orange' : 'green'} />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+          {dimensiones.map(([key, label], index) => {
+            const dim = diagnosis.dimensiones_gestion_proyectos?.[key];
+            const isMissing = missing.has(key);
+            const tone = isMissing ? 'orange' : levelTone(dim?.confianza ?? ciclo?.completitud);
+            const toneClass = phaseReportToneStyles[tone];
+            return (
+              <div key={key} className={`rounded-2xl border ${toneClass.border} ${toneClass.soft} px-3 py-4 min-w-0`}>
+                <div className={`w-7 h-7 rounded-full ${toneClass.bg} text-white flex items-center justify-center text-[11px] mb-3`} style={{ fontWeight: 800 }}>{index + 1}</div>
+                <p className="text-[12px] text-neutral-900 leading-tight" style={{ fontWeight: 750 }}>{label}</p>
+                <p className={`mt-2 text-[10px] ${toneClass.text}`} style={{ fontWeight: 700 }}>{valueOrEmpty(dim?.confianza)}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-neutral-100 bg-white p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-2" style={{ fontWeight: 800 }}>Continuidad documental</p>
+          <p className="text-neutral-700 text-[13px] leading-relaxed">{textWithDocumentNames(ciclo?.continuidad_documental, lookup)}</p>
+        </div>
+        <div className="rounded-2xl border border-neutral-100 bg-white p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-2" style={{ fontWeight: 800 }}>Desbalance identificado</p>
+          <p className="text-neutral-700 text-[13px] leading-relaxed">{textWithDocumentNames(ciclo?.desbalance_identificado, lookup)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsightCard({ item, index, lookup }: { item: unknown; index: number; lookup: ReturnType<typeof buildDocumentLookup> }) {
+  const tone: PhaseReportTone = (['blue', 'green', 'purple', 'orange', 'amber'] as PhaseReportTone[])[index % 5];
+  const toneClass = phaseReportToneStyles[tone];
+  return (
+    <div className={`rounded-2xl border ${toneClass.border} ${toneClass.soft} p-4 flex gap-3`}>
+      <div className={`w-7 h-7 rounded-full ${toneClass.bg} text-white flex items-center justify-center flex-shrink-0 text-[11px]`} style={{ fontWeight: 800 }}>{index + 1}</div>
+      <p className="text-neutral-700 text-[13px] leading-relaxed">{textWithDocumentNames(item, lookup)}</p>
+    </div>
+  );
+}
+
+function DimensionCard({ label, dim, lookup, index }: { label: string; dim: any; lookup: ReturnType<typeof buildDocumentLookup>; index: number }) {
+  const tones: PhaseReportTone[] = ['blue', 'purple', 'orange', 'green', 'amber'];
+  const tone = tones[index % tones.length];
+  const toneClass = phaseReportToneStyles[tone];
+  const confidenceTone = levelTone(dim?.confianza);
+  const mapItem = (item: unknown) => textWithDocumentNames(item, lookup);
+  const mapReference = (item: unknown) => referenceName(item, lookup);
+
+  return (
+    <article className={`rounded-2xl border ${toneClass.border} bg-white overflow-hidden`}>
+      <div className={`h-1 ${toneClass.bar}`} />
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <p className="text-neutral-950 text-[15px]" style={{ fontWeight: 850 }}>{label}</p>
+            <p className={`text-[11px] ${toneClass.text} mt-1`} style={{ fontWeight: 750 }}>{valueOrEmpty(dim?.nivel_formalidad)}</p>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full ${phaseReportToneStyles[confidenceTone].soft} ${phaseReportToneStyles[confidenceTone].text} text-[10px]`} style={{ fontWeight: 800 }}>
+            Confianza {valueOrEmpty(dim?.confianza)}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <PhaseReportMiniList title="Procesos documentados" items={dim?.procesos_documentados} tone={tone} mapItem={mapItem} />
+          <PhaseReportMiniList title="Artefactos" items={dim?.artefactos} tone={tone} mapItem={mapItem} />
+          <PhaseReportMiniList title="Herramientas" items={dim?.herramientas} tone={tone} mapItem={mapItem} />
+          <PhaseReportMiniList title="Roles documentados" items={dim?.roles_documentados} tone={tone} mapItem={mapItem} />
+        </div>
+        <div className={`mt-3 rounded-2xl border ${toneClass.border} ${toneClass.soft} p-3.5`}>
+          <p className={`text-[10px] uppercase tracking-[0.14em] ${toneClass.text} mb-2`} style={{ fontWeight: 850 }}>Fuentes documentales</p>
+          <PhaseReportBadgeList items={dim?.fuentes_documentales} mapItem={mapReference} tone={tone} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function InventoryTable({ diagnosis }: { diagnosis: AgentDiagnosis }) {
+  const lookup = buildDocumentLookup(diagnosis);
+  const estadoMap: Record<string, any> = {};
+  for (const doc of diagnosis.estado_documentos ?? []) {
+    const code = doc.codigo_catalogo?.trim().toUpperCase();
+    if (code && !estadoMap[code]) estadoMap[code] = doc;
+  }
+
+  const missingSet = new Set((diagnosis.missing_documents ?? []).map((code) => code.trim().toUpperCase()));
+  const stateLabel: Record<string, string> = {
+    util_para_analisis: 'Util para analisis',
+    critico_para_gp: 'Critico',
+    incompleto: 'Incompleto',
+    no_legible: 'No legible',
+    parcialmente_interpretable: 'Parcial',
+    insuficiente_para_concluir: 'Insuficiente',
+    desactualizado: 'Desactualizado',
+    solo_referenciado: 'Solo referenciado',
+    no_entregado: 'No entregado',
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-x-auto rounded-2xl border border-neutral-100">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-neutral-100 bg-[#f7f8ff]">
+              <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">Codigo</th>
+              <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">Documento esperado</th>
+              <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">Archivo PDF / CSV</th>
+              <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">Estado</th>
+              <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-500 font-semibold">Valor</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-50 bg-white">
+            {DOC_CATEGORIES.map((cat) => {
+              const entry = estadoMap[cat.value];
+              const isMissing = missingSet.has(cat.value) || !entry || entry.estado === 'no_entregado';
+              const tone: PhaseReportTone = isMissing ? 'orange' : entry?.estado === 'critico_para_gp' ? 'green' : 'blue';
+              const toneClass = phaseReportToneStyles[tone];
+              return (
+                <tr key={cat.value} className="hover:bg-neutral-50/60 transition-colors">
+                  <td className="px-4 py-3.5"><span className={`text-[11px] tabular-nums ${toneClass.text}`} style={{ fontWeight: 850 }}>{cat.value}</span></td>
+                  <td className="px-4 py-3.5"><span className="text-neutral-800 text-[13px]" style={{ fontWeight: 650 }}>{cat.label}</span></td>
+                  <td className="px-4 py-3.5 max-w-[320px]"><span className="text-neutral-600 text-[12px] leading-relaxed">{valueOrEmpty(entry?.nombre)}</span></td>
+                  <td className="px-4 py-3.5">
+                    <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] border ${toneClass.soft} ${toneClass.border} ${toneClass.text}`} style={{ fontWeight: 800 }}>
+                      {entry?.estado ? stateLabel[entry.estado] ?? entry.estado : 'No entregado'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5"><span className="text-neutral-500 text-[12px]">{valueOrEmpty(entry?.valor_analitico)}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-2" style={{ fontWeight: 800 }}>Codigos faltantes reportados por el agente</p>
+        <PhaseReportBadgeList items={diagnosis.missing_documents} tone="orange" mapItem={(item) => referenceName(item, lookup)} />
+      </div>
+    </div>
+  );
+}
+
+function Recommendations({ items, lookup }: { items?: string[]; lookup: ReturnType<typeof buildDocumentLookup> }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {normalizeList(items).map((rec, i) => (
+        <div key={i} className="rounded-2xl border border-[#4cb979]/25 bg-[#4cb979]/10 p-4 flex gap-3">
+          <div className="w-8 h-8 rounded-2xl bg-[#4cb979] text-white flex items-center justify-center flex-shrink-0">
+            <Lightbulb size={15} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[#22794b] mb-1" style={{ fontWeight: 800 }}>Recomendacion {i + 1}</p>
+            <p className="text-neutral-700 text-[13px] leading-relaxed">{textWithDocumentNames(rec, lookup)}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Agent4Inputs({ diagnosis, lookup }: { diagnosis: AgentDiagnosis; lookup: ReturnType<typeof buildDocumentLookup> }) {
+  const inputs = diagnosis.insumos_para_agente_4;
+  const mapText = (value: unknown) => textWithDocumentNames(value, lookup);
+  const mapReference = (value: unknown) => referenceName(value, lookup);
+
+  return (
+    <div className="space-y-5">
+      <PhaseReportKeyValueGrid rows={[
+        { label: 'Nivel estandarizacion', value: inputs?.nivel_estandarizacion },
+        { label: 'Nivel calidad documental', value: inputs?.nivel_calidad_documental },
+      ]} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PhaseReportMiniList title="Hallazgos clave resumen" items={inputs?.hallazgos_clave_resumen} tone="blue" mapItem={mapText} />
+        <PhaseReportMiniList title="Brechas criticas resumen" items={inputs?.brechas_criticas_resumen} tone="orange" mapItem={mapText} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 800 }}>Metodologias mencionadas</p>
+          <div className="space-y-3">
+            {(inputs?.metodologias_mencionadas?.length ? inputs.metodologias_mencionadas : [{ nombre: EMPTY_VALUE, documento_fuente: EMPTY_VALUE, nivel_adopcion_visible: EMPTY_VALUE }]).map((met, i) => (
+              <div key={i} className="rounded-2xl border border-[#865cf0]/20 bg-[#865cf0]/10 p-4">
+                <p className="text-neutral-950 text-[14px]" style={{ fontWeight: 800 }}>{valueOrEmpty(met.nombre)}</p>
+                <p className="mt-1 text-[12px] text-neutral-600">Adopcion visible: <span className="text-[#5d3bbd]" style={{ fontWeight: 800 }}>{valueOrEmpty(met.nivel_adopcion_visible)}</span></p>
+                <div className="mt-3"><PhaseReportBadgeList items={[met.documento_fuente]} mapItem={mapReference} tone="purple" /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400" style={{ fontWeight: 800 }}>Senales de enfoque</p>
+          {(inputs?.senales_flexibilidad_agil ?? []).map((senal, i) => (
+            <PhaseReportEvidenceCard key={`agil-${i}`} title="Flexibilidad agil" subtitle={senal.nivel_evidencia} description={senal.descripcion} references={senal.documentos_fuente} tone="green" mapText={mapText} mapReference={mapReference} />
+          ))}
+          {(inputs?.senales_estructuracion_formal ?? []).map((senal, i) => (
+            <PhaseReportEvidenceCard key={`formal-${i}`} title="Estructuracion formal" subtitle={senal.nivel_evidencia} description={senal.descripcion} references={senal.documentos_fuente} tone="blue" mapText={mapText} mapReference={mapReference} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function DocumentacionDiagnosisView({ diagnosis }: { diagnosis: AgentDiagnosis }) {
+  const d = diagnosis;
+  const lookup = buildDocumentLookup(d);
+  const mapText = (value: unknown) => textWithDocumentNames(value, lookup);
+  const mapReference = (value: unknown) => referenceName(value, lookup);
+  const dimensiones = [
+    ['inicio', 'Inicio'],
+    ['planeacion', 'Planeacion'],
+    ['ejecucion', 'Ejecucion'],
+    ['monitoreo_control', 'Monitoreo y control'],
+    ['cierre', 'Cierre'],
+  ] as const;
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-[1.5rem] overflow-hidden border border-[#5454e9]/20 bg-white" style={{ boxShadow: '0 20px 55px -34px rgba(84,84,233,0.5)' }}>
+        <div className="bg-[#5454e9] p-6 text-white">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-2xl bg-white/12 border border-white/20 flex items-center justify-center">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-white/70" style={{ fontWeight: 800 }}>Agente 1 - Gestion documental</p>
+              <h2 className="text-[22px] tracking-tight" style={{ fontWeight: 850 }}>Diagnostico documental consolidado</h2>
+            </div>
+          </div>
+          <p className="text-white/88 text-[14px] leading-relaxed max-w-4xl">{mapText(d.summary)}</p>
+        </div>
+      </section>
+
+      <PhaseReportSection title="Cobertura documental" eyebrow="Indicadores" icon={<BarChart3 size={18} />} tone="blue">
+        <CoverageChart diagnosis={d} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Calidad documental" eyebrow="Evaluacion" icon={<Gauge size={18} />} tone="purple">
+        <QualityPanel diagnosis={d} lookup={lookup} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Cobertura ciclo de vida" eyebrow="Flujo documental" icon={<Layers3 size={18} />} tone="amber">
+        <LifecycleCoverage diagnosis={d} lookup={lookup} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Inventario y cobertura documental" eyebrow="D01 - D10" icon={<FileSearch size={18} />} tone="slate">
+        <InventoryTable diagnosis={d} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Insights clave" eyebrow="Lectura ejecutiva" icon={<Sparkles size={18} />} tone="green">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {normalizeList(d.key_insights).map((insight, i) => <InsightCard key={i} item={insight} index={i} lookup={lookup} />)}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Hallazgos documentales" eyebrow="Patrones e incoherencias" icon={<CheckCircle2 size={18} />} tone="blue">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {(d.hallazgos_documentales?.length ? d.hallazgos_documentales : [{ tipo: EMPTY_VALUE, nombre: EMPTY_VALUE, descripcion: EMPTY_VALUE, documentos_fuente: [] }]).map((hallazgo, i) => (
+            <PhaseReportEvidenceCard key={i} title={hallazgo.nombre} subtitle={hallazgo.tipo} description={hallazgo.descripcion} references={hallazgo.documentos_fuente} badge={hallazgo.tipo} tone={i % 2 === 0 ? 'blue' : 'purple'} mapText={mapText} mapReference={mapReference} />
+          ))}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Brechas documentales" eyebrow="Riesgos de informacion" icon={<ShieldAlert size={18} />} tone="orange">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {(d.brechas_documentales?.length ? d.brechas_documentales : [{ id: EMPTY_VALUE, impacto: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimension_o_area: EMPTY_VALUE, evidencia_o_ausencia: EMPTY_VALUE, documentos_fuente_o_ausentes: [] }]).map((brecha, i) => (
+            <PhaseReportEvidenceCard
+              key={i}
+              title={`${valueOrEmpty(brecha.id)} - ${valueOrEmpty(brecha.dimension_o_area)}`}
+              subtitle={brecha.impacto}
+              description={`${mapText(brecha.descripcion)} ${mapText(brecha.evidencia_o_ausencia)}`}
+              references={brecha.documentos_fuente_o_ausentes}
+              badge={brecha.impacto}
+              tone={levelTone(brecha.impacto)}
+              mapText={mapText}
+              mapReference={mapReference}
+            />
+          ))}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Dimensiones de gestion de proyectos" eyebrow="Capacidades observadas" icon={<Target size={18} />} tone="green">
+        <div className="grid grid-cols-1 gap-3">
+          {dimensiones.map(([key, label], i) => (
+            <DimensionCard key={key} label={label} dim={d.dimensiones_gestion_proyectos?.[key]} lookup={lookup} index={i} />
+          ))}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Limitaciones" eyebrow="Confiabilidad del diagnostico" icon={<AlertCircle size={18} />} tone="red">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {(d.limitaciones?.length ? d.limitaciones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, impacto_confiabilidad: EMPTY_VALUE, dimensiones_afectadas: [] }]).map((lim, i) => {
+            const tone = levelTone(lim.impacto_confiabilidad);
+            return (
+              <div key={i} className="rounded-2xl border border-[#ef4444]/20 bg-[#ef4444]/[0.08] p-4">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <p className="text-neutral-950 text-[15px]" style={{ fontWeight: 800 }}>{valueOrEmpty(lim.tipo).replace(/_/g, ' ')}</p>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] ${phaseReportToneStyles[tone].soft} ${phaseReportToneStyles[tone].text}`} style={{ fontWeight: 800 }}>{valueOrEmpty(lim.impacto_confiabilidad)}</span>
+                </div>
+                <p className="text-neutral-700 text-[13px] leading-relaxed">{mapText(lim.descripcion)}</p>
+                <div className="mt-3"><PhaseReportBadgeList items={lim.dimensiones_afectadas} tone="red" /></div>
+              </div>
+            );
+          })}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Recomendaciones" eyebrow="Acciones sugeridas" icon={<Lightbulb size={18} />} tone="green">
+        <Recommendations items={d.recommendations} lookup={lookup} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Insumos para agente 4" eyebrow="Transferencia analitica" icon={<MessageSquare size={18} />} tone="purple">
+        <Agent4Inputs diagnosis={d} lookup={lookup} />
+      </PhaseReportSection>
+    </div>
+  );
+}

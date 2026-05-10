@@ -214,15 +214,195 @@ select {
 }
 
 @media print {
+  /* ── Page setup ── */
+  @page {
+    margin: 12mm 10mm;
+    size: A4;
+  }
+
+  /* ── Scale everything to 80% so content fits on fewer pages ── */
+  html {
+    zoom: 0.8;
+  }
+
+  /* ── Preserve all background colors, gradients and images ── */
+  *,
+  html,
+  body,
+  #root {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   html,
   body,
   #root {
     background: #fff !important;
   }
 
+  /* ── Remove shadows (they bleed badly on paper) ── */
   .brand-surface,
   .brand-card,
-  .brand-report-section {
+  .brand-report-section,
+  *[class*="shadow"] {
     box-shadow: none !important;
   }
+
+  /* ── break-inside: avoid ONLY on elements that are
+        guaranteed to be short (< one page height).
+        Large section wrappers are intentionally excluded so
+        they can flow naturally — avoiding blank pages caused
+        by huge containers that can't fit on a single page. ── */
+
+  /* Individual grid cells */
+  .grid > * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Self-contained article cards */
+  article {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* ── Never orphan a heading from the content that follows it ── */
+  h1, h2, h3, h4, h5, h6 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* ── APA / Corporate Report Mode (Triggered by .print-apa class) ── */
+  
+  /* Reset zoom for standard document flow */
+  html.print-apa {
+    zoom: 1; 
+  }
+
+  /* Typography and Colors */
+  html.print-apa body {
+    font-family: "Times New Roman", Times, serif !important;
+    font-size: 11pt !important;
+    color: #000 !important;
+    line-height: 1.5 !important;
+  }
+
+  html.print-apa *, 
+  html.print-apa p, 
+  html.print-apa span,
+  html.print-apa div {
+    color: #000 !important;
+  }
+
+  /* Academic headings */
+  html.print-apa h1,
+  html.print-apa h2,
+  html.print-apa h3,
+  html.print-apa h4,
+  html.print-apa h5,
+  html.print-apa h6 {
+    color: #000 !important;
+    font-weight: bold !important;
+    margin-top: 1.2rem !important;
+    margin-bottom: 0.4rem !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+
+  html.print-apa h1 { font-size: 16pt !important; text-align: center !important; }
+  html.print-apa h2 { font-size: 14pt !important; }
+  html.print-apa h3 { font-size: 12pt !important; font-style: italic !important; }
+  html.print-apa h4, 
+  html.print-apa h5, 
+  html.print-apa h6 { font-size: 11pt !important; }
+  
+  html.print-apa p {
+    font-size: 11pt !important;
+    margin-bottom: 0.5rem !important;
+    text-indent: 0 !important;
+  }
+
+  /* Hide the PhaseHeader completely to avoid overlapping text */
+  html.print-apa .sticky.top-0,
+  html.print-apa .print\:hidden {
+    display: none !important;
+  }
+
+  /* Completely remove UI embellishments: Cards, borders, backgrounds */
+  html.print-apa .brand-card,
+  html.print-apa .brand-surface,
+  html.print-apa .brand-report-section,
+  html.print-apa article,
+  html.print-apa section,
+  html.print-apa div[class*="bg-"],
+  html.print-apa div[class*="border"] {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Format real HTML Tables seriously */
+  html.print-apa table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid #000 !important;
+  }
+  html.print-apa th, 
+  html.print-apa td {
+    border: 1px solid #000 !important;
+    padding: 0.4rem 0.5rem !important;
+    text-align: left !important;
+    font-size: 10pt !important;
+  }
+  html.print-apa th {
+    font-weight: bold !important;
+    background: transparent !important;
+  }
+
+  /* Bring text much closer by squashing Tailwind's massive paddings and margins */
+  html.print-apa .p-3, html.print-apa .p-4, html.print-apa .p-5, html.print-apa .p-6, html.print-apa .p-8,
+  html.print-apa .py-3, html.print-apa .py-4, html.print-apa .py-5, html.print-apa .py-6, html.print-apa .py-8,
+  html.print-apa .px-3, html.print-apa .px-4, html.print-apa .px-5, html.print-apa .px-6, html.print-apa .px-8 {
+    padding: 0 !important;
+  }
+  
+  html.print-apa .mb-3, html.print-apa .mb-4, html.print-apa .mb-5, html.print-apa .mb-6, html.print-apa .mb-8,
+  html.print-apa .mt-3, html.print-apa .mt-4, html.print-apa .mt-5, html.print-apa .mt-6, html.print-apa .mt-8 {
+    margin-top: 0 !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  /* Hide icons but keep charts. */
+  html.print-apa svg.lucide,
+  html.print-apa [data-slot="icon"] {
+    display: none !important;
+  }
+
+  /* Remove extraneous decorative elements */
+  html.print-apa .h-1, 
+  html.print-apa .h-2,
+  html.print-apa hr {
+    display: none !important;
+  }
+
+  /* Simple bullet lists instead of custom UI lists */
+  html.print-apa ul {
+    list-style-type: disc !important;
+    padding-left: 1.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  html.print-apa li {
+    margin-bottom: 0.15rem !important;
+    display: list-item !important;
+  }
+  
+  /* Prevent massive gaps in structural grids/flex */
+  html.print-apa .gap-3, html.print-apa .gap-4, html.print-apa .gap-5, html.print-apa .gap-6, html.print-apa .gap-8 {
+    gap: 0.5rem !important;
+  }
 }
+
+

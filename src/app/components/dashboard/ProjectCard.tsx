@@ -155,7 +155,7 @@ export default function ProjectCard({ project, index }: ProjectCardProps) {
                   </>
                 )}
               </div>
-            <div className="w-9 h-9 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-400 group-hover:bg-neutral-900 group-hover:border-neutral-900 group-hover:text-white transition-all duration-300">
+            <div className="w-9 h-9 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-400 group-hover:bg-[#5454e9] group-hover:border-[#5454e9] group-hover:text-white transition-all duration-300">
               <ArrowUpRight size={15} strokeWidth={1.75} className="transition-transform duration-300 group-hover:rotate-0" />
             </div>
           </div>

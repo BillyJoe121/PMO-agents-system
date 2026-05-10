@@ -7,13 +7,14 @@ import { toast } from 'sonner';
 // ─────────────────────────────────────────────────────────────────────────────
 export type QuestionType = 'abierta' | 'si_no' | 'multiple';
 export type UserRole = 'auditor' | 'admin' | 'usuario_externo';
-export type AiModelMode = 'low' | 'high_with_fallback';
+export type AiModelMode = 'low' | 'high_with_fallback' | 'kimi';
 
 export interface AiModelSettings {
   id: 'global';
   mode: AiModelMode;
   highModel: string;
   lowModel: string;
+  kimiModel: string;
   updatedAt?: string;
 }
 
@@ -50,6 +51,12 @@ const DEFAULT_AI_MODEL_SETTINGS: AiModelSettings = {
   mode: 'high_with_fallback',
   highModel: 'gemini-3.1-pro-preview',
   lowModel: 'gemini-flash-lite-latest',
+  kimiModel: 'kimi-k2.6',
+};
+
+const normalizeAiModelMode = (value: unknown): AiModelMode => {
+  const mode = String(value ?? '').trim().toLowerCase();
+  return mode === 'low' || mode === 'kimi' ? mode : 'high_with_fallback';
 };
 
 export function useAiModelSettings() {
@@ -59,9 +66,10 @@ export function useAiModelSettings() {
 
   const mapSettings = (row: any): AiModelSettings => ({
     id: 'global',
-    mode: row?.mode === 'low' ? 'low' : 'high_with_fallback',
+    mode: normalizeAiModelMode(row?.mode),
     highModel: row?.high_model || DEFAULT_AI_MODEL_SETTINGS.highModel,
     lowModel: row?.low_model || DEFAULT_AI_MODEL_SETTINGS.lowModel,
+    kimiModel: row?.kimi_model || DEFAULT_AI_MODEL_SETTINGS.kimiModel,
     updatedAt: row?.updated_at,
   });
 
@@ -70,7 +78,7 @@ export function useAiModelSettings() {
     try {
       const { data, error } = await supabase
         .from('ai_model_settings')
-        .select('id, mode, high_model, low_model, updated_at')
+        .select('*')
         .eq('id', 'global')
         .maybeSingle();
 
@@ -90,24 +98,36 @@ export function useAiModelSettings() {
   const updateMode = useCallback(async (mode: AiModelMode) => {
     setIsSaving(true);
     try {
-      const { data, error } = await supabase
+      const payload = {
+        id: 'global',
+        mode,
+        high_model: settings.highModel || DEFAULT_AI_MODEL_SETTINGS.highModel,
+        low_model: settings.lowModel || DEFAULT_AI_MODEL_SETTINGS.lowModel,
+        kimi_model: settings.kimiModel || DEFAULT_AI_MODEL_SETTINGS.kimiModel,
+        updated_at: new Date().toISOString(),
+      };
+
+      let result = await supabase
         .from('ai_model_settings')
-        .upsert({
-          id: 'global',
-          mode,
-          high_model: DEFAULT_AI_MODEL_SETTINGS.highModel,
-          low_model: DEFAULT_AI_MODEL_SETTINGS.lowModel,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' })
-        .select('id, mode, high_model, low_model, updated_at')
+        .upsert(payload, { onConflict: 'id' })
+        .select('id, mode, high_model, low_model, kimi_model, updated_at')
         .single();
 
-      if (error) throw error;
-      setSettings(mapSettings(data));
+      if (result.error && /kimi_model/i.test(result.error.message ?? '')) {
+        const { kimi_model, ...legacyPayload } = payload;
+        result = await supabase
+          .from('ai_model_settings')
+          .upsert(legacyPayload, { onConflict: 'id' })
+          .select('id, mode, high_model, low_model, updated_at')
+          .single();
+      }
+
+      if (result.error) throw result.error;
+      setSettings(mapSettings(result.data));
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [settings.highModel, settings.lowModel, settings.kimiModel]);
 
   return { settings, isLoading, isSaving, fetchSettings, updateMode };
 }

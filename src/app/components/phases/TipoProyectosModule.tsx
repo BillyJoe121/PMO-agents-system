@@ -14,22 +14,22 @@
  * TODO: RF-F4-05 → axios.post(N8N_WEBHOOK_AGENTE_4, { diagnostico_original, comentario_consultor })
  */
 
-import { Fragment, useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { supabase } from '../../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Loader2, CheckCircle2, Brain, Zap, GitMerge, BarChart2,
-  MessageSquare, Save, RefreshCw, ThumbsUp, AlertTriangle, Send,
-  Clock, Sparkles, ChevronRight, Info,
+  Loader2, CheckCircle2, Brain, Zap,
+  RefreshCw, AlertTriangle, Send, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
 import { useSoundManager } from '../../hooks/useSoundManager';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { normalizeIdoneidadDiagnosisItems, getIdoneidadItemCode, getIdoneidadItemScore, inferIdoneidadDimension, factorMapping } from './IdoneidadModule';
+import TipoProyectosDiagnosisView from './tipo-proyectos/TipoProyectosDiagnosisView';
+import TipoProyectosIdoneidadAnnex from './tipo-proyectos/TipoProyectosIdoneidadAnnex';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,134 +37,6 @@ import { normalizeIdoneidadDiagnosisItems, getIdoneidadItemCode, getIdoneidadIte
 type PmoType = 'Ágil' | 'Híbrida' | 'Predictiva';
 type DiagnosisVersion = 'original' | 'reprocesado';
 type ModuleView = 'auto-trigger' | 'processing' | 'diagnosis' | 'approved' | 'error';
-
-interface DiagnosisResult {
-  pmoType: PmoType;
-  confidence: number;
-  justification: string;
-  keyFactors: string[];
-  recommendation: string;
-  timestamp: string;
-  version: DiagnosisVersion;
-}
-
-// ---------------------------------------------------------------------------
-// Config por tipo de PMO
-// ---------------------------------------------------------------------------
-const PMO_CONFIG: Record<PmoType, {
-  color: string; bg: string; border: string; lightText: string;
-  Icon: React.ElementType; tagline: string;
-}> = {
-  Ágil: {
-    color: '#171717', bg: '#f5f5f5', border: '#e5e5e5', lightText: '#404040',
-    Icon: Zap,
-    tagline: 'Estructura flexible orientada a ciclos iterativos y entrega continua de valor.',
-  },
-  Híbrida: {
-    color: '#404040', bg: '#fcfcfc', border: '#e5e5e5', lightText: '#525252',
-    Icon: GitMerge,
-    tagline: 'Combina prácticas ágiles y predictivas según el contexto y naturaleza de cada proyecto.',
-  },
-  Predictiva: {
-    color: '#525252', bg: '#ffffff', border: '#d4d4d4', lightText: '#737373',
-    Icon: BarChart2,
-    tagline: 'Gestión secuencial con planificación detallada y control formal de cambios.',
-  },
-};
-
-// Eliminado MOCK_ORIGINAL y buildReprocessedDiagnosis
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-/** Tarjeta hero del tipo de PMO (RF-F4-04) */
-function PmoTypeCard({ diagnosis }: { diagnosis: DiagnosisResult }) {
-  const cfg = PMO_CONFIG[diagnosis.pmoType];
-  const { Icon } = cfg;
-  const pct = diagnosis.confidence;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border-2 p-6 mb-6"
-      style={{ borderColor: cfg.border, background: cfg.bg }}
-    >
-      <div className="flex flex-col sm:flex-row sm:items-start gap-5">
-        {/* Icon + type */}
-        <div className="flex items-center gap-4 flex-1">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm"
-            style={{ background: cfg.color }}
-          >
-            <Icon size={30} className="text-white" />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: cfg.color, fontWeight: 700 }}>
-              Tipo de PMO detectado
-            </p>
-            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: cfg.lightText, lineHeight: 1.1 }}>
-              PMO {diagnosis.pmoType}
-            </h2>
-            <p className="text-sm mt-1" style={{ color: cfg.lightText, opacity: 0.75 }}>
-              {cfg.tagline}
-            </p>
-          </div>
-        </div>
-
-        {/* Confidence */}
-        <div
-          className="flex-shrink-0 rounded-xl p-4 min-w-[140px]"
-          style={{ background: 'rgba(255,255,255,0.7)', border: `1px solid ${cfg.border}` }}
-        >
-          <p className="text-xs mb-2" style={{ color: cfg.lightText, fontWeight: 600 }}>
-            Nivel de confianza
-          </p>
-          <div className="flex items-end gap-1 mb-2">
-            <span style={{ fontSize: '2rem', fontWeight: 800, color: cfg.color, lineHeight: 1 }}>{pct}</span>
-            <span className="text-sm mb-0.5" style={{ color: cfg.color, fontWeight: 600 }}>%</span>
-          </div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ background: `${cfg.color}30` }}>
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: cfg.color }}
-              initial={{ width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
-            />
-          </div>
-          <p className="text-xs mt-1.5" style={{ color: cfg.lightText, opacity: 0.7 }}>
-            {diagnosis.confidence_label || (pct >= 85 ? 'Alta certeza' : pct >= 70 ? 'Certeza media' : 'Certeza baja')}
-          </p>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/** Indicador de versión del diagnóstico (RF-F4-06) */
-function VersionBadge({ diagnosis }: { diagnosis: DiagnosisResult }) {
-  const ts = new Date(diagnosis.timestamp);
-  const formatted = ts.toLocaleString('es-CO', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-
-  return (
-    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${
-      diagnosis.version === 'reprocesado'
-        ? 'bg-neutral-800 border-neutral-800 text-white'
-        : 'bg-gray-100 border-gray-200 text-gray-500'
-    }`} style={{ fontWeight: 500 }}>
-      {diagnosis.version === 'reprocesado' ? <RefreshCw size={11} /> : <Sparkles size={11} />}
-      Diagnóstico {diagnosis.version === 'reprocesado' ? 'reprocesado' : 'original'}
-      <span className="opacity-60">·</span>
-      <Clock size={10} />
-      {formatted}
-    </div>
-  );
-}
 
 /** Modal de confirmación de aprobación (RF-F4-07) */
 function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
@@ -295,47 +167,12 @@ export default function TipoProyectosModule() {
     });
   }, [phase3?.agentData]);
 
-  const emptyValue = 'N/A';
-  const valueOrEmpty = (value: unknown) => {
-    if (value === null || value === undefined || value === '') return emptyValue;
-    if (typeof value === 'boolean') return value ? 'Si' : 'No';
-    if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
-    return String(value);
-  };
-
-  const CustomRadarTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white border border-neutral-200/80 p-3.5 rounded-xl" style={{ boxShadow: '0 4px 24px -6px rgba(0,0,0,0.12)' }}>
-          <div className="mb-2.5 pb-2 border-b border-neutral-100">
-            <p className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold mb-0.5">{data.dimension}</p>
-            <p className="text-[12px] text-neutral-900 leading-tight" style={{ fontWeight: 600 }}>{data.fullLabel}</p>
-          </div>
-          <div className="space-y-1.5">
-            {payload.filter((p: any) => p.dataKey === 'Puntaje').map((entry: any, index: number) => (
-              <div key={index} className="flex items-center justify-between gap-6">
-                <span className="text-[12px] flex items-center gap-1.5 text-neutral-600 font-medium">
-                  <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
-                  {entry.name}
-                </span>
-                <span className="text-[13px] tabular-nums font-bold" style={{ color: entry.color }}>
-                  {entry.value.toFixed(1)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
   // Derive initial view from phase status
   const deriveInitialView = (): ModuleView => {
     if (!phase) return 'auto-trigger';
     if (phase.status === 'completado') return 'approved';
     if (phase.status === 'procesando') return 'processing';
+    if (phase.status === 'error') return 'error';
     if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'diagnosis';
     return 'auto-trigger';
   };
@@ -413,8 +250,11 @@ export default function TipoProyectosModule() {
         setView(phase.status === 'completado' ? 'approved' : 'diagnosis');
         autoTriggered.current = true;
       }
+    } else if (phase?.status === 'error' && view !== 'error') {
+      setView('error');
+      autoTriggered.current = true;
     }
-  }, [phase?.agentData, phase?.status, diagnosis]);
+  }, [phase?.agentData, phase?.status, diagnosis, view]);
 
   // ── Load existing diagnosis from DB on mount ──
   useEffect(() => {
@@ -451,6 +291,13 @@ export default function TipoProyectosModule() {
         processingGuardUntilRef.current = Date.now() + 15000;
         setView('processing');
         autoTriggered.current = true; // don't double-trigger
+        return;
+      }
+
+      // Explicitly handle 'error' state from DB on mount
+      if (data.estado_visual === 'error') {
+        setView('error');
+        autoTriggered.current = true;
         return;
       }
     })();
@@ -765,436 +612,54 @@ export default function TipoProyectosModule() {
         >
           <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
         </div>
-        <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[#5454e9] mb-2" style={{ fontWeight: 500 }}>
           Procesando
         </p>
         <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
           {isReprocessing ? 'Regenerando diagnóstico' : 'Clasificando tipo de PMO'}
         </h2>
-        <p className="text-neutral-500 text-[13px] mt-2 max-w-sm text-center">
+        <p className="text-[#5454e9] text-[13px] mt-2 max-w-sm text-center">
           {isReprocessing
-            ? 'El Agente 4 está incorporando el comentario del consultor y actualizando el diagnóstico…'
-            : 'El Agente 4 está analizando el consolidado de los tres agentes previos…'}
+            ? 'El Agente está incorporando el comentario del consultor y actualizando el diagnóstico…'
+            : 'El Agente está analizando el consolidado de los tres agentes previos…'}
         </p>
       </motion.div>
     </AnimatePresence>
   );
 
+  const renderPhase3Annex = () => (
+    <TipoProyectosIdoneidadAnnex phase3AgentData={phase3?.agentData} radarData={radarData} />
+  );
+
   const renderDiagnosis = () => {
     if (!diagnosis) return null;
-    const cfg = PMO_CONFIG[diagnosis.pmoType];
-
     return (
-      <motion.div key="diagnosis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <div className="mb-10 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 4 · Clasificación de proyectos</p>
-            <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
-              Diagnóstico de clasificación
-            </h1>
-            <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
-              El Agente 4 evaluó el portafolio y determinó la tipología de PMO óptima con factores determinantes y recomendación.
-            </p>
-          </div>
-          <VersionBadge diagnosis={diagnosis} />
-        </div>
-
-        {/* PMO type hero (RF-F4-04) */}
-        <PmoTypeCard diagnosis={diagnosis} />
-
-        {/* Justification */}
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
-              <Brain size={13} style={{ color: cfg.color }} />
-            </div>
-            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Justificación del Agente 4</h3>
-          </div>
-          <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-            {diagnosis.justification}
-          </p>
-        </div>
-
-        {/* Key factors */}
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
-              <Info size={13} style={{ color: cfg.color }} />
-            </div>
-            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Evidencia Principal</h3>
-          </div>
-          <ul className="space-y-3">
-            {diagnosis.keyFactors?.map((f: any, i: number) => (
-              <li key={i} className="flex items-start gap-2.5 text-gray-600 text-sm">
-                <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{ background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
-                  {typeof f === 'string' ? i + 1 : f.split && f.split(':')[0] ? f.split(':')[0].substring(0, 3) : 'EV'}
-                </div>
-                <span className="leading-relaxed">{typeof f === 'string' ? f : JSON.stringify(f)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Breakdown and Tensiones */}
-        {(diagnosis.type_breakdown || (diagnosis.tensiones && diagnosis.tensiones.length > 0)) && (
-          <div className="grid grid-cols-2 gap-5 mb-5">
-            {diagnosis.type_breakdown && (
-              <div className="rounded-2xl border p-5" style={{ borderColor: cfg.border, background: cfg.bg }}>
-                <p className="text-xs uppercase tracking-wide mb-3" style={{ color: cfg.color, fontWeight: 700 }}>
-                  Composición del Enfoque
-                </p>
-                <div className="flex gap-1 h-3 rounded-full overflow-hidden mb-4 bg-white/50 border border-white/40">
-                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#262626' }} />
-                  <div style={{ width: `${diagnosis.type_breakdown.predictive_weight}%`, background: '#a3a3a3' }} />
-                </div>
-                <div className="flex justify-between text-[11px] mb-3" style={{ fontWeight: 600 }}>
-                  <span className="text-neutral-800">{diagnosis.type_breakdown.agile_weight}% Ágil</span>
-                  <span className="text-neutral-500">{diagnosis.type_breakdown.predictive_weight}% Predictivo</span>
-                </div>
-                <p className="text-xs leading-relaxed" style={{ color: cfg.lightText }}>
-                  {diagnosis.type_breakdown.hybrid_rationale}
-                </p>
-              </div>
-            )}
-            
-            {diagnosis.tensiones && diagnosis.tensiones.length > 0 && (
-              <div className="rounded-2xl border p-5 bg-white border-neutral-200">
-                <p className="text-xs uppercase tracking-wide mb-3 text-neutral-600" style={{ fontWeight: 700 }}>
-                  Tensiones Detectadas
-                </p>
-                <ul className="space-y-3">
-                  {diagnosis.tensiones.map((tens: any, i: number) => (
-                    <li key={i} className="text-[12px] text-neutral-700 leading-relaxed border-l-2 border-neutral-300 pl-3">
-                      <span className="font-semibold text-neutral-900">{tens.tipo}: </span>
-                      {tens.descripcion}
-                      {tens.intensidad && (
-                        <span className={`ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-md font-medium border ${
-                          tens.intensidad === 'Alta' ? 'bg-neutral-800 text-neutral-100 border-neutral-800'
-                          : tens.intensidad === 'Moderada' ? 'bg-neutral-200 text-neutral-700 border-neutral-300'
-                          : 'bg-neutral-100 text-neutral-500 border-neutral-200'
-                        }`}>{tens.intensidad}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Orientaciones por Fuente + Coherencia + Advertencias */}
-        {diagnosis.orientaciones_por_fuente && (
-          <div className="grid grid-cols-3 gap-5 mb-5">
-            {['cuantitativo', 'cualitativo', 'documental'].map((fuente) => {
-              const data = diagnosis.orientaciones_por_fuente[fuente];
-              if (!data) return null;
-              const orientColors: Record<string, { bg: string; text: string; border: string }> = {
-                'Agil': { bg: '#262626', text: '#ffffff', border: '#171717' },
-                'Ágil': { bg: '#262626', text: '#ffffff', border: '#171717' },
-                'Predictivo': { bg: '#f5f5f5', text: '#525252', border: '#e5e5e5' },
-                'Hibrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
-                'Híbrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
-              };
-              const colors = orientColors[data.orientacion] || { bg: '#ffffff', text: '#737373', border: '#f4f4f5' };
-              const labels: Record<string, string> = { cuantitativo: 'Encuesta (Cuantitativo)', cualitativo: 'Entrevistas (Cualitativo)', documental: 'Documentos (Documental)' };
-              return (
-                <div key={fuente} className="bg-white rounded-2xl border border-neutral-200/70 p-5">
-                  <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-2" style={{ fontWeight: 600 }}>{labels[fuente]}</p>
-                  <div className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] mb-3" style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, fontWeight: 600 }}>
-                    {data.orientacion || 'No disponible'}
-                  </div>
-                  <p className="text-neutral-600 text-[12px] leading-relaxed">{data.evidencia_principal || 'Sin evidencia detallada'}</p>
-                  {data.promedio_general !== undefined && data.promedio_general > 0 && (
-                    <p className="text-neutral-400 text-[11px] mt-2">Promedio: <span className="font-semibold text-neutral-600">{data.promedio_general}</span></p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Coherencia + Estado de integración + Advertencias */}
-        <div className="flex gap-5 mb-5">
-          {diagnosis.coherencia && (
-            <div className={`flex-1 rounded-2xl border p-5 ${
-              diagnosis.coherencia === 'Alta' ? 'bg-neutral-900 text-white border-neutral-900' 
-              : diagnosis.coherencia === 'Media' ? 'bg-neutral-100 text-neutral-800 border-neutral-300'
-              : 'bg-neutral-50 text-neutral-500 border-neutral-200'
-            }`}>
-              <p className="text-[10px] uppercase tracking-wider opacity-60 mb-1" style={{ fontWeight: 600 }}>Coherencia entre Fuentes</p>
-              <p className="text-lg" style={{ fontWeight: 700 }}>{diagnosis.coherencia}</p>
-            </div>
-          )}
-          {diagnosis.estado_integracion && (
-            <div className="flex-1 rounded-2xl border border-neutral-200/70 bg-white p-5">
-              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1" style={{ fontWeight: 600 }}>Estado de Integración</p>
-              <p className="text-lg text-neutral-800" style={{ fontWeight: 700 }}>{diagnosis.estado_integracion}</p>
-            </div>
-          )}
-        </div>
-
-        {diagnosis.advertencias_de_entrada && diagnosis.advertencias_de_entrada.length > 0 && (
-          <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-5 mb-5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={14} className="text-neutral-500" />
-              <p className="text-xs uppercase tracking-wide text-neutral-700" style={{ fontWeight: 700 }}>Advertencias de Entrada</p>
-            </div>
-            <ul className="space-y-2">
-              {diagnosis.advertencias_de_entrada.map((adv: string, i: number) => (
-                <li key={i} className="text-[12px] text-neutral-600 leading-relaxed flex items-start gap-2">
-                  <span className="w-1 h-1 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
-                  {adv}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {renderPhase3Details()}
-
-        {/* RF-F4-05: Consultant comments */}
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-          <div className="flex items-center gap-2 mb-1">
-            <MessageSquare size={15} className="text-gray-500" />
-            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Comentarios del consultor</h3>
-          </div>
-          <p className="text-gray-400 text-xs mb-3">
-            Agregue observaciones, contexto o ajustes al diagnóstico. Puede guardar el comentario o re-procesar el diagnóstico incorporándolo.
-          </p>
-
-          {savedComment && (
-            <div className="mb-3 px-3 py-2.5 rounded-xl bg-neutral-50 border border-neutral-200/70 text-[13px] text-neutral-600">
-              <p className="text-gray-400 text-xs mb-1" style={{ fontWeight: 600 }}>Último comentario guardado</p>
-              <p className="leading-relaxed">{savedComment}</p>
-            </div>
-          )}
-
-          <textarea
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            placeholder="Ej: Considerando que el área de manufactura opera con proyectos de alta regulación, se sugiere reforzar el componente predictivo para esas unidades de negocio específicas..."
-            rows={4}
-            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 transition-all resize-y leading-relaxed bg-white mb-3"
-          />
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSaveComment}
-              disabled={isSavingComment || !comment.trim()}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              style={{ fontWeight: 500 }}
-            >
-              {isSavingComment ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-              Guardar comentario
-            </button>
-            <button
-              onClick={handleReprocess}
-              disabled={isReprocessing || !comment.trim()}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:opacity-80"
-              style={{ borderColor: cfg.color, color: cfg.color, background: cfg.bg, fontWeight: 500 }}
-            >
-              <RefreshCw size={13} />
-              Re-procesar con comentario
-            </button>
-            <div className="flex-1" />
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setShowApproveModal(true)}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-white text-sm shadow-sm hover:shadow-md transition-all"
-              style={{ background: '#5454e9', fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -8px rgba(0,0,0,0.18)' }}
-            >
-              <ThumbsUp size={14} />
-              Aprobar diagnóstico
-            </motion.button>
-          </div>
-        </div>
-      </motion.div>
+      <TipoProyectosDiagnosisView
+        diagnosis={diagnosis}
+        savedComment={savedComment}
+        comment={comment}
+        isSavingComment={isSavingComment}
+        isReprocessing={isReprocessing}
+        onCommentChange={setComment}
+        onSaveComment={handleSaveComment}
+        onReprocess={handleReprocess}
+        onApprove={() => setShowApproveModal(true)}
+        annex={renderPhase3Annex()}
+      />
     );
   };
 
   const renderApproved = () => {
     if (!diagnosis) return null;
-    const cfg = PMO_CONFIG[diagnosis.pmoType as PmoType];
-    
     return (
-      <motion.div key="approved" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <div className="mb-10">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Fase 4 · Clasificación de proyectos</p>
-          <h1 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '2.25rem', lineHeight: 1.05, letterSpacing: '-0.025em' }}>
-            Diagnóstico aprobado
-          </h1>
-          <p className="text-neutral-500 text-[14px] mt-3 max-w-2xl leading-relaxed">
-            La tipología de PMO ha sido validada y registrada como referencia para las fases siguientes.
-          </p>
-          <span className="inline-flex items-center gap-1.5 mt-4 text-neutral-900 text-[12px]" style={{ fontWeight: 600 }}>
-            <CheckCircle2 size={13} /> Fase completada y aprobada
-          </span>
-        </div>
-
-        <PmoTypeCard diagnosis={diagnosis} />
-
-        {/* Justification */}
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
-              <Brain size={13} style={{ color: cfg.color }} />
-            </div>
-            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Justificación del Agente 4</h3>
-          </div>
-          <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-            {diagnosis.justification}
-          </p>
-        </div>
-
-        {/* Key factors */}
-        <div className="bg-white rounded-2xl border border-neutral-200/70 p-6 mb-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: cfg.bg }}>
-              <Info size={13} style={{ color: cfg.color }} />
-            </div>
-            <h3 className="text-gray-800 text-sm" style={{ fontWeight: 600 }}>Evidencia Principal</h3>
-          </div>
-          <ul className="space-y-3">
-            {diagnosis.keyFactors?.map((f: any, i: number) => (
-              <li key={i} className="flex items-start gap-2.5 text-gray-600 text-sm">
-                <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{ background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '9px', textTransform: 'uppercase' }}>
-                  {typeof f === 'string' ? i + 1 : f.split && f.split(':')[0] ? f.split(':')[0].substring(0, 3) : 'EV'}
-                </div>
-                <span className="leading-relaxed">{typeof f === 'string' ? f : JSON.stringify(f)}</span>
-              </li>
-            ))}
-          </ul>
-          {safePhase.completedAt && (
-            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-1.5 text-gray-400 text-xs">
-              <CheckCircle2 size={11} className="text-neutral-900" />
-              Aprobado el {safePhase.completedAt}
-            </div>
-          )}
-        </div>
-
-        {/* Breakdown and Tensiones */}
-        {(diagnosis.type_breakdown || (diagnosis.tensiones && diagnosis.tensiones.length > 0)) && (
-          <div className="grid grid-cols-2 gap-5 mb-5">
-            {diagnosis.type_breakdown && (
-              <div className="rounded-2xl border p-5" style={{ borderColor: cfg.border, background: cfg.bg }}>
-                <p className="text-xs uppercase tracking-wide mb-3" style={{ color: cfg.color, fontWeight: 700 }}>
-                  Composición del Enfoque
-                </p>
-                <div className="flex gap-1 h-3 rounded-full overflow-hidden mb-4 bg-white/50 border border-white/40">
-                  <div style={{ width: `${diagnosis.type_breakdown.agile_weight}%`, background: '#5454e9' }} />
-                  <div style={{ width: `${diagnosis.type_breakdown.predictive_weight}%`, background: '#525252' }} />
-                </div>
-                <div className="flex justify-between text-[11px] mb-3" style={{ fontWeight: 600 }}>
-                  <span className="text-neutral-900">{diagnosis.type_breakdown.agile_weight}% Ágil</span>
-                  <span className="text-neutral-600">{diagnosis.type_breakdown.predictive_weight}% Predictivo</span>
-                </div>
-                <p className="text-xs leading-relaxed" style={{ color: cfg.lightText }}>
-                  {diagnosis.type_breakdown.hybrid_rationale}
-                </p>
-              </div>
-            )}
-            
-            {diagnosis.tensiones && diagnosis.tensiones.length > 0 && (
-              <div className="rounded-2xl border p-5 bg-white border-neutral-200">
-                <p className="text-xs uppercase tracking-wide mb-3 text-neutral-900" style={{ fontWeight: 700 }}>
-                  Tensiones Detectadas
-                </p>
-                <ul className="space-y-3">
-                  {diagnosis.tensiones.map((tens: any, i: number) => (
-                    <li key={i} className="text-[12px] text-neutral-700 leading-relaxed border-l-2 border-neutral-300 pl-3">
-                      <span className="font-semibold text-neutral-900">{tens.tipo}: </span>
-                      {tens.descripcion}
-                      {tens.intensidad && (
-                        <span className={`ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-md font-medium border ${
-                          tens.intensidad === 'Alta' ? 'bg-neutral-900 text-white border-neutral-900'
-                          : tens.intensidad === 'Moderada' ? 'bg-neutral-200 text-neutral-700 border-neutral-300'
-                          : 'bg-neutral-100 text-neutral-500 border-neutral-200'
-                        }`}>{tens.intensidad}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Orientaciones por Fuente + Coherencia + Advertencias */}
-        {diagnosis.orientaciones_por_fuente && (
-          <div className="grid grid-cols-3 gap-5 mb-5">
-            {['cuantitativo', 'cualitativo', 'documental'].map((fuente) => {
-              const data = diagnosis.orientaciones_por_fuente[fuente];
-              if (!data) return null;
-              const orientColors: Record<string, { bg: string; text: string; border: string }> = {
-                'Agil': { bg: '#262626', text: '#ffffff', border: '#171717' },
-                'Ágil': { bg: '#262626', text: '#ffffff', border: '#171717' },
-                'Predictivo': { bg: '#f5f5f5', text: '#525252', border: '#e5e5e5' },
-                'Hibrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
-                'Híbrido': { bg: '#fcfcfc', text: '#404040', border: '#d4d4d4' },
-              };
-              const colors = orientColors[data.orientacion] || { bg: '#ffffff', text: '#737373', border: '#f4f4f5' };
-              const labels: Record<string, string> = { cuantitativo: 'Encuesta (Cuantitativo)', cualitativo: 'Entrevistas (Cualitativo)', documental: 'Documentos (Documental)' };
-              return (
-                <div key={fuente} className="bg-white rounded-2xl border border-neutral-200/70 p-5">
-                  <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-2" style={{ fontWeight: 600 }}>{labels[fuente]}</p>
-                  <div className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] mb-3" style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, fontWeight: 600 }}>
-                    {data.orientacion || 'No disponible'}
-                  </div>
-                  <p className="text-neutral-600 text-[12px] leading-relaxed">{data.evidencia_principal || 'Sin evidencia detallada'}</p>
-                  {data.promedio_general !== undefined && data.promedio_general > 0 && (
-                    <p className="text-neutral-400 text-[11px] mt-2">Promedio: <span className="font-semibold text-neutral-600">{data.promedio_general}</span></p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Coherencia + Estado de integración + Advertencias */}
-        <div className="flex gap-5 mb-5">
-          {diagnosis.coherencia && (
-            <div className={`flex-1 rounded-2xl border p-5 ${
-              diagnosis.coherencia === 'Alta' ? 'bg-neutral-900 text-white border-neutral-900' 
-              : diagnosis.coherencia === 'Media' ? 'bg-neutral-100 text-neutral-800 border-neutral-300'
-              : 'bg-neutral-50 text-neutral-500 border-neutral-200'
-            }`}>
-              <p className="text-[10px] uppercase tracking-wider opacity-60 mb-1" style={{ fontWeight: 600 }}>Coherencia entre Fuentes</p>
-              <p className="text-lg" style={{ fontWeight: 700 }}>{diagnosis.coherencia}</p>
-            </div>
-          )}
-          {diagnosis.estado_integracion && (
-            <div className="flex-1 rounded-2xl border border-neutral-200/70 bg-white p-5">
-              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1" style={{ fontWeight: 600 }}>Estado de Integración</p>
-              <p className="text-lg text-neutral-800" style={{ fontWeight: 700 }}>{diagnosis.estado_integracion}</p>
-            </div>
-          )}
-        </div>
-
-        {diagnosis.advertencias_de_entrada && diagnosis.advertencias_de_entrada.length > 0 && (
-          <div className="bg-neutral-50 rounded-2xl border border-neutral-200 p-5 mb-5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={14} className="text-neutral-500" />
-              <p className="text-xs uppercase tracking-wide text-neutral-700" style={{ fontWeight: 700 }}>Advertencias de Entrada</p>
-            </div>
-            <ul className="space-y-2">
-              {diagnosis.advertencias_de_entrada.map((adv: string, i: number) => (
-                <li key={i} className="text-[12px] text-neutral-600 leading-relaxed flex items-start gap-2">
-                  <span className="w-1 h-1 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
-                  {adv}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {renderPhase3Details()}
-      </motion.div>
+      <TipoProyectosDiagnosisView
+        diagnosis={diagnosis}
+        approved
+        completedAt={safePhase.completedAt}
+        annex={renderPhase3Annex()}
+      />
     );
   };
-
   const renderError = () => (
     <motion.div key="error" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
       className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
@@ -1222,163 +687,6 @@ export default function TipoProyectosModule() {
       </button>
     </motion.div>
   );
-
-  const renderPhase3Details = () => {
-    if (!phase3?.agentData) return null;
-    const diagnosisFase3 = phase3.agentData.diagnosis || phase3.agentData;
-    
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-10 border-t border-neutral-200/70 pt-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center border border-neutral-200">
-            <BarChart2 size={15} className="text-neutral-600" />
-          </div>
-          <div>
-            <h2 className="text-neutral-900 text-[15px]" style={{ fontWeight: 600 }}>Anexo: Resultados de Idoneidad (Fase 3)</h2>
-            <p className="text-neutral-500 text-[12px] mt-0.5">Gráfica de radar y cuadro de detalles por factor generados en la fase anterior.</p>
-          </div>
-        </div>
-
-        <div className="mb-8">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Gráfica de radar para la Evaluación de Idoneidad</p>
-          <div className="p-5 bg-white rounded-xl border border-neutral-200/70 overflow-x-auto print:overflow-visible print:border-none print:shadow-none print:p-0 print:break-inside-avoid" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-            <div className="h-[750px] min-w-[750px] w-full print:min-w-0 print:w-full print:h-[650px] mx-auto">
-              {radarData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                    <PolarGrid stroke="#d4d4d4" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#525252', fontSize: 11, fontWeight: 600 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#737373', fontSize: 10 }} axisLine={false} tickCount={6} />
-                    <Radar name="Zona Predictiva (8-10)" dataKey="PredictiveZone" stroke="none" fill="#ef4444" fillOpacity={0.12} isAnimationActive={false} />
-                    <Radar name="Zona Híbrida (4-8)" dataKey="HybridZone" stroke="none" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
-                    <Radar name="Zona Ágil (0-4)" dataKey="AgileZone" stroke="none" fill="#10b981" fillOpacity={0.25} isAnimationActive={false} />
-                    <Radar name="Puntaje Real" dataKey="Puntaje" stroke="#171717" strokeWidth={3} fill="#171717" fillOpacity={0.45} />
-                    <Tooltip content={<CustomRadarTooltip />} />
-                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '11px', fontWeight: 500 }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400">
-                  <p className="text-[13px]">Gráfica no disponible para estos datos</p>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-neutral-100">
-              {['cultura', 'equipo', 'proyecto'].map((dim) => {
-                const data = (diagnosisFase3?.indicadores || diagnosisFase3?.indicadores_dimension)?.[dim];
-                if (!data) return null;
-                return (
-                  <div key={dim} className="bg-neutral-50 p-3 rounded-xl border border-neutral-200/50 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-neutral-500 font-semibold mb-0.5">{dim}</p>
-                      <p className="text-[10px] text-neutral-400">Coherencia: {data.coherencia_interna}</p>
-                    </div>
-                    <p className="text-neutral-900 font-bold text-lg tabular-nums">
-                      {typeof data.promedio === 'number' ? Number(data.promedio.toFixed(1)) : data.promedio}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 pt-5 border-t border-neutral-100">
-              <h4 className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 font-semibold mb-3">Detalle por factor</h4>
-              <div className="overflow-hidden rounded-xl border border-neutral-200/50 bg-white print:overflow-visible print:border-none print:break-inside-avoid">
-                <table className="w-full text-left text-[11px]">
-                  <thead className="bg-neutral-50/80 border-b border-neutral-200/60">
-                    <tr>
-                      <th className="px-3 py-2 font-semibold text-neutral-500 w-16">Código</th>
-                      <th className="px-3 py-2 font-semibold text-neutral-500">Factor Propuesto</th>
-                      <th className="px-3 py-2 font-semibold text-neutral-500">Descripción Técnica del Indicador</th>
-                      <th className="px-3 py-2 font-semibold text-neutral-500 w-16 text-right">Pts</th>
-                      <th className="px-3 py-2 font-semibold text-neutral-500 w-24 text-center">Zona</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-100/60">
-                    {(() => {
-                      const groups: Record<string, any[]> = { Cultura: [], Equipo: [], Proyecto: [], Otros: [] };
-                      normalizeIdoneidadDiagnosisItems(diagnosisFase3).forEach((res: any) => {
-                        let dim = res.dimension || '';
-                        if (!dim) {
-                          const code = getIdoneidadItemCode(res);
-                          if (code.match(/^C\d/i)) dim = 'Cultura';
-                          else if (code.match(/^E\d/i)) dim = 'Equipo';
-                          else if (code.match(/^P\d/i)) dim = 'Proyecto';
-                          else dim = 'Otros';
-                        }
-                        const key = Object.keys(groups).find(k => k.toLowerCase() === dim.toLowerCase()) || 'Otros';
-                        groups[key].push(res);
-                      });
-
-                      return [
-                        { name: 'Cultura', items: groups.Cultura },
-                        { name: 'Equipo', items: groups.Equipo },
-                        { name: 'Proyecto', items: groups.Proyecto },
-                        { name: 'Otros', items: groups.Otros },
-                      ].filter(g => g.items.length > 0).map((group, gIdx) => (
-                        <Fragment key={gIdx}>
-                          <tr className="bg-neutral-50/30">
-                            <td className="px-3 py-1.5 font-bold text-neutral-800 uppercase tracking-tight text-[9px] bg-neutral-50/50" colSpan={5}>
-                              {group.name}
-                            </td>
-                          </tr>
-                          {group.items.map((res: any, idx: number) => {
-                            let zoneColor = 'bg-neutral-100 text-neutral-600 border-neutral-200';
-                            let zoneText = res.zona || 'Neutral';
-                            const p = getIdoneidadItemScore(res) ?? res.promedio;
-
-                            if (p <= 4) {
-                              zoneColor = 'bg-emerald-50 text-emerald-700 border-emerald-100';
-                              zoneText = 'Ágil';
-                            } else if (p <= 8) {
-                              zoneColor = 'bg-amber-50 text-amber-700 border-amber-100';
-                              zoneText = 'Híbrido';
-                            } else {
-                              zoneColor = 'bg-rose-50 text-rose-700 border-rose-100';
-                              zoneText = 'Predictivo';
-                            }
-
-                            const code = getIdoneidadItemCode(res);
-                            const factorInfo = factorMapping[code] || { name: res.factor || 'Factor Desconocido', description: res.interpretacion || 'Sin descripción' };
-
-                            return (
-                              <tr key={`${gIdx}-${idx}`} className="hover:bg-neutral-50/50 transition-colors">
-                                <td className="px-3 py-2 pl-5">
-                                  <span className="text-neutral-500 font-mono text-[10px] bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">{code}</span>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <span className="text-neutral-800 font-medium leading-tight">{factorInfo.name}</span>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <p className="text-[10px] text-neutral-500 leading-snug">{factorInfo.description}</p>
-                                  {res.interpretacion && factorInfo.description !== res.interpretacion && (
-                                    <p className="text-[10px] text-neutral-400 mt-1 italic leading-snug line-clamp-1 hover:line-clamp-none print:line-clamp-none transition-all">" {res.interpretacion} "</p>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 tabular-nums text-right font-bold text-neutral-900" style={{ fontSize: '13px' }}>
-                                  {valueOrEmpty(getIdoneidadItemScore(res))}
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                  <span className={`inline-block px-2 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-md border ${zoneColor}`}>
-                                    {zoneText}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </Fragment>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-    );
-  };
 
   // ── Layout ──
   return (

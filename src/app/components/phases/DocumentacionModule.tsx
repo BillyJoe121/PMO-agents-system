@@ -1,38 +1,24 @@
-import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Upload, FileText, FileSpreadsheet, Presentation, Image,
-  Trash2, RefreshCw, ChevronDown, Send, Loader2,
-  CheckCircle2, FolderOpen, Sparkles, Download, ExternalLink, Info, Check,
-  AlertCircle, FileSearch, ShieldAlert, MessageSquare, ChevronRight, Users, Clock, X
+  Trash2, RefreshCw, ChevronDown, Loader2,
+  FolderOpen, Sparkles, Download, ExternalLink, Info,
+  AlertCircle, MessageSquare, ChevronRight, Users, Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { useDocumentacion, type DocumentoLocal, type AgentDiagnosis } from '../../hooks/useDocumentacion';
+import { useDocumentacion, type AgentDiagnosis, type DocumentoLocal } from '../../hooks/useDocumentacion';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
+import DocumentacionDiagnosisView from './documentacion/DocumentacionDiagnosisView';
+import DocumentCategoryDropdown from './documentacion/DocumentCategoryDropdown';
+import { DOCUMENT_CATEGORIES, type DocCategory } from './documentacion/documentCategories';
 
-type DocCategory = 'D01' | 'D02' | 'D03' | 'D04' | 'D05' | 'D06' | 'D07' | 'D08' | 'D09' | 'D10' | 'D11';
 type Documento = DocumentoLocal;
-
-const CATEGORIES: { value: DocCategory; label: string }[] = [
-  { value: 'D01', label: 'Organigrama' },
-  { value: 'D02', label: 'Artefactos de Gestión de proyectos' },
-  { value: 'D03', label: 'Plataformas y Sistemas' },
-  { value: 'D04', label: 'Listado de Proyectos' },
-  { value: 'D05', label: 'Proyecto mejor documentado' },
-  { value: 'D06', label: 'Resultados Estratégicos' },
-  { value: 'D07', label: 'Mapa de Procesos' },
-  { value: 'D08', label: 'Arquitectura Organizacional/TI' },
-  { value: 'D09', label: 'Metodología de Proyectos' },
-  { value: 'D10', label: 'Portafolio de Productos/Servicios' },
-  { value: 'D11', label: 'Otros' },
-];
-
-
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -47,469 +33,6 @@ function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-const EMPTY_VALUE = 'N/A';
-
-function valueOrEmpty(value: unknown) {
-  if (value === null || value === undefined || value === '') return EMPTY_VALUE;
-  if (typeof value === 'boolean') return value ? 'Si' : 'No';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
-  return String(value);
-}
-
-function normalizeList(items?: unknown[]) {
-  return Array.isArray(items) && items.length > 0 ? items.map(valueOrEmpty) : [EMPTY_VALUE];
-}
-
-function DiagnosisCard({ title, children, muted = false }: { title: string; children: ReactNode; muted?: boolean }) {
-  return (
-    <div className={`rounded-2xl border border-neutral-200/70 ${muted ? 'bg-neutral-50' : 'bg-white'} p-6`} style={{ boxShadow: muted ? undefined : '0 1px 2px rgba(0,0,0,0.02)' }}>
-      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>{title}</p>
-      {children}
-    </div>
-  );
-}
-
-function EmptyAwareList({ items }: { items?: unknown[] }) {
-  return (
-    <ul className="space-y-2">
-      {normalizeList(items).map((item, i) => (
-        <li key={i} className="flex items-start gap-2.5 text-neutral-700 text-[13px] leading-relaxed">
-          <span className="w-1.5 h-1.5 rounded-full mt-2 bg-neutral-400 flex-shrink-0" />
-          <span>{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function KeyValueGrid({ rows }: { rows: { label: string; value: unknown }[] }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {rows.map((row) => (
-        <div key={row.label} className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-neutral-400 mb-1" style={{ fontWeight: 500 }}>{row.label}</p>
-          <p className="text-neutral-800 text-[13px] leading-relaxed">{valueOrEmpty(row.value)}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function BadgeList({ items }: { items?: unknown[] }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {normalizeList(items).map((item, i) => (
-        <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-neutral-700 text-[11px]" style={{ fontWeight: 500 }}>
-          {item}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function DocumentDiagnosisView({ diagnosis }: { diagnosis: AgentDiagnosis }) {
-  const d = diagnosis;
-  const dimensiones = [
-    ['inicio', 'Inicio'],
-    ['planeacion', 'Planeacion'],
-    ['ejecucion', 'Ejecucion'],
-    ['monitoreo_control', 'Monitoreo y control'],
-    ['cierre', 'Cierre'],
-  ] as const;
-
-  return (
-    <div className="space-y-5">
-      <DiagnosisCard title="Diagnostico - Agente 3 · Documental">
-        <div className="flex items-center gap-2.5 mb-5">
-          <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
-            <Sparkles size={13} strokeWidth={1.75} />
-          </div>
-          <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Respuesta consolidada</span>
-        </div>
-        <p className="text-neutral-700 text-[14px] leading-relaxed">{valueOrEmpty(d.summary)}</p>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Cobertura documental">
-        <KeyValueGrid rows={[
-          { label: 'Total esperado', value: d.cobertura_documental?.total_esperado },
-          { label: 'Recibidos completos', value: d.cobertura_documental?.recibidos_completos },
-          { label: 'Recibidos referenciados', value: d.cobertura_documental?.recibidos_referenciados },
-          { label: 'Faltantes', value: d.cobertura_documental?.faltantes },
-          { label: 'Documentos vencidos', value: d.cobertura_documental?.documentos_vencidos },
-        ]} />
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Calidad documental">
-        <div className="space-y-4">
-          <KeyValueGrid rows={[
-            { label: 'Resultado consolidado', value: d.calidad_documental?.resultado_consolidado },
-            { label: 'Actualizacion', value: d.calidad_documental?.actualizacion },
-            { label: 'Aplicabilidad', value: d.calidad_documental?.aplicabilidad },
-            { label: 'Nivel detalle', value: d.calidad_documental?.nivel_detalle },
-            { label: 'Coherencia entre documentos', value: d.calidad_documental?.coherencia_entre_documentos },
-          ]} />
-          <p className="text-neutral-700 text-[13px] leading-relaxed">{valueOrEmpty(d.calidad_documental?.justificacion)}</p>
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Cobertura ciclo de vida">
-        <div className="space-y-4">
-          <KeyValueGrid rows={[
-            { label: 'Completitud', value: d.cobertura_ciclo_vida?.completitud },
-            { label: 'Continuidad documental', value: d.cobertura_ciclo_vida?.continuidad_documental },
-            { label: 'Desbalance identificado', value: d.cobertura_ciclo_vida?.desbalance_identificado },
-          ]} />
-          <BadgeList items={d.cobertura_ciclo_vida?.fases_faltantes} />
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Inventario y cobertura documental">
-        {(() => {
-          const estadoMap: Record<string, any> = {};
-          for (const doc of d.estado_documentos ?? []) {
-            const code = doc.codigo_catalogo?.trim().toUpperCase();
-            if (code) estadoMap[code] = doc;
-          }
-
-          const missingSet = new Set((d.missing_documents ?? []).map((code) => code.trim().toUpperCase()));
-          const catalog = CATEGORIES.filter((cat) => cat.value !== 'D11');
-
-          const stateLabel: Record<string, string> = {
-            util_para_analisis: 'Util para analisis',
-            critico_para_gp: 'Critico',
-            incompleto: 'Incompleto',
-            no_legible: 'No legible',
-            parcialmente_interpretable: 'Parcial',
-            insuficiente_para_concluir: 'Insuficiente',
-            desactualizado: 'Desactualizado',
-            solo_referenciado: 'Solo referenciado',
-            no_entregado: 'No entregado',
-          };
-
-          return (
-            <div className="space-y-4">
-              <div className="overflow-x-auto rounded-xl border border-neutral-100">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-neutral-100 bg-neutral-50">
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Codigo</th>
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Documento esperado</th>
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Archivo recibido</th>
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold text-center">Disponible</th>
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold text-center">Faltante</th>
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Estado</th>
-                      <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-50 bg-white">
-                    {catalog.map((cat) => {
-                      const entry = estadoMap[cat.value];
-                      const isMissing = missingSet.has(cat.value) || !entry || entry.estado === 'no_entregado';
-                      return (
-                        <tr key={cat.value} className="hover:bg-neutral-50/60 transition-colors">
-                          <td className="px-4 py-3.5">
-                            <span className="text-[10px] font-bold tabular-nums text-neutral-400">{cat.value}</span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className="text-neutral-700 text-[13px]" style={{ fontWeight: 500 }}>{cat.label}</span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className="text-neutral-500 text-[12px] leading-relaxed">{valueOrEmpty(entry?.nombre)}</span>
-                          </td>
-                          <td className="px-4 py-3.5 text-center">
-                            {!isMissing ? (
-                              <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-900 text-white">
-                                <Check size={12} strokeWidth={3} />
-                              </div>
-                            ) : (
-                              <span className="text-neutral-200 text-[10px]">-</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 text-center">
-                            {isMissing ? (
-                              <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 text-neutral-400 border border-neutral-200">
-                                <X size={12} strokeWidth={3} />
-                              </div>
-                            ) : (
-                              <span className="text-neutral-200 text-[10px]">-</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] border ${
-                              isMissing
-                                ? 'bg-neutral-50 text-neutral-400 border-neutral-200'
-                                : 'bg-neutral-100 text-neutral-800 border-neutral-200'
-                            }`} style={{ fontWeight: 500 }}>
-                              {entry?.estado ? stateLabel[entry.estado] ?? entry.estado : 'No entregado'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span className="text-neutral-500 text-[12px]">{valueOrEmpty(entry?.valor_analitico)}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Codigos faltantes reportados por el agente</p>
-                <BadgeList items={d.missing_documents} />
-              </div>
-            </div>
-          );
-        })()}
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Insights clave"><EmptyAwareList items={d.key_insights} /></DiagnosisCard>
-
-      <DiagnosisCard title="Hallazgos documentales">
-        <div className="space-y-3">
-          {(d.hallazgos_documentales?.length ? d.hallazgos_documentales : [{ tipo: EMPTY_VALUE, nombre: EMPTY_VALUE, descripcion: EMPTY_VALUE, documentos_fuente: [] }]).map((hallazgo, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <KeyValueGrid rows={[
-                { label: 'Tipo', value: hallazgo.tipo },
-                { label: 'Nombre', value: hallazgo.nombre },
-                { label: 'Descripcion', value: hallazgo.descripcion },
-              ]} />
-              <div className="mt-3"><BadgeList items={hallazgo.documentos_fuente} /></div>
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Brechas documentales">
-        <div className="space-y-3">
-          {(d.brechas_documentales?.length ? d.brechas_documentales : [{ id: EMPTY_VALUE, impacto: EMPTY_VALUE, descripcion: EMPTY_VALUE, dimension_o_area: EMPTY_VALUE, evidencia_o_ausencia: EMPTY_VALUE, documentos_fuente_o_ausentes: [] }]).map((brecha, i) => (
-            <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-              <KeyValueGrid rows={[
-                { label: 'ID', value: brecha.id },
-                { label: 'Impacto', value: brecha.impacto },
-                { label: 'Dimension o area', value: brecha.dimension_o_area },
-                { label: 'Descripcion', value: brecha.descripcion },
-                { label: 'Evidencia o ausencia', value: brecha.evidencia_o_ausencia },
-              ]} />
-              <div className="mt-3"><BadgeList items={brecha.documentos_fuente_o_ausentes} /></div>
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Dimensiones gestion de proyectos">
-        <div className="space-y-4">
-          {dimensiones.map(([key, label]) => {
-            const dim = d.dimensiones_gestion_proyectos?.[key];
-            return (
-              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-5">
-                <p className="text-neutral-900 text-[13px] mb-4" style={{ fontWeight: 600 }}>{label}</p>
-                <KeyValueGrid rows={[
-                  { label: 'Confianza', value: dim?.confianza },
-                  { label: 'Nivel formalidad', value: dim?.nivel_formalidad },
-                ]} />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Artefactos</p><EmptyAwareList items={dim?.artefactos} /></div>
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Herramientas</p><EmptyAwareList items={dim?.herramientas} /></div>
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Roles documentados</p><EmptyAwareList items={dim?.roles_documentados} /></div>
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Fuentes documentales</p><EmptyAwareList items={dim?.fuentes_documentales} /></div>
-                  <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesos documentados</p><EmptyAwareList items={dim?.procesos_documentados} /></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Limitaciones" muted>
-        <div className="space-y-3">
-          {(d.limitaciones?.length ? d.limitaciones : [{ tipo: EMPTY_VALUE, descripcion: EMPTY_VALUE, impacto_confiabilidad: EMPTY_VALUE, dimensiones_afectadas: [] }]).map((lim, i) => (
-            <div key={i} className="rounded-xl border border-neutral-200 bg-white p-4">
-              <KeyValueGrid rows={[
-                { label: 'Tipo', value: lim.tipo },
-                { label: 'Descripcion', value: lim.descripcion },
-                { label: 'Impacto confiabilidad', value: lim.impacto_confiabilidad },
-              ]} />
-              <div className="mt-3"><BadgeList items={lim.dimensiones_afectadas} /></div>
-            </div>
-          ))}
-        </div>
-      </DiagnosisCard>
-
-      <DiagnosisCard title="Recomendaciones" muted><EmptyAwareList items={d.recommendations} /></DiagnosisCard>
-
-      <DiagnosisCard title="Insumos para agente 4">
-        <div className="space-y-5">
-          <KeyValueGrid rows={[
-            { label: 'Nivel estandarizacion', value: d.insumos_para_agente_4?.nivel_estandarizacion },
-            { label: 'Nivel calidad documental', value: d.insumos_para_agente_4?.nivel_calidad_documental },
-          ]} />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Hallazgos clave resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.hallazgos_clave_resumen} /></div>
-            <div><p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Brechas criticas resumen</p><EmptyAwareList items={d.insumos_para_agente_4?.brechas_criticas_resumen} /></div>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Metodologias mencionadas</p>
-            <div className="space-y-3">
-              {(d.insumos_para_agente_4?.metodologias_mencionadas?.length ? d.insumos_para_agente_4.metodologias_mencionadas : [{ nombre: EMPTY_VALUE, documento_fuente: EMPTY_VALUE, nivel_adopcion_visible: EMPTY_VALUE }]).map((met, i) => (
-                <KeyValueGrid key={i} rows={[
-                  { label: 'Nombre', value: met.nombre },
-                  { label: 'Documento fuente', value: met.documento_fuente },
-                  { label: 'Nivel adopcion visible', value: met.nivel_adopcion_visible },
-                ]} />
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Senales flexibilidad agil</p>
-              {(d.insumos_para_agente_4?.senales_flexibilidad_agil?.length ? d.insumos_para_agente_4.senales_flexibilidad_agil : [{ descripcion: EMPTY_VALUE, nivel_evidencia: EMPTY_VALUE, documentos_fuente: [] }]).map((senal, i) => (
-                <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 mb-3">
-                  <KeyValueGrid rows={[{ label: 'Descripcion', value: senal.descripcion }, { label: 'Nivel evidencia', value: senal.nivel_evidencia }]} />
-                  <div className="mt-3"><BadgeList items={senal.documentos_fuente} /></div>
-                </div>
-              ))}
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400 mb-3" style={{ fontWeight: 500 }}>Senales estructuracion formal</p>
-              {(d.insumos_para_agente_4?.senales_estructuracion_formal?.length ? d.insumos_para_agente_4.senales_estructuracion_formal : [{ descripcion: EMPTY_VALUE, nivel_evidencia: EMPTY_VALUE, documentos_fuente: [] }]).map((senal, i) => (
-                <div key={i} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 mb-3">
-                  <KeyValueGrid rows={[{ label: 'Descripcion', value: senal.descripcion }, { label: 'Nivel evidencia', value: senal.nivel_evidencia }]} />
-                  <div className="mt-3"><BadgeList items={senal.documentos_fuente} /></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </DiagnosisCard>
-    </div>
-  );
-}
-
-// ── Category dropdown ──────────────────────────────────────────────────────────
-interface CategoryDropdownProps {
-  value: DocCategory;
-  onChange: (v: DocCategory) => void;
-}
-
-function CategoryDropdown({ value, onChange }: CategoryDropdownProps) {
-  const [open, setOpen] = useState(false);
-  const [openUpwards, setOpenUpwards] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useEffect(() => {
-    if (open && ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      // El dropdown puede medir aprox 250-300px
-      if (spaceBelow < 280 && spaceAbove > spaceBelow) {
-        setOpenUpwards(true);
-      } else {
-        setOpenUpwards(false);
-      }
-    }
-  }, [open]);
-
-  const selected = CATEGORIES.find(c => c.value === value);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(prev => !prev)}
-        className="flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 border border-neutral-200/80 rounded-full text-[12px] bg-white text-neutral-700 hover:border-neutral-300 transition-all cursor-pointer"
-        style={{ fontWeight: 500 }}
-      >
-        {selected?.label}
-        <ChevronDown
-          size={11}
-          strokeWidth={2}
-          className={`text-neutral-400 transition-transform duration-200 ${open ? (openUpwards ? 'rotate-0' : 'rotate-180') : (openUpwards ? 'rotate-180' : 'rotate-0')}`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: openUpwards ? 5 : -5, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: openUpwards ? 3 : -3, scale: 0.97 }}
-            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-            className={`absolute right-0 min-w-[240px] max-h-[300px] overflow-y-auto bg-white rounded-2xl border border-neutral-200/70 z-[9999] py-1.5 px-1.5 scrollbar-thin ${openUpwards ? 'bottom-full mb-1.5 origin-bottom' : 'top-full mt-1.5 origin-top'
-              }`}
-            style={{ boxShadow: '0 4px 6px -2px rgba(0,0,0,0.04), 0 16px 40px -8px rgba(0,0,0,0.10)' }}
-          >
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat.value}
-                onClick={() => { onChange(cat.value); setOpen(false); }}
-                className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-[12px] transition-colors text-left ${value === cat.value
-                  ? 'bg-neutral-50 text-neutral-900'
-                  : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
-                  }`}
-                style={{ fontWeight: value === cat.value ? 500 : 400 }}
-              >
-                <span>{cat.label}</span>
-                {value === cat.value && (
-                  <Check size={12} strokeWidth={2.25} className="text-neutral-900 flex-shrink-0" />
-                )}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function ConfirmModal({ open, count, onCancel, onConfirm, isLoading }: {
-  open: boolean; count: number; onCancel: () => void; onConfirm: () => void; isLoading: boolean;
-}) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onCancel} className="absolute inset-0 bg-neutral-900/30 backdrop-blur-sm" />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="relative bg-white rounded-2xl w-full max-w-md z-10 p-6 border border-neutral-200/70"
-            style={{ boxShadow: '0 24px 64px -16px rgba(0,0,0,0.18)' }}>
-            <div className="flex items-start gap-4 mb-6">
-              <div>
-                <h3 className="text-neutral-900 mb-1.5 tracking-tight" style={{ fontWeight: 500, letterSpacing: '-0.01em' }}>¿Enviar al Agente 1?</h3>
-                <p className="text-neutral-500 text-[13px] leading-relaxed">
-                  Se enviarán <span className="text-neutral-900" style={{ fontWeight: 500 }}>{count} documentos</span> al Agente 1 para análisis de completitud. Los archivos quedarán en modo lectura.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-neutral-200/80 rounded-full text-neutral-700 text-[13px] hover:bg-neutral-50 transition-colors" style={{ fontWeight: 500 }}>
-                Cancelar
-              </button>
-              <button onClick={onConfirm} disabled={isLoading}
-                className="flex-1 py-2.5 rounded-full text-white text-[13px] flex items-center justify-center gap-2 disabled:opacity-70 hover:-translate-y-px transition-all"
-                style={{ background: '#5454e9', fontWeight: 500 }}>
-                {isLoading ? <><Loader2 size={13} className="animate-spin" /> Enviando…</> : <><Send size={13} /> Confirmar</>}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-
 
 export default function DocumentacionModule() {
   const { id: projectId } = useParams<{ id: string }>();
@@ -529,8 +52,8 @@ export default function DocumentacionModule() {
 
   const [liveDiagnosis, setLiveDiagnosis] = useState<AgentDiagnosis | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [documentsExpanded, setDocumentsExpanded] = useState(false);
 
   // Agente 9 — Banco de preguntas de entrevista
   const [agent9Data, setAgent9Data] = useState<any>(null);
@@ -585,7 +108,7 @@ export default function DocumentacionModule() {
     const pollAgent9 = async () => {
       const { data, error } = await supabase
         .from('fases_estado')
-        .select('datos_consolidados, estado_visual')
+        .select('datos_consolidados, estado_visual, updated_at')
         .eq('proyecto_id', projectId)
         .eq('numero_fase', 9)
         .maybeSingle();
@@ -620,7 +143,21 @@ export default function DocumentacionModule() {
         setAgent9Status('error');
         if (agent9PollRef.current) clearInterval(agent9PollRef.current);
       } else if (data?.estado_visual === 'procesando') {
-        setAgent9Status('processing');
+        // Detectar estado "stuck": si lleva más de 3 minutos procesando sin resultado, es un timeout
+        const updatedAt = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
+        const minutesElapsed = (Date.now() - updatedAt) / 1000 / 60;
+        if (minutesElapsed > 3) {
+          // Timeout: resetear y reintentar automáticamente
+          console.warn('[Agent9] Estado procesando > 3 min sin resultado — se considera timeout. Reintentando.');
+          agent9TriggerInFlightRef.current = false;
+          await supabase.from('fases_estado').upsert(
+            { proyecto_id: projectId, numero_fase: 9, estado_visual: 'disponible', datos_consolidados: null, updated_at: new Date().toISOString() },
+            { onConflict: 'proyecto_id,numero_fase' }
+          );
+          triggerAgent9();
+        } else {
+          setAgent9Status('processing');
+        }
       } else if (!data || !data?.datos_consolidados) {
         // No hay registro o está disponible sin datos -> Disparar Agente 9
         triggerAgent9();
@@ -657,19 +194,28 @@ export default function DocumentacionModule() {
         return;
       }
       if (file.size > maxSize) { toast.error(`${file.name} supera el límite de 50MB`); return; }
-      const doc: Documento = {
-        id: `d${Date.now()}_${Math.random()}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        category: 'D01',
-        customCategory: '',
-        file,
-      };
-      setDocumentos(prev => [...prev, doc]);
-      toast.success(`${file.name} cargado correctamente`);
+      
+      setDocumentos(prev => {
+        // Prevenir duplicados por nombre de archivo
+        if (prev.some(d => d.name === file.name)) {
+          toast.error(`${file.name} ya está en la lista`, { description: 'No se agregarán duplicados.' });
+          return prev;
+        }
+        
+        const doc: Documento = {
+          id: `d${Date.now()}_${Math.random()}`,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          category: 'D01',
+          customCategory: '',
+          file,
+        };
+        toast.success(`${file.name} cargado correctamente`);
+        return [...prev, doc];
+      });
     });
-  }, []);
+  }, [setDocumentos]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -762,11 +308,11 @@ export default function DocumentacionModule() {
             <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
             </div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>Procesando</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[#5454e9] mb-2" style={{ fontWeight: 500 }}>Procesando</p>
             <h2 className="text-neutral-900 tracking-tight" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
               Analizando documentos
             </h2>
-            <p className="text-neutral-500 text-[13px] mt-2">El Agente 1 está evaluando la completitud documental…</p>
+            <p className="text-[#5454e9] text-[13px] mt-2">El Agente está evaluando la completitud documental…</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -876,114 +422,133 @@ export default function DocumentacionModule() {
 
         {/* Document List */}
         {documentos.length > 0 && (
-          <div className="bg-white rounded-2xl border border-neutral-200/70 mb-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-            <div className="px-5 py-3.5 border-b border-neutral-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FolderOpen size={13} className="text-neutral-500" strokeWidth={1.75} />
-                <span className="text-neutral-900 text-[13px]" style={{ fontWeight: 500 }}>
-                  Documentos
+          <div className="bg-white rounded-2xl border border-neutral-200/70 mb-6 overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+            <button
+              type="button"
+              onClick={() => setDocumentsExpanded((open) => !open)}
+              className={`w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-neutral-50 transition-colors ${documentsExpanded ? 'border-b border-neutral-100' : ''}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <FolderOpen size={13} className="text-neutral-500 flex-shrink-0" strokeWidth={1.75} />
+                <span className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>
+                  Documentos cargados
                 </span>
-                <span className="text-[11px] text-neutral-400 tabular-nums">{documentos.length}</span>
+                <span className="text-[11px] text-neutral-400 tabular-nums flex-shrink-0">{documentos.length}</span>
               </div>
-            </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <span className="text-[11px] text-neutral-400 tabular-nums">{formatSize(documentos.reduce((s, d) => s + d.size, 0))}</span>
+                <ChevronDown size={13} className={`text-neutral-400 transition-transform duration-200 ${documentsExpanded ? 'rotate-180' : ''}`} strokeWidth={1.75} />
+              </div>
+            </button>
 
-            <div className="divide-y divide-neutral-100">
-              {documentos.map(doc => (
+            <AnimatePresence initial={false}>
+              {documentsExpanded && (
                 <motion.div
-                  key={doc.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="px-5 py-4 flex items-center gap-4 transition-colors hover:bg-neutral-50/60"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  className="overflow-hidden"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-neutral-50 border border-neutral-200/70 flex items-center justify-center flex-shrink-0">
-                    {getFileIcon(doc.name)}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>{doc.name}</p>
-                    <p className="text-neutral-400 text-[11px] tabular-nums">{formatSize(doc.size)}</p>
-                  </div>
-
-                  {!isCompleted ? (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <CategoryDropdown
-                        value={doc.category}
-                        onChange={v => updateCategory(doc.id, v)}
-                      />
-
-                      <AnimatePresence>
-                        {doc.category === 'D11' && (
-                          <motion.input
-                            initial={{ width: 0, opacity: 0 }}
-                            animate={{ width: '10rem', opacity: 1 }}
-                            exit={{ width: 0, opacity: 0 }}
-                            type="text"
-                            value={doc.customCategory}
-                            onChange={e => updateCustomCategory(doc.id, e.target.value)}
-                            placeholder="Especifique…"
-                            className={`px-2.5 py-1.5 border rounded-full text-[12px] outline-none transition-all bg-white
-                              ${!doc.customCategory.trim() ? 'border-neutral-900 focus:ring-2 focus:ring-neutral-100' : 'border-neutral-200/80 focus:border-neutral-300'}
-                            `}
-                          />
-                        )}
-                      </AnimatePresence>
-
-                      <button title="Reemplazar" className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors">
-                        <RefreshCw size={12} strokeWidth={1.75} />
-                      </button>
-                      <button onClick={() => handleDelete(doc)} title="Eliminar"
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors">
-                        <Trash2 size={12} strokeWidth={1.75} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <span className="px-2.5 py-1 bg-neutral-100 text-neutral-700 text-[11px] rounded-full" style={{ fontWeight: 500 }}>
-                        {CATEGORIES.find(c => c.value === doc.category)?.label || doc.category || 'Sin categoría'}
-                      </span>
-                      <button
-                        onClick={async () => {
-                          try {
-                            let url = doc.storagePath || (doc.file ? URL.createObjectURL(doc.file) : '');
-
-                            // Si la URL es de Supabase y tiene un token, podría estar expirado (dura 1 hora).
-                            // Extraemos la ruta real y generamos una nueva URL firmada.
-                            if (url && url.includes('token=')) {
-                              const match = url.match(/documentos-pmo\/(.+?)\?token=/);
-                              if (match && match[1]) {
-                                const rawPath = decodeURIComponent(match[1]);
-                                const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(rawPath, 3600);
-                                if (data?.signedUrl) url = data.signedUrl;
-                              }
-                            }
-
-                            if (url) {
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = doc.name;
-                              a.target = '_blank';
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                            }
-                          } catch (err) {
-                            console.error('Error al descargar:', err);
-                            toast.error('No se pudo generar el enlace de descarga.');
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 text-[12px] text-neutral-700 hover:text-neutral-900 hover:underline"
-                        style={{ fontWeight: 500 }}
+                  <div className="divide-y divide-neutral-100">
+                    {documentos.map(doc => (
+                      <motion.div
+                        key={doc.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="px-5 py-4 flex items-center gap-4 transition-colors hover:bg-neutral-50/60"
                       >
-                        <Download size={11} /> Descargar
-                      </button>
-                    </div>
-                  )}
+                        <div className="w-9 h-9 rounded-xl bg-neutral-50 border border-neutral-200/70 flex items-center justify-center flex-shrink-0">
+                          {getFileIcon(doc.name)}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 500 }}>{doc.name}</p>
+                          <p className="text-neutral-400 text-[11px] tabular-nums">{formatSize(doc.size)}</p>
+                        </div>
+
+                        {!isCompleted ? (
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <DocumentCategoryDropdown
+                              value={doc.category}
+                              onChange={v => updateCategory(doc.id, v)}
+                            />
+
+                            <AnimatePresence>
+                              {doc.category === 'D11' && (
+                                <motion.input
+                                  initial={{ width: 0, opacity: 0 }}
+                                  animate={{ width: '10rem', opacity: 1 }}
+                                  exit={{ width: 0, opacity: 0 }}
+                                  type="text"
+                                  value={doc.customCategory}
+                                  onChange={e => updateCustomCategory(doc.id, e.target.value)}
+                                  placeholder="Especifique…"
+                                  className={`px-2.5 py-1.5 border rounded-full text-[12px] outline-none transition-all bg-white
+                                    ${!doc.customCategory.trim() ? 'border-neutral-900 focus:ring-2 focus:ring-neutral-100' : 'border-neutral-200/80 focus:border-neutral-300'}
+                                  `}
+                                />
+                              )}
+                            </AnimatePresence>
+
+                            <button title="Reemplazar" className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors">
+                              <RefreshCw size={12} strokeWidth={1.75} />
+                            </button>
+                            <button onClick={() => handleDelete(doc)} title="Eliminar"
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors">
+                              <Trash2 size={12} strokeWidth={1.75} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <span className="px-2.5 py-1 bg-neutral-100 text-neutral-700 text-[11px] rounded-full" style={{ fontWeight: 500 }}>
+                              {DOCUMENT_CATEGORIES.find(c => c.value === doc.category)?.label || doc.category || 'Sin categoría'}
+                            </span>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  let url = doc.storagePath || (doc.file ? URL.createObjectURL(doc.file) : '');
+
+                                  // Si la URL es de Supabase y tiene un token, podría estar expirado (dura 1 hora).
+                                  // Extraemos la ruta real y generamos una nueva URL firmada.
+                                  if (url && url.includes('token=')) {
+                                    const match = url.match(/documentos-pmo\/(.+?)\?token=/);
+                                    if (match && match[1]) {
+                                      const rawPath = decodeURIComponent(match[1]);
+                                      const { data } = await supabase.storage.from('documentos-pmo').createSignedUrl(rawPath, 3600);
+                                      if (data?.signedUrl) url = data.signedUrl;
+                                    }
+                                  }
+
+                                  if (url) {
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = doc.name;
+                                    a.target = '_blank';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                  }
+                                } catch (err) {
+                                  console.error('Error al descargar:', err);
+                                  toast.error('No se pudo generar el enlace de descarga.');
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 text-[12px] text-neutral-700 hover:text-neutral-900 hover:underline"
+                              style={{ fontWeight: 500 }}
+                            >
+                              <Download size={11} /> Descargar
+                            </button>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
                 </motion.div>
-              ))}
-            </div>
+              )}
+            </AnimatePresence>
           </div>
         )}
-
         {documentos.length === 0 && !isCompleted && (
           <div className="bg-white rounded-2xl border border-dashed border-neutral-200 p-10 text-center">
             <FolderOpen size={24} className="text-neutral-300 mx-auto mb-3" strokeWidth={1.5} />
@@ -1019,272 +584,7 @@ export default function DocumentacionModule() {
           return (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-5">
-              <DocumentDiagnosisView diagnosis={d} />
-              <div className="hidden">
-
-              {/* Header */}
-              <div className="rounded-2xl border border-neutral-200/70 bg-white p-7"
-                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                <div className="flex items-center gap-2.5 mb-5">
-                  <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
-                    <Sparkles size={13} strokeWidth={1.75} />
-                  </div>
-                  <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>
-                    Diagnóstico — Agente 3 · Documental
-                  </span>
-                </div>
-                <p className="text-neutral-700 text-[14px] leading-relaxed">{d.summary}</p>
-              </div>
-
-              {/* Cobertura Stats */}
-              <div className="grid grid-cols-3 gap-px bg-neutral-200/60 rounded-2xl overflow-hidden border border-neutral-200/60">
-                {[
-                  { label: 'Documentos Esperados', value: typeof d.cobertura_documental?.total_esperado === 'number' ? Number(d.cobertura_documental.total_esperado.toFixed(1)) : (d.cobertura_documental?.total_esperado ?? '—') },
-                  { label: 'Recibidos Completos', value: typeof d.cobertura_documental?.recibidos_completos === 'number' ? Number(d.cobertura_documental.recibidos_completos.toFixed(1)) : (d.cobertura_documental?.recibidos_completos ?? '—') },
-                  { label: 'Faltantes', value: typeof d.cobertura_documental?.faltantes === 'number' ? Number(d.cobertura_documental.faltantes.toFixed(1)) : (d.cobertura_documental?.faltantes ?? '—') },
-                ].map((s, i) => (
-                  <div key={i} className="bg-white px-5 py-4">
-                    <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-400" style={{ fontWeight: 500 }}>{s.label}</p>
-                    <p className="mt-2 text-neutral-900 tabular-nums" style={{ fontWeight: 500, fontSize: '1.75rem', letterSpacing: '-0.02em' }}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Calidad Documental */}
-              {d.calidad_documental && (
-                <div className="rounded-2xl border border-neutral-200/70 bg-white p-6"
-                  style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileSearch size={14} className="text-neutral-500" strokeWidth={1.75} />
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 500 }}>Calidad Documental</p>
-                    <span className={`ml-auto px-2.5 py-1 rounded-full text-[11px] ${d.calidad_documental.resultado_consolidado === 'Alta' ? 'bg-neutral-900 text-white' :
-                      d.calidad_documental.resultado_consolidado === 'Media' ? 'bg-neutral-200 text-neutral-700' :
-                        'bg-neutral-100 text-neutral-500'
-                      }`} style={{ fontWeight: 500 }}>{d.calidad_documental.resultado_consolidado}</span>
-                  </div>
-                  <p className="text-neutral-600 text-[13px] leading-relaxed">{d.calidad_documental.justificacion}</p>
-                </div>
-              )}
-
-              {/* Key Insights (Hallazgos puntuales) */}
-              {d.key_insights && d.key_insights.length > 0 && (
-                <div className="rounded-2xl border border-neutral-200/70 bg-white p-6"
-                  style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Insights Rápidos</p>
-                  <ul className="space-y-3">
-                    {d.key_insights.map((insight, i) => (
-                      <li key={i} className="flex items-start gap-3 text-neutral-700 text-[13px] leading-relaxed">
-                        <Sparkles size={14} className="text-neutral-900 flex-shrink-0 mt-0.5" strokeWidth={1.75} />
-                        {insight}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Hallazgos Estructurados */}
-              {d.hallazgos_documentales && d.hallazgos_documentales.length > 0 && (
-                <div className="rounded-2xl border border-neutral-200/70 bg-white p-6"
-                  style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Hallazgos Estructurados</p>
-                  <div className="space-y-3">
-                    {d.hallazgos_documentales.map((hallazgo, i) => (
-                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-neutral-50 border border-neutral-100">
-                        <CheckCircle2 size={14} className="text-neutral-900 flex-shrink-0 mt-0.5" strokeWidth={1.75} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-neutral-800 text-[13px]" style={{ fontWeight: 500 }}>{hallazgo.nombre}</p>
-                          <p className="text-neutral-500 text-[12px] mt-0.5 leading-relaxed">{hallazgo.descripcion}</p>
-                        </div>
-                        {hallazgo.tipo && (
-                          <span className="flex-shrink-0 px-2 py-0.5 bg-neutral-200/60 text-neutral-600 rounded-full text-[10px]" style={{ fontWeight: 500 }}>
-                            {hallazgo.tipo.replace(/_/g, ' ')}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Brechas */}
-              {d.brechas_documentales && d.brechas_documentales.length > 0 && (
-                <div className="rounded-2xl border border-neutral-200/70 bg-white p-6"
-                  style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 mb-4" style={{ fontWeight: 500 }}>Brechas Documentales</p>
-                  <div className="space-y-3">
-                    {d.brechas_documentales.map((brecha, i) => (
-                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-neutral-50 border border-neutral-100">
-                        <ShieldAlert size={14} className={`flex-shrink-0 mt-0.5 ${brecha.impacto === 'Alto' ? 'text-neutral-900' :
-                          brecha.impacto === 'Medio' ? 'text-neutral-600' : 'text-neutral-400'
-                          }`} strokeWidth={1.75} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-neutral-800 text-[13px]" style={{ fontWeight: 500 }}>{brecha.dimension_o_area}</p>
-                          <p className="text-neutral-500 text-[12px] mt-0.5 leading-relaxed">{brecha.descripcion}</p>
-                        </div>
-                        <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] ${brecha.impacto === 'Alto' ? 'bg-neutral-900 text-white' :
-                          brecha.impacto === 'Medio' ? 'bg-neutral-200 text-neutral-700' :
-                            'bg-neutral-100 text-neutral-500'
-                          }`} style={{ fontWeight: 500 }}>{brecha.impacto}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Recomendaciones */}
-              {d.recommendations && d.recommendations.length > 0 && (
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-4" style={{ fontWeight: 500 }}>Recomendaciones</p>
-                  <ul className="space-y-3">
-                    {d.recommendations.map((rec, i) => (
-                      <li key={i} className="flex items-start gap-3 text-neutral-700 text-[13px] leading-relaxed">
-                        <div className="w-1.5 h-1.5 rounded-full bg-neutral-400 mt-2 flex-shrink-0" />
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* ── Cobertura Documental (D01-D10) ── */}
-              <div className="rounded-2xl border border-neutral-200/70 bg-white overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                <div className="bg-neutral-50/50 px-6 py-3 border-b border-neutral-200/70 flex items-center gap-2">
-                  <FileSearch size={14} className="text-neutral-500" />
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500" style={{ fontWeight: 600 }}>Inventario y Cobertura de Documentación</p>
-                </div>
-                <div className="overflow-x-auto">
-                  {(() => {
-                    // Build a lookup map from codigo_catalogo → entry
-                    const estadoMap: Record<string, any> = {};
-                    if (Array.isArray(d.estado_documentos)) {
-                      for (const e of d.estado_documentos) {
-                        const code = e.codigo_catalogo?.trim().toUpperCase();
-                        if (code) estadoMap[code] = e;
-                      }
-                    }
-
-                    const ESTADO_LABELS: Record<string, { label: string; color: string }> = {
-                      'util_para_analisis':              { label: 'Útil para análisis',    color: 'text-neutral-900 bg-neutral-100 border-neutral-200' },
-                      'critico_para_gp':                 { label: 'Crítico',                color: 'text-neutral-900 bg-neutral-900 text-white border-neutral-900' },
-                      'incompleto':                      { label: 'Incompleto',             color: 'text-neutral-600 bg-neutral-100 border-neutral-200' },
-                      'no_legible':                      { label: 'No legible',             color: 'text-neutral-500 bg-neutral-50 border-neutral-200' },
-                      'parcialmente_interpretable':      { label: 'Parcial',                color: 'text-neutral-600 bg-neutral-100 border-neutral-200' },
-                      'insuficiente_para_concluir':      { label: 'Insuficiente',           color: 'text-neutral-500 bg-neutral-50 border-neutral-200' },
-                      'desactualizado':                  { label: 'Desactualizado',         color: 'text-neutral-600 bg-neutral-100 border-neutral-200' },
-                      'solo_referenciado':               { label: 'Solo referenciado',      color: 'text-neutral-400 bg-neutral-50 border-neutral-200' },
-                      'no_entregado':                    { label: 'No entregado',           color: 'text-neutral-400 bg-neutral-50 border-neutral-100' },
-                    };
-
-                    const standardCats = [
-                      { id: 'D01', label: 'Organigrama' },
-                      { id: 'D02', label: 'Artefactos de Gestión de proyectos' },
-                      { id: 'D03', label: 'Plataformas y Sistemas' },
-                      { id: 'D04', label: 'Listado de Proyectos' },
-                      { id: 'D05', label: 'Proyecto mejor documentado' },
-                      { id: 'D06', label: 'Resultados Estratégicos' },
-                      { id: 'D07', label: 'Mapa de Procesos' },
-                      { id: 'D08', label: 'Arquitectura Organizacional/TI' },
-                      { id: 'D09', label: 'Metodología de Proyectos' },
-                      { id: 'D10', label: 'Portafolio de Productos/Servicios' }
-                    ];
-
-                    // Find additional documents (DXX, etc.) not in the standard list
-                    const additionalDocs = (d.estado_documentos || [])
-                      .filter((e: any) => !standardCats.some(c => c.id === e.codigo_catalogo?.trim().toUpperCase()))
-                      .map((e: any) => ({
-                        id: e.codigo_catalogo || 'DXX',
-                        label: e.nombre || 'Documento Adicional',
-                        isExtra: true
-                      }));
-
-                    const allRows = [...standardCats, ...additionalDocs];
-
-                    return (
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-neutral-100">
-                            <th className="px-6 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Documento</th>
-                            <th className="px-6 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold text-center w-28">Disponible</th>
-                            <th className="px-6 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold text-center w-28">Faltante</th>
-                            <th className="px-6 py-3 text-[10px] uppercase tracking-wider text-neutral-400 font-semibold w-44">Estado</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-50">
-                          {allRows.map((cat: any) => {
-                            const entry = estadoMap[cat.id.toUpperCase()];
-                            const isMissing = !entry || entry.estado === 'no_entregado';
-                            const estadoInfo = entry ? ESTADO_LABELS[entry.estado] : null;
-                            
-                            // For extra docs, we don't show "Faltante" because they aren't required
-                            const showMissing = !cat.isExtra;
-
-                            return (
-                              <tr key={cat.id} className="hover:bg-neutral-50/50 transition-colors">
-                                <td className="px-6 py-3.5">
-                                  <div className="flex items-center gap-2.5">
-                                    <span className={`text-[10px] font-bold tabular-nums w-6 ${cat.isExtra ? 'text-neutral-900' : 'text-neutral-400'}`}>{cat.id}</span>
-                                    <span className="text-neutral-700 text-[13px]" style={{ fontWeight: 500 }}>{cat.label}</span>
-                                    {cat.isExtra && <span className="text-[9px] px-1.5 py-0.5 bg-neutral-900 text-white rounded-md border border-neutral-900 uppercase tracking-wider font-bold">Extra</span>}
-                                  </div>
-                                </td>
-                                <td className="px-6 py-3.5 text-center">
-                                  {!isMissing ? (
-                                    <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-900 text-white">
-                                      <Check size={12} strokeWidth={3} />
-                                    </div>
-                                  ) : (
-                                    <span className="text-neutral-200 text-[10px]">—</span>
-                                  )}
-                                </td>
-                                <td className="px-6 py-3.5 text-center">
-                                  {showMissing && isMissing ? (
-                                    <div className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-100 text-neutral-400 border border-neutral-200">
-                                      <X size={12} strokeWidth={3} />
-                                    </div>
-                                  ) : (
-                                    <span className="text-neutral-200 text-[10px]">—</span>
-                                  )}
-                                </td>
-                                <td className="px-6 py-3.5">
-                                  {estadoInfo ? (
-                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] border ${estadoInfo.color}`} style={{ fontWeight: 500 }}>
-                                      {estadoInfo.label}
-                                    </span>
-                                  ) : (
-                                    <span className="text-neutral-300 text-[11px]">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    );
-                  })()}
-                </div>
-              </div>
-
-
-              {/* Limitaciones */}
-              {d.limitaciones && d.limitaciones.length > 0 && (
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-100/50 p-5 mt-2">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info size={14} className="text-neutral-500" strokeWidth={1.75} />
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-600" style={{ fontWeight: 500 }}>Limitaciones de Análisis</p>
-                  </div>
-                  <ul className="space-y-2">
-                    {d.limitaciones.map((lim, i) => (
-                      <li key={i} className="text-[12px] text-neutral-600 flex items-start gap-2">
-                        <span className="text-neutral-400 mt-0.5">•</span>
-                        {lim.descripcion}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              </div>
-
+              <DocumentacionDiagnosisView diagnosis={d} />
               {/* ── Agente 9: Banco de Preguntas de Entrevista ── */}
               <div className="mt-2">
                 {(agent9Status === 'idle' || agent9Status === 'processing') && (

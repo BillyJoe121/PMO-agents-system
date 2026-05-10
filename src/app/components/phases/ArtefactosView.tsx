@@ -154,23 +154,29 @@ function FormatBadge({ format }: { format: Artifact['format'] }) {
 }
 
 function ArtifactCard({ artifact }: { artifact: Artifact }) {
+  const isRecommended = artifact.category === 'recommended';
+  const buttonColor = isRecommended ? '#4cb979' : '#5454e9';
+  
   return (
     <motion.div
-      whileHover={{ y: -2 }}
-      className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-3 hover:shadow-md transition-shadow h-full"
+      whileHover={{ y: -4, shadow: '0 12px 30px -10px rgba(0,0,0,0.08)' }}
+      className="bg-white rounded-2xl border border-neutral-200/60 p-5 flex flex-col gap-4 hover:border-neutral-300 transition-all h-full"
+      style={{ boxShadow: '0 2px 8px -2px rgba(0,0,0,0.02)' }}
     >
       <div className="flex items-start justify-between">
-        <div className="w-12 h-12 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isRecommended ? 'bg-emerald-50' : 'bg-blue-50'}`}>
           <FormatIcon format={artifact.format} />
         </div>
         <FormatBadge format={artifact.format} />
       </div>
       <div className="flex-1">
-        <p className="text-gray-800 text-sm leading-snug mb-1" style={{ fontWeight: 600 }}>{artifact.name}</p>
-        <p className="text-gray-500 text-[11px] leading-relaxed line-clamp-2">{artifact.description}</p>
-        <p className="text-gray-400 text-[10px] mt-1">{artifact.size}</p>
+        <p className="text-neutral-900 text-[15px] leading-tight mb-1.5" style={{ fontWeight: 700 }}>{artifact.name}</p>
+        <p className="text-neutral-500 text-[12px] leading-relaxed line-clamp-3 mb-2">{artifact.description}</p>
+        <div className="flex items-center gap-2 mt-auto">
+           <span className="text-neutral-400 text-[10px] tabular-nums" style={{ fontWeight: 500 }}>{artifact.size}</span>
+        </div>
       </div>
-      <div className="flex gap-2 pt-1 border-t border-gray-100 mt-auto">
+      <div className="pt-2">
         <button
           onClick={() => {
             if (!artifact.downloadUrl) {
@@ -179,10 +185,11 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
             }
             window.open(artifact.downloadUrl, '_blank');
           }}
-          className="flex-1 py-2 rounded-lg text-white text-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
-          style={{ background: '#5454e9', fontWeight: 500 }}
+          className="w-full py-2.5 rounded-xl text-white text-[13px] flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] transition-all shadow-sm"
+          style={{ background: buttonColor, fontWeight: 700 }}
         >
-          <Download size={12} />Descargar
+          <Download size={14} />
+          Descargar
         </button>
       </div>
     </motion.div>
@@ -411,16 +418,16 @@ export default function ArtefactosView() {
           >
             <Loader2 size={22} className="text-neutral-700 animate-spin" strokeWidth={1.75} />
           </div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 mb-2" style={{ fontWeight: 500 }}>
-            {isSending ? 'Finalizando' : 'Fase 8 · Agente 8'}
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#5454e9] mb-2" style={{ fontWeight: 500 }}>
+            {isSending ? 'Finalizando' : 'Fase 8 · Agente'}
           </p>
           <h2 className="text-neutral-900 tracking-tight mb-2" style={{ fontWeight: 500, fontSize: '1.25rem', letterSpacing: '-0.01em' }}>
             {isSending ? 'Cerrando proyecto' : 'Generando catálogo de artefactos'}
           </h2>
-          <p className="text-neutral-500 text-[13px] mt-2 max-w-sm text-center">
+          <p className="text-[#5454e9] text-[13px] mt-2 max-w-sm text-center">
             {isSending
               ? 'Consolidando el paquete final y registrando el cierre...'
-              : 'El Agente 8 está analizando la Guía Metodológica para recomendar los mejores artefactos para su PMO...'}
+              : 'El Agente está analizando la Guía Metodológica para recomendar los mejores artefactos para su PMO...'}
           </p>
         </motion.div>
       )}
@@ -449,20 +456,18 @@ export default function ArtefactosView() {
 
         {/* ── Left: Artifacts Grid (col-span-8) ── */}
         <div className="col-span-8 flex flex-col border-r border-gray-200 overflow-hidden">
-          {/* Section Header */}
-          <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="bg-white border-b border-neutral-100 px-8 py-6 flex items-center justify-between flex-shrink-0">
             <div>
-              <h2 className="text-gray-900" style={{ fontWeight: 700 }}>Paquete de Artefactos de Soporte</h2>
-              <p className="text-gray-500 text-sm mt-0.5">{MOCK_ARTIFACTS.length} archivos generados para este proyecto</p>
+              <h2 className="text-neutral-900 text-2xl tracking-tight" style={{ fontWeight: 850 }}>Catálogo de Entregables</h2>
+              <p className="text-neutral-500 text-[13px] mt-1">Se han generado {MOCK_ARTIFACTS.length} plantillas personalizadas para su gestión operativa.</p>
             </div>
-            <div className="flex items-center gap-2">
-
+            <div className="flex items-center gap-3">
               <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity"
-                style={{ background: '#5454e9', fontWeight: 600 }}
+                className="flex items-center gap-2.5 px-6 py-3 rounded-2xl text-white text-sm hover:brightness-110 active:scale-[0.98] transition-all shadow-md shadow-blue-500/10"
+                style={{ background: '#5454e9', fontWeight: 800 }}
               >
-                <Archive size={15} />
-                Descargar todos (ZIP)
+                <Archive size={16} />
+                Paquete Completo (ZIP)
               </button>
             </div>
           </div>
@@ -484,16 +489,19 @@ export default function ArtefactosView() {
 
               {/* Recommended Section */}
               <section>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                    <CheckCircle2 size={16} className="text-emerald-600" />
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                      <CheckCircle2 size={18} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h3 className="text-neutral-900 text-[20px] tracking-tight" style={{ fontWeight: 850 }}>Artefactos Recomendados</h3>
+                      <p className="text-neutral-500 text-[13px]">El Agente 8 sugiere priorizar estos entregables según su diagnóstico.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-gray-900 text-lg" style={{ fontWeight: 700 }}>Artefactos Recomendados</h3>
-                    <p className="text-gray-500 text-sm">Documentación esencial recomendada por el Agente 8 basada en su metodología.</p>
-                  </div>
+                  <div className="h-[2px] flex-1 mx-8 bg-neutral-100/60 hidden md:block" />
                 </div>
-                <div className="grid grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {recommendedArtifacts.map(artifact => (
                     <ArtifactCard key={artifact.id} artifact={artifact} />
                   ))}
@@ -506,17 +514,20 @@ export default function ArtefactosView() {
               </section>
 
               {/* Others Section */}
-              <section className="opacity-75 hover:opacity-100 transition-opacity pb-10">
-                <div className="flex items-center gap-3 mb-6 pt-4 border-t border-gray-100">
-                  <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
-                    <File size={16} className="text-gray-500" />
+              <section className="pb-16">
+                <div className="flex items-center justify-between mb-8 pt-8 border-t border-neutral-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shadow-lg shadow-neutral-900/10">
+                      <Archive size={18} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h3 className="text-neutral-900 text-[20px] tracking-tight" style={{ fontWeight: 850 }}>Otros Artefactos</h3>
+                      <p className="text-neutral-500 text-[13px]">Biblioteca complementaria de soporte operativo y metodológico.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-gray-900 text-lg" style={{ fontWeight: 700 }}>Otros Artefactos</h3>
-                    <p className="text-gray-500 text-sm">Material complementario que puede ser útil para la gestión operativa.</p>
-                  </div>
+                  <div className="h-[2px] flex-1 mx-8 bg-neutral-100/60 hidden md:block" />
                 </div>
-                <div className="grid grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {otherArtifacts.map(artifact => (
                     <ArtifactCard key={artifact.id} artifact={artifact} />
                   ))}
@@ -528,61 +539,73 @@ export default function ArtefactosView() {
         </div>
 
         {/* ── Right: Iteration & Close (col-span-4) ── */}
-        <div className="col-span-4 flex flex-col bg-white overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div>
-              <h3 className="text-gray-700 text-sm mb-1" style={{ fontWeight: 600 }}>Estado del Paquete</h3>
-              <div className="flex items-center gap-2 text-sm mt-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                <span className="text-gray-600 font-medium">{recommendedArtifacts.length} artefactos recomendados</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm mt-1.5">
-                <div className="w-2 h-2 rounded-full bg-neutral-300 flex-shrink-0" />
-                <span className="text-gray-600">{otherArtifacts.length} artefactos complementarios</span>
+        <div className="col-span-4 flex flex-col bg-neutral-50/50 border-l border-neutral-200 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-8 space-y-8">
+            <div className="bg-white rounded-2xl border border-neutral-200/60 p-6 shadow-sm">
+              <h3 className="text-neutral-900 text-[14px] mb-4 uppercase tracking-wider" style={{ fontWeight: 800 }}>Resumen del Paquete</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-100/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-neutral-700 text-sm font-semibold">Recomendados</span>
+                  </div>
+                  <span className="text-emerald-700 font-bold tabular-nums">{recommendedArtifacts.length}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-100 border border-neutral-200/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-neutral-400" />
+                    <span className="text-neutral-600 text-sm">Complementarios</span>
+                  </div>
+                  <span className="text-neutral-500 font-bold tabular-nums">{otherArtifacts.length}</span>
+                </div>
               </div>
             </div>
 
-            <hr className="border-gray-100" />
+            <hr className="border-neutral-200/60" />
 
             {!isCompleted && (
-              <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-5 flex items-start gap-4">
-                <AlertTriangle size={20} className="text-neutral-400 flex-shrink-0 mt-0.5" />
+              <div className="bg-amber-50 border border-amber-200/50 rounded-2xl p-6 flex items-start gap-4 shadow-sm shadow-amber-900/5">
+                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 border border-amber-200/60 shadow-sm">
+                  <AlertTriangle size={20} className="text-amber-500" />
+                </div>
                 <div>
-                  <p className="text-neutral-900 text-sm mb-1" style={{ fontWeight: 600 }}>Revisión final</p>
-                  <p className="text-neutral-500 text-xs leading-relaxed">
-                    Asegúrese de que todos los artefactos seleccionados cumplen con los requisitos de la organización. Al completar, el sistema generará el informe de entrega.
+                  <p className="text-amber-950 text-sm mb-1.5" style={{ fontWeight: 700 }}>Revisión Final de Entrega</p>
+                  <p className="text-amber-800/80 text-[12px] leading-relaxed font-medium">
+                    Al proceder con la aprobación, el sistema consolidará la documentación final y registrará el cierre administrativo del proyecto de implementación de la PMO.
                   </p>
                 </div>
               </div>
             )}
+            
             {isCompleted && (
-              <div className="bg-neutral-900 border border-neutral-900 rounded-2xl p-5 flex items-center gap-4 shadow-xl">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                  <CheckCircle2 size={20} className="text-white flex-shrink-0" />
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex items-center gap-5 shadow-2xl shadow-neutral-900/40">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 size={24} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <p className="text-white text-sm" style={{ fontWeight: 600 }}>Proyecto completado</p>
-                  <p className="text-neutral-400 text-xs mt-0.5">Todos los artefactos fueron entregados.</p>
+                  <p className="text-white text-base tracking-tight" style={{ fontWeight: 800 }}>Proyecto Finalizado</p>
+                  <p className="text-neutral-400 text-xs mt-0.5">Cierre registrado el {new Date().toLocaleDateString()}</p>
                 </div>
               </div>
             )}
           </div>
 
           {!isCompleted && (
-            <div className="p-6 border-t border-gray-100 bg-white flex-shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
+            <div className="p-8 border-t border-neutral-200 bg-white flex-shrink-0 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
               <motion.button
-                whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.01, brightness: 1.1 }} whileTap={{ scale: 0.98 }}
                 onClick={() => setShowConfirm(true)}
-                className="w-full py-5 rounded-2xl text-white flex flex-col items-center justify-center shadow-lg"
-                style={{ background: '#5454e9', fontWeight: 700 }}
+                className="w-full py-6 rounded-2xl text-white flex flex-col items-center justify-center shadow-xl shadow-blue-600/20 group relative overflow-hidden"
+                style={{ background: '#5454e9', fontWeight: 850 }}
               >
-                <div className="flex items-center gap-2 text-base">
-                  <Send size={18} />
-                  Aprobar y Completar Proyecto
+                <div className="flex items-center gap-3 text-[17px] relative z-10">
+                  <Send size={20} />
+                  Aprobar y Cerrar Proyecto
                 </div>
-                <span className="text-neutral-400 text-xs mt-1" style={{ fontWeight: 400 }}>
-                  Esta acción cerrará formalmente el compromiso
+                <span className="text-blue-100/60 text-[11px] mt-1.5 uppercase tracking-widest relative z-10" style={{ fontWeight: 500 }}>
+                  Acción definitiva e irreversible
                 </span>
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
               </motion.button>
             </div>
           )}
