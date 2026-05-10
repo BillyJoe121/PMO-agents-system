@@ -156,7 +156,7 @@ function FormatBadge({ format }: { format: Artifact['format'] }) {
 function ArtifactCard({ artifact }: { artifact: Artifact }) {
   const isRecommended = artifact.category === 'recommended';
   const buttonColor = isRecommended ? '#4cb979' : '#5454e9';
-  
+
   return (
     <motion.div
       whileHover={{ y: -4, shadow: '0 12px 30px -10px rgba(0,0,0,0.08)' }}
@@ -173,7 +173,7 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
         <p className="text-neutral-900 text-[15px] leading-tight mb-1.5" style={{ fontWeight: 700 }}>{artifact.name}</p>
         <p className="text-neutral-500 text-[12px] leading-relaxed line-clamp-3 mb-2">{artifact.description}</p>
         <div className="flex items-center gap-2 mt-auto">
-           <span className="text-neutral-400 text-[10px] tabular-nums" style={{ fontWeight: 500 }}>{artifact.size}</span>
+          <span className="text-neutral-400 text-[10px] tabular-nums" style={{ fontWeight: 500 }}>{artifact.size}</span>
         </div>
       </div>
       <div className="pt-2">
@@ -224,7 +224,7 @@ function ConfirmFinalModal({
               </div>
             </div>
             <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 mb-5 text-xs text-neutral-600 leading-relaxed">
-              Esta acción cerrará el proyecto. Esta operación es irreversible.
+              Esta acción cerrará el proyecto.
             </div>
             <div className="flex gap-3">
               <button
@@ -485,55 +485,55 @@ export default function ArtefactosView() {
             )}
 
             {hasLoadedArtifacts && (
-            <div className="max-w-5xl mx-auto space-y-10">
+              <div className="max-w-5xl mx-auto space-y-10">
 
-              {/* Recommended Section */}
-              <section>
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                      <CheckCircle2 size={18} strokeWidth={2.5} />
+                {/* Recommended Section */}
+                <section>
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                        <CheckCircle2 size={18} strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <h3 className="text-neutral-900 text-[20px] tracking-tight" style={{ fontWeight: 850 }}>Artefactos Recomendados</h3>
+                        <p className="text-neutral-500 text-[13px]">El Agente 8 sugiere priorizar estos entregables según su diagnóstico.</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-neutral-900 text-[20px] tracking-tight" style={{ fontWeight: 850 }}>Artefactos Recomendados</h3>
-                      <p className="text-neutral-500 text-[13px]">El Agente 8 sugiere priorizar estos entregables según su diagnóstico.</p>
+                    <div className="h-[2px] flex-1 mx-8 bg-neutral-100/60 hidden md:block" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {recommendedArtifacts.map(artifact => (
+                      <ArtifactCard key={artifact.id} artifact={artifact} />
+                    ))}
+                  </div>
+                  {hasEmptyRecommendations && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 leading-relaxed">
+                      El Agente 8 no dejó recomendaciones utilizables para esta guía. Puede reprocesar el análisis desde el panel derecho para volver a clasificar los artefactos con la guía metodológica aprobada.
                     </div>
-                  </div>
-                  <div className="h-[2px] flex-1 mx-8 bg-neutral-100/60 hidden md:block" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {recommendedArtifacts.map(artifact => (
-                    <ArtifactCard key={artifact.id} artifact={artifact} />
-                  ))}
-                </div>
-                {hasEmptyRecommendations && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 leading-relaxed">
-                    El Agente 8 no dejó recomendaciones utilizables para esta guía. Puede reprocesar el análisis desde el panel derecho para volver a clasificar los artefactos con la guía metodológica aprobada.
-                  </div>
-                )}
-              </section>
+                  )}
+                </section>
 
-              {/* Others Section */}
-              <section className="pb-16">
-                <div className="flex items-center justify-between mb-8 pt-8 border-t border-neutral-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shadow-lg shadow-neutral-900/10">
-                      <Archive size={18} strokeWidth={2.5} />
+                {/* Others Section */}
+                <section className="pb-16">
+                  <div className="flex items-center justify-between mb-8 pt-8 border-t border-neutral-100">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shadow-lg shadow-neutral-900/10">
+                        <Archive size={18} strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <h3 className="text-neutral-900 text-[20px] tracking-tight" style={{ fontWeight: 850 }}>Otros Artefactos</h3>
+                        <p className="text-neutral-500 text-[13px]">Biblioteca complementaria de soporte operativo y metodológico.</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-neutral-900 text-[20px] tracking-tight" style={{ fontWeight: 850 }}>Otros Artefactos</h3>
-                      <p className="text-neutral-500 text-[13px]">Biblioteca complementaria de soporte operativo y metodológico.</p>
-                    </div>
+                    <div className="h-[2px] flex-1 mx-8 bg-neutral-100/60 hidden md:block" />
                   </div>
-                  <div className="h-[2px] flex-1 mx-8 bg-neutral-100/60 hidden md:block" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {otherArtifacts.map(artifact => (
-                    <ArtifactCard key={artifact.id} artifact={artifact} />
-                  ))}
-                </div>
-              </section>
-            </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {otherArtifacts.map(artifact => (
+                      <ArtifactCard key={artifact.id} artifact={artifact} />
+                    ))}
+                  </div>
+                </section>
+              </div>
             )}
           </div>
         </div>
@@ -576,7 +576,7 @@ export default function ArtefactosView() {
                 </div>
               </div>
             )}
-            
+
             {isCompleted && (
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 flex items-center gap-5 shadow-2xl shadow-neutral-900/40">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/20">

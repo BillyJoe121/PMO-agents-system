@@ -96,7 +96,7 @@ function WrappedAxisTick({ x, y, payload }: any) {
   );
 }
 
-function MaturityChartPanel({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function MaturityChartPanel({ title, description, children, noPadding }: { title: string; description: string; children: ReactNode; noPadding?: boolean }) {
   return (
     <section className="rounded-[1.35rem] border border-[#5454e9]/15 bg-white overflow-hidden" style={{ boxShadow: '0 18px 44px -32px rgba(84,84,233,0.42)' }}>
       <div className="h-1.5 bg-[#5454e9]" />
@@ -104,7 +104,7 @@ function MaturityChartPanel({ title, description, children }: { title: string; d
         <h3 className="text-[16px] tracking-tight text-neutral-950" style={{ fontWeight: 850 }}>{title}</h3>
         {description && <p className="mt-1 text-[12px] leading-relaxed text-neutral-500">{description}</p>}
       </div>
-      <div className="p-4 md:p-5">{children}</div>
+      <div className={noPadding ? 'p-0' : 'p-4 md:p-5'}>{children}</div>
     </section>
   );
 }
@@ -256,11 +256,11 @@ function ExecutiveCharts({ results }: { results: any }) {
   }));
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_0.8fr] gap-5">
-      <MaturityChartPanel title="Prioridades de cierre de brechas" description="Menores puntajes ordenados para lectura ejecutiva.">
+    <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-5">
+      <MaturityChartPanel title="Prioridades de cierre de brechas" description="Menores puntajes ordenados para lectura ejecutiva." noPadding>
         <div className="h-[500px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={topRows} margin={{ top: 20, right: 12, left: 12, bottom: 20 }} barCategoryGap={8}>
+            <BarChart data={topRows} margin={{ top: 60, right: 60, left: 30, bottom: 30 }} barCategoryGap={8}>
               <CartesianGrid stroke={chartColors.grid} strokeDasharray="4 4" vertical={false} />
               <XAxis dataKey="label" interval={0} height={58} tick={<WrappedAxisTick />} />
               <YAxis domain={[0, 5]} ticks={[0, 1, 2, 3, 4, 5]} tick={{ ...chartFont, fill: chartColors.axis, fontSize: 11 }} />

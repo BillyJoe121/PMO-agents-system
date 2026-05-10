@@ -81,12 +81,12 @@ export default function PhaseHeader({
   return (
     <>
       <div className="sticky top-0 z-20 bg-[#f7f8ff]/85 backdrop-blur-md border-b border-neutral-200/60 print:hidden">
-        <div className="max-w-[1100px] mx-auto px-10 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-full mx-auto px-6 py-3 grid grid-cols-3 items-center gap-4">
+          <div className="flex items-center gap-3 min-w-0 justify-start">
             {/* Back button */}
             <button
               onClick={() => navigate(`/dashboard/project/${projectId}`)}
-              className="group inline-flex items-center gap-2 pl-2 pr-3.5 py-1.5 rounded-full bg-white border border-neutral-200/80 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 text-[13px] transition-all flex-shrink-0 print:hidden"
+              className="group inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1.25 rounded-full bg-white border border-neutral-200/80 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 text-[13px] transition-all flex-shrink-0 print:hidden"
               style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
             >
               <span className="w-5 h-5 rounded-full bg-neutral-100 group-hover:bg-neutral-200 flex items-center justify-center transition-colors">
@@ -115,53 +115,14 @@ export default function PhaseHeader({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0 print:hidden">
-            <IcesiLogo variant="positive" className="brand-logo-mark hidden lg:block h-9 w-auto mr-2" />
+          {/* Logo en el centro exacto */}
+          <div className="flex justify-center">
+            <IcesiLogo variant="positive" className="brand-logo-mark h-8 w-auto" />
+          </div>
+
+          <div className="flex items-center gap-2 justify-end print:hidden">
             {rightSlot}
 
-            {/* ── Botón Ver JSON (automático si hay agentData) ── */}
-            <AnimatePresence>
-              {phase?.agentData && Object.keys(phase.agentData).length > 0 && (
-                <motion.button
-                  key="json-btn"
-                  initial={{ opacity: 0, scale: 0.9, width: 0 }}
-                  animate={{ opacity: 1, scale: 1, width: 'auto' }}
-                  exit={{ opacity: 0, scale: 0.9, width: 0 }}
-                  transition={{ duration: 0.18 }}
-                  onClick={() => {
-                    const json = JSON.stringify(phase.agentData, null, 2);
-                    const win = window.open('', '_blank');
-                    if (!win) return;
-                    win.document.write(`<!DOCTYPE html><html lang="es"><head>
-                      <meta charset="UTF-8"/>
-                      <title>Agente ${phaseNumber} \u00b7 JSON raw</title>
-                      <style>
-                        *{box-sizing:border-box;margin:0;padding:0}
-                        body{background:#0d1117;color:#e6edf3;font-family:'SF Mono','Fira Code',monospace;font-size:13px;line-height:1.65;padding:32px}
-                        h1{font-size:11px;font-weight:600;color:#7d8590;text-transform:uppercase;letter-spacing:.12em;margin-bottom:20px}
-                        pre{white-space:pre-wrap;word-break:break-word}
-                        .k{color:#79c0ff}.s{color:#a5d6ff}.n{color:#f2cc60}.b{color:#ff7b72}
-                      </style>
-                    </head><body>
-                      <h1>Agente ${phaseNumber} &mdash; ${phaseName} &mdash; Respuesta JSON</h1>
-                      <pre>${json
-                        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                        .replace(/"([^"]+)":/g,'<span class="k">"$1"</span>:')
-                        .replace(/: "([^"]*)"/g,': <span class="s">"$1"</span>')
-                        .replace(/: (-?\\d+\\.?\\d*)/g,': <span class="n">$1</span>')
-                        .replace(/: (true|false|null)/g,': <span class="b">$1</span>')
-                      }</pre>
-                    </body></html>`);
-                    win.document.close();
-                  }}
-                  title="Ver respuesta raw del agente en JSON"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] border bg-white border-neutral-200 hover:border-neutral-300 text-neutral-600 hover:text-neutral-900 transition-all flex-shrink-0 overflow-hidden font-mono"
-                  style={{ fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}
-                >
-                  {'{ }'}
-                </motion.button>
-              )}
-            </AnimatePresence>
 
             {/* ── Botón Descargar PDF ── */}
             <AnimatePresence>
@@ -177,7 +138,7 @@ export default function PhaseHeader({
                 >
                   <button
                     onClick={() => setShowPdfMenu(!showPdfMenu)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] border bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800 transition-all overflow-hidden"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] border bg-neutral-900 border-neutral-900 text-white hover:bg-neutral-800 transition-all overflow-hidden"
                     style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}
                   >
                     <Download size={13} strokeWidth={2} />
@@ -278,11 +239,55 @@ export default function PhaseHeader({
                   exit={{ opacity: 0, scale: 0.9, width: 0 }}
                   transition={{ duration: 0.18 }}
                   onClick={() => setShowReprocess(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] border bg-white border-neutral-200 hover:border-neutral-300 text-neutral-600 hover:text-neutral-900 transition-all flex-shrink-0 overflow-hidden"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] border bg-white border-neutral-200 hover:border-neutral-300 text-neutral-600 hover:text-neutral-900 transition-all flex-shrink-0 overflow-hidden"
                   style={{ fontWeight: 500, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}
                 >
                   <RotateCcw size={13} strokeWidth={2} />
                   Reprocesar
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            {/* ── Botón Ver JSON (automático si hay agentData) ── */}
+            <AnimatePresence>
+              {phase?.agentData && Object.keys(phase.agentData).length > 0 && (
+                <motion.button
+                  key="json-btn"
+                  initial={{ opacity: 0, scale: 0.9, width: 0 }}
+                  animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                  exit={{ opacity: 0, scale: 0.9, width: 0 }}
+                  transition={{ duration: 0.18 }}
+                  onClick={() => {
+                    const json = JSON.stringify(phase.agentData, null, 2);
+                    const win = window.open('', '_blank');
+                    if (!win) return;
+                    win.document.write(`<!DOCTYPE html><html lang="es"><head>
+                      <meta charset="UTF-8"/>
+                      <title>Agente ${phaseNumber} \u00b7 JSON raw</title>
+                      <style>
+                        *{box-sizing:border-box;margin:0;padding:0}
+                        body{background:#0d1117;color:#e6edf3;font-family:'SF Mono','Fira Code',monospace;font-size:13px;line-height:1.65;padding:32px}
+                        h1{font-size:11px;font-weight:600;color:#7d8590;text-transform:uppercase;letter-spacing:.12em;margin-bottom:20px}
+                        pre{white-space:pre-wrap;word-break:break-word}
+                        .k{color:#79c0ff}.s{color:#a5d6ff}.n{color:#f2cc60}.b{color:#ff7b72}
+                      </style>
+                    </head><body>
+                      <h1>Agente ${phaseNumber} &mdash; ${phaseName} &mdash; Respuesta JSON</h1>
+                      <pre>${json
+                        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                        .replace(/"([^"]+)":/g,'<span class="k">"$1"</span>:')
+                        .replace(/: "([^"]*)"/g,': <span class="s">"$1"</span>')
+                        .replace(/: (-?\\d+\\.?\\d*)/g,': <span class="n">$1</span>')
+                        .replace(/: (true|false|null)/g,': <span class="b">$1</span>')
+                      }</pre>
+                    </body></html>`);
+                    win.document.close();
+                  }}
+                  title="Ver respuesta raw del agente en JSON"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] border bg-white border-neutral-200 hover:border-neutral-300 text-neutral-600 hover:text-neutral-900 transition-all flex-shrink-0 overflow-hidden font-mono"
+                  style={{ fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}
+                >
+                  {'{ }'}
                 </motion.button>
               )}
             </AnimatePresence>
@@ -323,7 +328,7 @@ export default function PhaseHeader({
         {/* ── Phase sub-navigation navbar ── */}
         {project && (
           <div className="border-t border-neutral-200/60 select-none overflow-x-auto bg-white/40 backdrop-blur-sm print:hidden">
-            <div className="max-w-[1100px] mx-auto px-10 py-2 flex items-center justify-between gap-1.5 min-w-[700px]">
+            <div className="max-w-full mx-auto px-6 py-2 flex items-center justify-between gap-1.5 min-w-[700px]">
               {project.phases.map((p) => {
                 const isCurrent = p.number === phaseNumber;
                 const isCompleted = p.status === 'completado';

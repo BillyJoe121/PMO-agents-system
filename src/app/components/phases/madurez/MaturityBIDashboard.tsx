@@ -220,10 +220,10 @@ function MaturityBISection({
           </table>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_0.8fr] gap-5">
-          <div className="h-[560px] rounded-2xl border border-slate-200 bg-white px-5 pt-5 pb-2">
+        <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-5 items-stretch">
+          <div className="h-[520px] rounded-2xl border border-slate-200 bg-white p-0 flex flex-col justify-center">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={rows} margin={{ top: 20, right: 8, left: 4, bottom: 62 }} barCategoryGap={8}>
+              <BarChart data={rows} margin={{ top: 40, right: 40, left: 20, bottom: 20 }} barCategoryGap={8}>
                 <CartesianGrid stroke={chartColors.grid} strokeDasharray="4 4" vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -253,9 +253,9 @@ function MaturityBISection({
             </ResponsiveContainer>
           </div>
 
-          <div className="h-[430px] rounded-2xl border border-slate-200 bg-white px-3 py-4">
+          <div className="h-[520px] rounded-2xl border border-slate-200 bg-white p-0 flex flex-col justify-center">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={rows} margin={{ top: 26, right: 48, bottom: 26, left: 48 }} outerRadius="76%">
+              <RadarChart data={rows} margin={{ top: 60, right: 60, left: 60, bottom: 60 }} outerRadius="80%">
                 <PolarGrid stroke={chartColors.grid} />
                 <PolarAngleAxis dataKey="label" tick={{ ...chartFont, fill: chartColors.label, fontSize: 11 }} />
                 <PolarRadiusAxis
