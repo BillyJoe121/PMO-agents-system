@@ -55,7 +55,7 @@ export default function GuiaMetodologicaView() {
   const phase    = project?.phases.find(p => p.number === 7);
   const phase4   = project?.phases.find(p => p.number === 4);
 
-  const pmoType      = parsePmoType(phase4?.agentDiagnosis);
+  const pmoType      = parsePmoType(phase4?.agentData ?? phase4?.agentDiagnosis);
 
   const deriveView = (): ModuleView => {
     if (!project || !phase) return 'processing';

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { useIdoneidad } from '../../hooks/useIdoneidad';
+import { useIdoneidad, type AgentErrorPayload } from '../../hooks/useIdoneidad';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
@@ -73,6 +73,29 @@ function ConfirmModal({ open, onCancel, onConfirm, isLoading }: {
   );
 }
 
+function AgentErrorCard({ error }: { error: AgentErrorPayload }) {
+  return (
+    <div className="rounded-2xl border border-[#ef4444]/25 bg-white overflow-hidden" style={{ boxShadow: '0 18px 44px -30px rgba(239,68,68,0.35)' }}>
+      <div className="h-1.5 bg-[#ef4444]" />
+      <div className="p-5 flex gap-4">
+        <div className="w-10 h-10 rounded-2xl bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 flex items-center justify-center flex-shrink-0">
+          <AlertTriangle size={18} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-neutral-950 text-[15px]" style={{ fontWeight: 750 }}>El agente no pudo completar el analisis</p>
+          <p className="text-neutral-600 text-[13px] leading-relaxed mt-1">{error.message}</p>
+          {error.details && <p className="text-neutral-500 text-[12px] leading-relaxed mt-2">{error.details}</p>}
+          {error.code && (
+            <span className="inline-flex mt-3 px-2.5 py-1 rounded-full bg-[#ef4444]/10 text-[#b91c1c] border border-[#ef4444]/20 text-[10px]" style={{ fontWeight: 750 }}>
+              {error.code}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function IdoneidadModule() {
   // useParams() extrae :id desde la URL dinámica (TODO: usar para queries a Supabase)
   const { id: projectId } = useParams<{ id: string }>();
@@ -80,22 +103,26 @@ export default function IdoneidadModule() {
   const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
-  const { activeLink, responses, diagnosis, isLoadingData, externalFile, setExternalFile, existingFileName, existingFileUrl, fetchInitialData, generateLink, processPhase, deleteFile } = useIdoneidad(projectId);
+  const { activeLink, responses, diagnosis, agentError, isLoadingData, externalFile, setExternalFile, existingFileName, existingFileUrl, fetchInitialData, generateLink, processPhase, deleteFile } = useIdoneidad(projectId);
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 3);
+  const [liveDiagnosis, setLiveDiagnosis] = useState<any | null>(null);
+  const visibleDiagnosis = liveDiagnosis ?? diagnosis;
 
   const radarData = useMemo(() => {
-    if (!diagnosis) return [];
+    if (!visibleDiagnosis) return [];
     
     // Debug para ver qué está llegando del agente
-    console.log("PMO Agent Diagnosis Data:", diagnosis);
+    console.log("PMO Agent Diagnosis Data:", visibleDiagnosis);
 
-    const items = normalizeIdoneidadDiagnosisItems(diagnosis);
+    const items = Array.isArray(visibleDiagnosis.resultados_por_item) && visibleDiagnosis.resultados_por_item.length > 0
+      ? visibleDiagnosis.resultados_por_item
+      : normalizeIdoneidadDiagnosisItems(visibleDiagnosis);
     
     // Fallback: Si no hay ítems detallados o vienen solo las 3 dimensiones generales
-    if (items.length === 0 && diagnosis.indicadores) {
-      return Object.entries(diagnosis.indicadores).filter(([key]) => key !== 'general').map(([key, data]: [string, any]) => {
+    if (items.length === 0 && visibleDiagnosis.indicadores) {
+      return Object.entries(visibleDiagnosis.indicadores).filter(([key]) => key !== 'general').map(([key, data]: [string, any]) => {
         const label = key === 'cultura' ? 'CULTURA (Promedio)' : 
                       key === 'equipo' ? 'EQUIPO (Promedio)' : 
                       key === 'proyecto' ? 'PROYECTO (Promedio)' : key.toUpperCase();
@@ -104,8 +131,8 @@ export default function IdoneidadModule() {
           fullLabel: `Dimensión General: ${key}`,
           dimension: key,
           Puntaje: typeof data.promedio === 'number' ? Number(data.promedio.toFixed(1)) : 0,
-          AgileZone: 4,
-          HybridZone: 8,
+          AgileZone: 3,
+          TransitionZone: 6.9,
           PredictiveZone: 10,
         };
       });
@@ -122,13 +149,12 @@ export default function IdoneidadModule() {
         fullLabel: factorInfo ? `${itemLabel} - ${factorInfo.name}` : itemLabel,
         dimension: res.dimension ?? inferIdoneidadDimension(itemLabel),
         Puntaje: score,
-        // Thresholds for background zones
-        AgileZone: 4,
-        HybridZone: 8,
+        AgileZone: 3,
+        TransitionZone: 6.9,
         PredictiveZone: 10,
       };
     });
-  }, [diagnosis]);
+  }, [visibleDiagnosis]);
 
   const initialState: ModuleState = phase?.status === 'completado' ? 'completed' : 'selection';
 
@@ -139,18 +165,20 @@ export default function IdoneidadModule() {
   const [isSending, setIsSending] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const diagnosisRespondentCount = Number(diagnosis?.numero_encuestados) || 0;
+  const diagnosisRespondentCount = Number(visibleDiagnosis?.numero_encuestados) || 0;
   const externalRespondentCount = existingFileUrl && diagnosisRespondentCount > responses.length
     ? diagnosisRespondentCount - responses.length
     : 0;
   const totalRespondentCount = responses.length + externalRespondentCount;
+  const hasDiagnosis = Boolean(visibleDiagnosis);
+  const isCompleted = phase?.status === 'completado' || hasDiagnosis;
 
   // Cargar datos iniciales
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  const isProcessing = phase?.status === 'procesando' || isSending;
+  const isProcessing = !hasDiagnosis && !agentError && (phase?.status === 'procesando' || isSending);
 
   useEffect(() => {
     if (isProcessing) {
@@ -162,12 +190,14 @@ export default function IdoneidadModule() {
   }, [isProcessing]);
 
   useEffect(() => {
-    if (phase?.status === 'disponible' || phase?.status === 'error') {
+    if (hasDiagnosis) {
+      setModuleState('completed');
+    } else if (phase?.status === 'disponible' || phase?.status === 'error') {
       setModuleState('selection');
     } else if (phase?.status === 'completado') {
       setModuleState('completed');
     }
-  }, [phase?.status]);
+  }, [phase?.status, hasDiagnosis]);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pmo.icesi.edu.co';
   const surveyLink = activeLink ? `${baseUrl}/survey/${activeLink}` : 'Generando enlace...';
@@ -202,7 +232,8 @@ export default function IdoneidadModule() {
     updatePhaseStatus(projectId!, 3, 'procesando');
 
     try {
-      await processPhase();
+      const result = await processPhase();
+      if (result && typeof result === 'object') setLiveDiagnosis(result);
       updatePhaseStatus(projectId!, 3, 'completado', 'Diagnóstico generado.');
       setModuleState('completed');
       playPhaseComplete();
@@ -225,6 +256,7 @@ export default function IdoneidadModule() {
       setModuleState('selection');
       setEntryMethod(null);
       setManualData('');
+      setLiveDiagnosis(null);
       setShowConfirm(false);
       setExternalFile(null);
       await generateLink();
@@ -301,7 +333,7 @@ export default function IdoneidadModule() {
         companyName={project.companyName}
         phaseNumber={3}
         phaseName="Diagnóstico de Idoneidad"
-        eyebrow={moduleState === 'completed' ? 'Completada' : 'Activa'}
+        eyebrow={isCompleted ? 'Completada' : 'Activa'}
         onReprocessed={handleReprocess}
       />
 
@@ -322,6 +354,11 @@ export default function IdoneidadModule() {
       </AnimatePresence>
 
       <div className="max-w-[1100px] mx-auto px-10 py-10">
+        {agentError && (
+          <div className="mb-8">
+            <AgentErrorCard error={agentError} />
+          </div>
+        )}
         <AnimatePresence mode="wait">
 
           {/* SELECTION */}
@@ -501,9 +538,9 @@ export default function IdoneidadModule() {
           {/* COMPLETED */}
           {moduleState === 'completed' && (
             <motion.div key="completed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-              {diagnosis && (
+              {visibleDiagnosis && (
                 <IdoneidadDiagnosisView
-                  diagnosis={diagnosis}
+                  diagnosis={visibleDiagnosis}
                   radarData={radarData}
                   totalRespondentCount={totalRespondentCount}
                   completedAt={phase?.completedAt}
@@ -528,7 +565,7 @@ export default function IdoneidadModule() {
                   </div>
                   <div className="space-y-2">
                     {responses.length === 0 ? (
-                      (diagnosis?.numero_encuestados || 0) > 0 ? (
+                          (visibleDiagnosis?.numero_encuestados || 0) > 0 ? (
                         <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200/50">
                           <p className="text-neutral-600 text-[12px] font-medium">Datos cargados mediante archivo externo (CSV/PDF)</p>
                           <p className="text-neutral-400 text-[11px] mt-1">El archivo contenía {totalRespondentCount} registros válidos.</p>
@@ -568,7 +605,7 @@ export default function IdoneidadModule() {
         isLoading={isSending}
       />
 
-      <NextPhaseButton projectId={projectId!} nextPhase={4} prevPhase={2} show={moduleState === 'completed'} />
+      <NextPhaseButton projectId={projectId!} nextPhase={4} prevPhase={2} show={isCompleted} />
     </div>
   );
 }

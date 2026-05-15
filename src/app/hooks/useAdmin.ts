@@ -7,14 +7,22 @@ import { toast } from 'sonner';
 // ─────────────────────────────────────────────────────────────────────────────
 export type QuestionType = 'abierta' | 'si_no' | 'multiple';
 export type UserRole = 'auditor' | 'admin' | 'usuario_externo';
-export type AiModelMode = 'low' | 'high_with_fallback' | 'kimi';
+export type AiProvider = 'openai' | 'anthropic';
+export type AiModelId =
+  | 'gpt-5.5'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'claude-sonnet-4-6'
+  | 'claude-haiku-4-5';
 
 export interface AiModelSettings {
   id: 'global';
-  mode: AiModelMode;
-  highModel: string;
-  lowModel: string;
-  kimiModel: string;
+  provider: AiProvider;
+  selectedModel: AiModelId;
+  openaiModel: AiModelId;
+  anthropicModel: AiModelId;
+  legacyGeminiHighModel: string;
+  legacyGeminiLowModel: string;
   updatedAt?: string;
 }
 
@@ -48,15 +56,25 @@ export interface BankQuestion {
 // ─────────────────────────────────────────────────────────────────────────────
 const DEFAULT_AI_MODEL_SETTINGS: AiModelSettings = {
   id: 'global',
-  mode: 'high_with_fallback',
-  highModel: 'gemini-3.1-pro-preview',
-  lowModel: 'gemini-flash-lite-latest',
-  kimiModel: 'kimi-k2.6',
+  provider: 'openai',
+  selectedModel: 'gpt-5.4',
+  openaiModel: 'gpt-5.4',
+  anthropicModel: 'claude-sonnet-4-6',
+  legacyGeminiHighModel: 'gemini-3.1-pro-preview',
+  legacyGeminiLowModel: 'gemini-flash-lite-latest',
 };
 
-const normalizeAiModelMode = (value: unknown): AiModelMode => {
-  const mode = String(value ?? '').trim().toLowerCase();
-  return mode === 'low' || mode === 'kimi' ? mode : 'high_with_fallback';
+const OPENAI_MODEL_IDS: AiModelId[] = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'];
+const ANTHROPIC_MODEL_IDS: AiModelId[] = ['claude-sonnet-4-6', 'claude-haiku-4-5'];
+const ALL_MODEL_IDS = new Set<AiModelId>([...OPENAI_MODEL_IDS, ...ANTHROPIC_MODEL_IDS]);
+
+const inferProviderFromModel = (model: unknown): AiProvider => (
+  String(model ?? '').startsWith('claude-') ? 'anthropic' : 'openai'
+);
+
+const normalizeModelId = (value: unknown, fallback: AiModelId): AiModelId => {
+  const model = String(value ?? '').trim() as AiModelId;
+  return ALL_MODEL_IDS.has(model) ? model : fallback;
 };
 
 export function useAiModelSettings() {
@@ -66,10 +84,12 @@ export function useAiModelSettings() {
 
   const mapSettings = (row: any): AiModelSettings => ({
     id: 'global',
-    mode: normalizeAiModelMode(row?.mode),
-    highModel: row?.high_model || DEFAULT_AI_MODEL_SETTINGS.highModel,
-    lowModel: row?.low_model || DEFAULT_AI_MODEL_SETTINGS.lowModel,
-    kimiModel: row?.kimi_model || DEFAULT_AI_MODEL_SETTINGS.kimiModel,
+    provider: row?.provider === 'anthropic' ? 'anthropic' : inferProviderFromModel(row?.selected_model),
+    selectedModel: normalizeModelId(row?.selected_model ?? row?.openai_model, DEFAULT_AI_MODEL_SETTINGS.selectedModel),
+    openaiModel: normalizeModelId(row?.openai_model, DEFAULT_AI_MODEL_SETTINGS.openaiModel),
+    anthropicModel: normalizeModelId(row?.anthropic_model, DEFAULT_AI_MODEL_SETTINGS.anthropicModel),
+    legacyGeminiHighModel: row?.high_model || DEFAULT_AI_MODEL_SETTINGS.legacyGeminiHighModel,
+    legacyGeminiLowModel: row?.low_model || DEFAULT_AI_MODEL_SETTINGS.legacyGeminiLowModel,
     updatedAt: row?.updated_at,
   });
 
@@ -95,41 +115,35 @@ export function useAiModelSettings() {
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
-  const updateMode = useCallback(async (mode: AiModelMode) => {
+  const updateSelectedModel = useCallback(async (selectedModel: AiModelId) => {
     setIsSaving(true);
     try {
+      const provider = inferProviderFromModel(selectedModel);
       const payload = {
         id: 'global',
-        mode,
-        high_model: settings.highModel || DEFAULT_AI_MODEL_SETTINGS.highModel,
-        low_model: settings.lowModel || DEFAULT_AI_MODEL_SETTINGS.lowModel,
-        kimi_model: settings.kimiModel || DEFAULT_AI_MODEL_SETTINGS.kimiModel,
+        provider,
+        selected_model: selectedModel,
+        openai_model: provider === 'openai' ? selectedModel : settings.openaiModel,
+        anthropic_model: provider === 'anthropic' ? selectedModel : settings.anthropicModel,
+        high_model: settings.legacyGeminiHighModel || DEFAULT_AI_MODEL_SETTINGS.legacyGeminiHighModel,
+        low_model: settings.legacyGeminiLowModel || DEFAULT_AI_MODEL_SETTINGS.legacyGeminiLowModel,
         updated_at: new Date().toISOString(),
       };
 
-      let result = await supabase
+      const result = await supabase
         .from('ai_model_settings')
         .upsert(payload, { onConflict: 'id' })
-        .select('id, mode, high_model, low_model, kimi_model, updated_at')
+        .select('id, provider, selected_model, openai_model, anthropic_model, high_model, low_model, updated_at')
         .single();
-
-      if (result.error && /kimi_model/i.test(result.error.message ?? '')) {
-        const { kimi_model, ...legacyPayload } = payload;
-        result = await supabase
-          .from('ai_model_settings')
-          .upsert(legacyPayload, { onConflict: 'id' })
-          .select('id, mode, high_model, low_model, updated_at')
-          .single();
-      }
 
       if (result.error) throw result.error;
       setSettings(mapSettings(result.data));
     } finally {
       setIsSaving(false);
     }
-  }, [settings.highModel, settings.lowModel, settings.kimiModel]);
+  }, [settings.openaiModel, settings.anthropicModel, settings.legacyGeminiHighModel, settings.legacyGeminiLowModel]);
 
-  return { settings, isLoading, isSaving, fetchSettings, updateMode };
+  return { settings, isLoading, isSaving, fetchSettings, updateSelectedModel };
 }
 
 export function useAdminUsers() {

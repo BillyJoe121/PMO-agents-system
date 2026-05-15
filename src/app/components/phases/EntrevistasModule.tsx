@@ -3,12 +3,12 @@ import { useParams, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, Trash2, Loader2, User, Briefcase, MessageSquare, ChevronDown,
-  Paperclip, FileUp, Download
+  Paperclip, FileUp, Download, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
 import { useApp } from '../../context/AppContext';
-import { useEntrevistas, type EntrevistaLocal as Entrevista } from '../../hooks/useEntrevistas';
+import { useEntrevistas, type AgentErrorPayload, type EntrevistaLocal as Entrevista, type EntrevistasDiagnosis } from '../../hooks/useEntrevistas';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
@@ -20,6 +20,30 @@ import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 // Using Entrevista from hook now
 
 // ---------------------------------------------------------------------------
+function AgentErrorCard({ error }: { error: AgentErrorPayload }) {
+  return (
+    <div className="rounded-2xl border border-[#ef4444]/25 bg-white overflow-hidden" style={{ boxShadow: '0 18px 44px -30px rgba(239,68,68,0.35)' }}>
+      <div className="h-1.5 bg-[#ef4444]" />
+      <div className="p-5 flex gap-4">
+        <div className="w-10 h-10 rounded-2xl bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 flex items-center justify-center flex-shrink-0">
+          <AlertTriangle size={18} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-neutral-950 text-[15px]" style={{ fontWeight: 750 }}>El agente no pudo completar el analisis</p>
+          <p className="text-neutral-600 text-[13px] leading-relaxed mt-1">{error.message}</p>
+          {error.details && <p className="text-neutral-500 text-[12px] leading-relaxed mt-2">{error.details}</p>}
+          {error.code && (
+            <span className="inline-flex mt-3 px-2.5 py-1 rounded-full bg-[#ef4444]/10 text-[#b91c1c] border border-[#ef4444]/20 text-[10px]" style={{ fontWeight: 750 }}>
+              {error.code}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 export default function EntrevistasModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -28,7 +52,6 @@ export default function EntrevistasModule() {
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 2);
-  const isCompleted = phase?.status === 'completado';
 
   // ---- Real hook state ----
   const {
@@ -37,11 +60,14 @@ export default function EntrevistasModule() {
     isLoadingData,
     isProcessing,
     diagnosis,
+    agentError,
     fetchInitialData,
     saveEntrevista,
     deleteEntrevista,
     processPhase,
   } = useEntrevistas(projectId!);
+
+  const [liveDiagnosis, setLiveDiagnosis] = useState<EntrevistasDiagnosis | null>(null);
 
   type PanelMode = 'empty' | 'detail' | 'new' | 'edit';
 
@@ -61,6 +87,10 @@ export default function EntrevistasModule() {
   const [registeredExpanded, setRegisteredExpanded] = useState(false);
   const bulkInputRef = useRef<HTMLInputElement>(null);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const visibleDiagnosis = liveDiagnosis ?? diagnosis;
+  const hasDiagnosis = Boolean(visibleDiagnosis);
+  const isCompleted = phase?.status === 'completado' || hasDiagnosis;
+  const isPhaseProcessing = !hasDiagnosis && !agentError && (phase?.status === 'procesando' || isProcessing || isSending);
 
   useEffect(() => {
     fetchInitialData();
@@ -327,6 +357,7 @@ export default function EntrevistasModule() {
     try {
       const result = await processPhase();
       if (result) {
+        setLiveDiagnosis(result);
         updatePhaseStatus(projectId!, 2, 'completado', 'Análisis consolidado de entrevistas completado.');
         playPhaseComplete();
         toast.success('¡Fase 2 completada!', { description: 'El Agente ha finalizado el análisis de entrevistas.' });
@@ -372,7 +403,7 @@ export default function EntrevistasModule() {
       {/* Processing overlay */}
       {/* ------------------------------------------------------------------ */}
       <AnimatePresence>
-        {isProcessing && (
+        {isPhaseProcessing && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-[#f7f8ff]/85 backdrop-blur-md flex flex-col items-center justify-center">
             <div className="w-16 h-16 rounded-full border border-neutral-200 bg-white flex items-center justify-center mb-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
@@ -424,6 +455,11 @@ export default function EntrevistasModule() {
             </div>
           </div>
         </div>
+        {agentError && !isCompleted && (
+          <div className="mb-8">
+            <AgentErrorCard error={agentError} />
+          </div>
+        )}
         {isCompleted ? (
           /* ======================================================= */
           /* COMPLETED VIEW                                           */
@@ -432,7 +468,8 @@ export default function EntrevistasModule() {
             <div className="flex flex-col gap-5">
 
               {/* Agent diagnosis */}
-              {diagnosis && <EntrevistasDiagnosisView diagnosis={diagnosis} />}
+              {visibleDiagnosis && <EntrevistasDiagnosisView diagnosis={visibleDiagnosis} />}
+              {agentError && <AgentErrorCard error={agentError} />}
               {/* Read-only accordion list */}
               <div className="bg-white rounded-2xl border border-neutral-200/70 overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                 <div className={`px-6 py-4 flex items-center justify-between gap-4 hover:bg-neutral-50 transition-colors ${registeredExpanded ? 'border-b border-neutral-100' : ''}`}>
@@ -668,7 +705,7 @@ export default function EntrevistasModule() {
       {/* ------------------------------------------------------------------ */}
       {/* Bottom action */}
       {/* ------------------------------------------------------------------ */}
-      {!isCompleted && !isProcessing && (
+      {!isCompleted && !isPhaseProcessing && (
         <div className="max-w-[1100px] mx-auto px-10 pb-12">
           <div className="flex justify-end pt-8 border-t border-neutral-200/60">
             <motion.button

@@ -80,7 +80,7 @@ export function PhaseReportBadgeList({ items, tone = 'blue', mapItem }: { items?
   return (
     <div className="flex flex-wrap gap-2">
       {normalizeList(items).map((item, i) => (
-        <span key={i} className={`max-w-full px-2.5 py-1 rounded-full ${toneClass.soft} border ${toneClass.border} ${toneClass.text} text-[11px] truncate`} style={{ fontWeight: 650 }}>
+        <span key={i} className={`max-w-full px-2.5 py-1 rounded-full ${toneClass.soft} border ${toneClass.border} ${toneClass.text} text-[11px]`} style={{ fontWeight: 650 }}>
           {mapItem ? mapItem(item) : valueOrEmpty(item)}
         </span>
       ))}
@@ -103,12 +103,12 @@ export function PhaseReportMetric({ label, value, tone = 'blue', icon }: { label
 
 export function PhaseReportKeyValueGrid({ rows, compact = false }: { rows: { label: string; value: unknown; tone?: PhaseReportTone }[]; compact?: boolean }) {
   return (
-    <div className={`grid grid-cols-1 ${compact ? 'sm:grid-cols-2 lg:grid-cols-5' : 'md:grid-cols-2'} gap-2.5`}>
+    <div className={`grid grid-cols-1 ${compact ? 'grid-cols-2 sm:grid-cols-3' : 'md:grid-cols-2'} gap-2.5`}>
       {rows.map((row) => {
         const toneClass = phaseReportToneStyles[row.tone ?? levelTone(row.value)];
         return (
-          <div key={row.label} className={`rounded-2xl border ${toneClass.border} ${toneClass.soft} px-3.5 py-3 min-w-0 overflow-hidden`}>
-            <p className="text-[9px] uppercase tracking-[0.12em] text-neutral-500 mb-1 truncate" style={{ fontWeight: 700 }}>{row.label}</p>
+          <div key={row.label} className={`rounded-2xl border ${toneClass.border} ${toneClass.soft} px-3.5 py-3 min-w-0 overflow-hidden flex flex-col justify-center`}>
+            <p className="text-[9px] uppercase tracking-[0.12em] text-neutral-500 mb-1" style={{ fontWeight: 700 }}>{row.label}</p>
             <p className={`text-[13px] leading-snug break-words ${toneClass.text}`} style={{ fontWeight: 700 }}>{valueOrEmpty(row.value)}</p>
           </div>
         );

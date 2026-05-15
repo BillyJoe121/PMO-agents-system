@@ -13,20 +13,6 @@ import { ChevronLeft, ChevronRight, CheckCircle2, X, AlertTriangle, Loader2 } fr
 import { useEncuestaExterna } from '../../hooks/useEncuestaExterna';
 import IcesiLogo from '../brand/IcesiLogo';
 
-const INTERPRETATION_MAP_IDONEIDAD: Record<number, string> = {
-  0: 'Altamente ágil',
-  1: 'Altamente ágil',
-  2: 'Predominantemente ágil',
-  3: 'Predominantemente ágil',
-  4: 'Híbrido',
-  5: 'Híbrido',
-  6: 'Híbrido',
-  7: 'Híbrido',
-  8: 'Predominantemente predictivo',
-  9: 'Predominantemente predictivo',
-  10: 'Altamente predictivo',
-};
-
 const INTERPRETATION_MAP_MADUREZ: Record<number, string> = {
   1: 'Nunca',
   2: 'Raramente',
@@ -34,6 +20,12 @@ const INTERPRETATION_MAP_MADUREZ: Record<number, string> = {
   4: 'Frecuentemente',
   5: 'Siempre'
 };
+
+function getIdoneidadInterpretation(value: number) {
+  if (value <= 3) return 'Zona agil';
+  if (value <= 6) return 'Zona de transicion';
+  return value === 10 ? 'Altamente predictivo' : 'Zona predictiva';
+}
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const pct = ((current) / total) * 100;
@@ -419,7 +411,7 @@ export default function ExternalSurveyView() {
                         exit={{ opacity: 0, y: -5 }}
                         className="text-indigo-600 font-semibold"
                       >
-                        {selectedAnswer}: {isIdoneidad ? INTERPRETATION_MAP_IDONEIDAD[selectedAnswer] : INTERPRETATION_MAP_MADUREZ[selectedAnswer]}
+                        {selectedAnswer}: {isIdoneidad ? getIdoneidadInterpretation(selectedAnswer) : INTERPRETATION_MAP_MADUREZ[selectedAnswer]}
                       </motion.p>
                     ) : (
                       <p className="text-gray-400 text-sm">Selecciona un valor para continuar</p>

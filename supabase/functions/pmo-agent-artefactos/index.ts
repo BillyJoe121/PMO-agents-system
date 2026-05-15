@@ -1,5 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  callAiWithFallback,
+  DEFAULT_ANTHROPIC_FALLBACK_MODEL,
+  DEFAULT_OPENAI_FALLBACK_MODEL,
+  getAiModelSettings,
+  getModelCandidates,
+  type AiAttemptError,
+  type AiModelCandidate,
+  type AiProvider,
+} from "../pmo-agent/_shared/aiModels.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS
@@ -10,33 +20,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_HIGH_MODEL = "gemini-3.1-pro-preview";
-const DEFAULT_LOW_MODEL = "gemini-flash-lite-latest";
-const DEFAULT_KIMI_MODEL = "kimi-k2.6";
-const DEFAULT_AI_MODEL_MODE = "high_with_fallback";
-
-type AiModelMode = "low" | "high_with_fallback" | "kimi";
-type AiProvider = "gemini" | "kimi";
-
-interface AiModelSettings {
-  mode: AiModelMode;
-  high_model: string;
-  low_model: string;
-  kimi_model: string;
-}
-
-interface AiModelCandidate {
-  provider: AiProvider;
-  model: string;
-}
-
-interface AiAttemptError {
-  provider: AiProvider;
-  model: string;
-  message: string;
-  status?: number;
-}
-
 interface AiTextResult {
   text: string;
   provider: AiProvider;
@@ -44,81 +27,6 @@ interface AiTextResult {
   attemptedModels: string[];
   errors: AiAttemptError[];
   fallbackUsed: boolean;
-}
-
-function normalizeAiModelSettings(row?: Partial<AiModelSettings> | null): AiModelSettings {
-  const rawMode = String(row?.mode ?? "").trim().toLowerCase();
-  const mode = rawMode === "low" || rawMode === "kimi" ? rawMode : DEFAULT_AI_MODEL_MODE;
-  return {
-    mode,
-    high_model: row?.high_model || DEFAULT_HIGH_MODEL,
-    low_model: row?.low_model || DEFAULT_LOW_MODEL,
-    kimi_model: row?.kimi_model || DEFAULT_KIMI_MODEL,
-  };
-}
-
-async function getAiModelSettings(supabase: any): Promise<AiModelSettings> {
-  const { data, error } = await supabase
-    .from("ai_model_settings")
-    .select("mode, high_model, low_model, kimi_model")
-    .eq("id", "global")
-    .maybeSingle();
-
-  if (error) {
-    console.warn("[pmo-agent-artefactos] No se pudo leer ai_model_settings con kimi_model; intentando esquema legacy.", error.message);
-    const fallback = await supabase
-      .from("ai_model_settings")
-      .select("mode, high_model, low_model")
-      .eq("id", "global")
-      .maybeSingle();
-
-    if (fallback.error) {
-      console.warn("[pmo-agent-artefactos] No se pudo leer ai_model_settings; usando defaults.", fallback.error.message);
-      return normalizeAiModelSettings(null);
-    }
-
-    return normalizeAiModelSettings(fallback.data as Partial<AiModelSettings> | null);
-  }
-
-  return normalizeAiModelSettings(data as Partial<AiModelSettings> | null);
-}
-
-function getModelCandidates(settings: AiModelSettings) {
-  const candidates: AiModelCandidate[] = settings.mode === "kimi"
-    ? [{ provider: "kimi", model: settings.kimi_model }]
-    : settings.mode === "low"
-      ? [
-          { provider: "gemini", model: settings.low_model },
-          { provider: "kimi", model: settings.kimi_model },
-        ]
-      : [
-          { provider: "gemini", model: settings.high_model },
-          { provider: "gemini", model: settings.low_model },
-          { provider: "kimi", model: settings.kimi_model },
-        ];
-
-  const seen = new Set<string>();
-  return candidates.filter((candidate) => {
-    const key = `${candidate.provider}:${candidate.model}`;
-    if (!candidate.model || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function shouldTryNextModel(status: number | undefined, isLastModel: boolean) {
-  if (isLastModel) return false;
-  return status === undefined || [400, 404, 429, 500, 502, 503, 504].includes(status);
-}
-
-async function readResponseData(response: Response) {
-  const text = await response.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw_text: text };
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,11 +180,11 @@ Responde ÚNICAMENTE con un JSON válido con la siguiente estructura, sin texto 
 // ─────────────────────────────────────────────────────────────────────────────
 async function callAi(
   prompt: string,
-  apiKeys: { gemini: string; kimi: string },
+  apiKeys: { openai: string; anthropic: string; gemini?: string },
   candidates: AiModelCandidate[],
   temperature?: number
 ): Promise<AiTextResult> {
-  const geminiBody = {
+  const result = await callAiWithFallback(apiKeys, candidates, {
     contents: [
       {
         role: "user",
@@ -287,85 +195,16 @@ async function callAi(
       temperature: temperature ?? 1,
       responseMimeType: "application/json",
     },
+  });
+
+  return {
+    text: result.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "",
+    provider: result.provider,
+    model: result.model,
+    attemptedModels: result.attemptedModels,
+    errors: result.errors,
+    fallbackUsed: result.fallbackUsed,
   };
-
-  const errors: AiAttemptError[] = [];
-  const attemptedModels: string[] = [];
-
-  for (let index = 0; index < candidates.length; index += 1) {
-    const candidate = candidates[index];
-    const attemptId = `${candidate.provider}:${candidate.model}`;
-    attemptedModels.push(attemptId);
-
-    try {
-      const apiKey = candidate.provider === "kimi" ? apiKeys.kimi : apiKeys.gemini;
-      if (!apiKey) throw new Error(`Falta API key para ${candidate.provider}`);
-
-      const res = candidate.provider === "kimi"
-        ? await fetch("https://api.moonshot.ai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: candidate.model,
-              messages: [{ role: "user", content: prompt }],
-              max_completion_tokens: 8192,
-              response_format: { type: "json_object" },
-              thinking: { type: "disabled" },
-              stream: false,
-            }),
-          })
-        : await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${candidate.model}:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(geminiBody),
-          });
-
-      const json = await readResponseData(res);
-
-      if (res.ok) {
-        const text = candidate.provider === "kimi"
-          ? json?.choices?.[0]?.message?.content ?? ""
-          : json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-        return {
-          text,
-          provider: candidate.provider,
-          model: candidate.model,
-          attemptedModels,
-          errors,
-          fallbackUsed: index > 0,
-        };
-      }
-
-      const message = candidate.provider === "kimi"
-        ? json?.error?.message || json?.error?.type || json?.raw_text || JSON.stringify(json)
-        : json?.error?.message || json?.error?.status || JSON.stringify(json);
-      errors.push({ provider: candidate.provider, model: candidate.model, status: res.status, message });
-
-      if (!shouldTryNextModel(res.status, index === candidates.length - 1)) {
-        throw new Error(`${candidate.provider} API error ${res.status} (${candidate.model}): ${message}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Error desconocido llamando al modelo";
-      const alreadyLogged = errors.some(e => e.provider === candidate.provider && e.model === candidate.model && e.message === message);
-      if (!alreadyLogged) errors.push({ provider: candidate.provider, model: candidate.model, message });
-
-      const latestStatus = [...errors].reverse().find(e => e.provider === candidate.provider && e.model === candidate.model)?.status;
-      if (latestStatus !== undefined && !shouldTryNextModel(latestStatus, index === candidates.length - 1)) {
-        throw error;
-      }
-
-      if (index === candidates.length - 1) {
-        throw new Error(
-          `Fallaron todos los modelos configurados (${attemptedModels.join(", ")}). Ultimo error: ${message}`
-        );
-      }
-    }
-  }
-
-  throw new Error("No hay modelos configurados.");
 }
 
 // -----------------------------------------------------------------------------
@@ -469,8 +308,9 @@ serve(async (req: Request) => {
     supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const apiKeys = {
+      openai: Deno.env.get("OPENAI_API_KEY") || "",
+      anthropic: Deno.env.get("ANTHROPIC_API_KEY") || "",
       gemini: Deno.env.get("GOOGLE_API_KEY") || Deno.env.get("GEMINI_API_KEY") || "",
-      kimi: Deno.env.get("MOONSHOT_API_KEY") || Deno.env.get("KIMI_API_KEY") || "",
     };
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -533,17 +373,17 @@ serve(async (req: Request) => {
       // Intentar extraer JSON si Gemini puso texto antes/después
       const jsonMatch = geminiResponse.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error(`Gemini no devolvió JSON válido: ${geminiResponse.text.slice(0, 300)}`);
+        throw new Error(`El proveedor de IA no devolvio JSON valido: ${geminiResponse.text.slice(0, 300)}`);
       }
       resultado = JSON.parse(jsonMatch[0]);
     }
 
     // ── 6. Normalizar, complementar y validar contra la lista maestra ───────
-    const geminiRecommended = normalizeArtifactList(resultado.artefactos_recomendados);
-    const geminiOther = normalizeArtifactList(resultado.otros_artefactos);
+    const aiRecommended = normalizeArtifactList(resultado.artefactos_recomendados);
+    const aiOther = normalizeArtifactList(resultado.otros_artefactos);
     const deterministicRecommended = inferRecommendedFromText(fase7Content);
 
-    const recommendedSet = new Set([...geminiRecommended, ...deterministicRecommended]);
+    const recommendedSet = new Set([...aiRecommended, ...deterministicRecommended]);
     const usedFallback = recommendedSet.size === 0;
     if (usedFallback) {
       for (const artifact of ARTEFACTOS_BASE_RECOMENDADOS) {
@@ -570,14 +410,16 @@ serve(async (req: Request) => {
         fase_origen: 7,
         total_recomendados: resultado.artefactos_recomendados.length,
         total_otros: resultado.otros_artefactos.length,
-        gemini_recomendados_normalizados: geminiRecommended,
-        gemini_otros_normalizados: geminiOther,
+        ai_recomendados_normalizados: aiRecommended,
+        ai_otros_normalizados: aiOther,
         inferidos_por_texto: deterministicRecommended,
         uso_fallback_base: usedFallback,
-        model_mode: modelSettings.mode,
-        model_high: modelSettings.high_model,
-        model_low: modelSettings.low_model,
-        model_kimi: modelSettings.kimi_model,
+        model_provider_configured: modelSettings.provider,
+        model_selected: modelSettings.selected_model,
+        model_openai_fallback: DEFAULT_OPENAI_FALLBACK_MODEL,
+        model_anthropic_fallback: DEFAULT_ANTHROPIC_FALLBACK_MODEL,
+        legacy_gemini_high: modelSettings.high_model,
+        legacy_gemini_low: modelSettings.low_model,
         model_provider: geminiResponse.provider,
         model_used: geminiResponse.model,
         model_fallback_used: geminiResponse.fallbackUsed,

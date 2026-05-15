@@ -19,7 +19,17 @@ function isTransientGeminiError(message: string) {
 // ---------------------------------------------------------------------------
 // Parsers
 // ---------------------------------------------------------------------------
-function parsePmoType(diag?: string): PmoType {
+function parsePmoType(input?: any): any {
+  const diag = input?.diagnosis ?? input;
+  const raw = typeof diag === 'object'
+    ? diag?.pmo_type ?? diag?.pmoType ?? diag?.summary
+    : diag;
+  if (raw) {
+    const token = String(raw).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (token.includes('agil')) return 'Ágil';
+    if (token.includes('predictiv')) return 'Predictiva';
+  }
+  if (typeof diag !== 'string') return 'Híbrida';
   if (!diag) return 'Híbrida';
   if (diag.includes('Ágil')) return 'Ágil';
   if (diag.includes('Predictiva')) return 'Predictiva';

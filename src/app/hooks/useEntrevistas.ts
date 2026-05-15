@@ -19,10 +19,18 @@ export interface EntrevistasDiagnosis {
   summary: string;
   advertencia_fuente_unica?: boolean;
   numero_entrevistados?: number;
-  roles_identificados?: string[];
+  nivel_formalizacion_general?: string;
+  roles_identificados?: Array<{
+    nombre_cargo: string;
+    area: string;
+    nivel_jerarquico: string;
+    participacion_en_proyectos: string;
+  }>;
   contexto_organizacional?: {
+    organizacion?: string;
     sector?: string;
     tamanio_aproximado?: string;
+    tipo_proyecto_analizado?: string;
     cultura_visible?: string;
   };
   calidad_input?: {
@@ -39,6 +47,22 @@ export interface EntrevistasDiagnosis {
     tipo_gestion: string;
     confianza: string;
     recurrencia: string;
+  }>;
+  herramientas_identificadas?: Array<{
+    nombre: string;
+    tipo: string;
+    uso_identificado: string;
+    fases_donde_se_usa: string[];
+    es_repositorio_digital: boolean;
+    mencionado_por: string[];
+  }>;
+  reuniones_existentes?: Array<{
+    nombre: string;
+    frecuencia: string;
+    participantes: string[];
+    proposito: string;
+    nivel_formalidad: string;
+    mencionado_por: string[];
   }>;
   key_findings?: string[];
   recurring_themes?: {
@@ -77,6 +101,10 @@ export interface EntrevistasDiagnosis {
   }[];
   recommendations?: string[];
   insumos_para_agente_4?: {
+    tiene_preproyecto?: boolean | null;
+    justificacion_preproyecto?: string;
+    tiene_postcierre?: boolean | null;
+    justificacion_postcierre?: string;
     patrones_clave_resumen?: string[];
     brechas_criticas_resumen?: string[];
     indicadores_predictivos?: string[];
@@ -84,6 +112,47 @@ export interface EntrevistasDiagnosis {
     indicadores_hibridos?: string[];
     nivel_general_formalizacion?: string;
   };
+  listo_para_integracion?: boolean;
+}
+
+export interface AgentErrorPayload {
+  code?: string;
+  message: string;
+  details?: string;
+  retryable?: boolean;
+}
+
+function extractAgentError(value: any): AgentErrorPayload | null {
+  if (!value || typeof value !== 'object') return null;
+
+  if (value._error) {
+    return {
+      message: value.message ?? 'El agente reporto un error durante el procesamiento.',
+      details: value.details,
+      retryable: true,
+    };
+  }
+
+  const nestedError = value.error;
+  if (nestedError && typeof nestedError === 'object' && value.diagnosis === null) {
+    return {
+      code: nestedError.code,
+      message: nestedError.message ?? 'El agente no pudo generar el diagnostico.',
+      details: nestedError.details,
+      retryable: nestedError.retryable,
+    };
+  }
+
+  if (value.metadata?.status === 'error') {
+    return {
+      code: nestedError?.code,
+      message: nestedError?.message ?? 'El agente finalizo con error.',
+      details: nestedError?.details,
+      retryable: nestedError?.retryable,
+    };
+  }
+
+  return null;
 }
 
 export function useEntrevistas(projectId: string) {
@@ -91,6 +160,7 @@ export function useEntrevistas(projectId: string) {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [diagnosis, setDiagnosis] = useState<EntrevistasDiagnosis | null>(null);
+  const [agentError, setAgentError] = useState<AgentErrorPayload | null>(null);
 
   const fetchInitialData = useCallback(async () => {
     setIsLoadingData(true);
@@ -128,8 +198,15 @@ export function useEntrevistas(projectId: string) {
 
       if (faseData?.datos_consolidados) {
         const consolidated = faseData.datos_consolidados as Record<string, any>;
+        const storedError = extractAgentError(consolidated);
+        if (storedError) {
+          setAgentError(storedError);
+          setDiagnosis(null);
+          return;
+        }
         const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
         setDiagnosis(innerDiagnosis as EntrevistasDiagnosis);
+        setAgentError(null);
       }
     } catch (err) {
       console.error('Error fetching initial phase 2 data', err);
@@ -249,6 +326,8 @@ export function useEntrevistas(projectId: string) {
 
   const processPhase = useCallback(async () => {
     setIsProcessing(true);
+    setDiagnosis(null);
+    setAgentError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -275,8 +354,15 @@ export function useEntrevistas(projectId: string) {
         throw new Error(result.error ?? 'Error desconocido en el agente');
       }
 
+      const reportedError = extractAgentError(result.data);
+      if (reportedError) {
+        setAgentError(reportedError);
+        throw new Error(reportedError.message);
+      }
+
       const diagnosisData: EntrevistasDiagnosis = result.data?.diagnosis ?? result.data;
       setDiagnosis(diagnosisData);
+      setAgentError(null);
 
       return diagnosisData;
     } catch (err) {
@@ -294,6 +380,7 @@ export function useEntrevistas(projectId: string) {
     isLoadingData,
     isProcessing,
     diagnosis,
+    agentError,
     fetchInitialData,
     saveEntrevista,
     deleteEntrevista,

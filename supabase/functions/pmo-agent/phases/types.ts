@@ -3,6 +3,7 @@ export type SupabaseClient = any;
 export type AgentFileUrl = {
   url: string;
   type: string;
+  label?: string;
 };
 
 export type PhasePayloadResult = {

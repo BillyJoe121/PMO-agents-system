@@ -1,8 +1,8 @@
 import React from 'react';
 import {
   AlertCircle, AlertTriangle, BarChart3, CheckCircle2, ClipboardList, Gauge,
-  Layers3, Lightbulb, Radar as RadarIcon, ShieldAlert, Sparkles, Target,
-  TrendingUp, Users
+  Layers3, Lightbulb, Radar as RadarIcon, ShieldAlert, Sparkles, Table2, Target,
+  TrendingUp, Users, Zap
 } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import {
@@ -94,6 +94,8 @@ function ScoreHero({ diagnosis }: { diagnosis: any }) {
   const score = Number((diagnosis?.suitability_score || diagnosis?.puntuacion_idoneidad || 0).toFixed(1));
   const tone = zoneTone(diagnosis?.suitability_level || diagnosis?.nivel_idoneidad);
   const toneClass = phaseReportToneStyles[tone];
+  const zonaGeneral = diagnosis?.zona_predominante_general || diagnosis?.indicadores?.general?.zona_predominante;
+  const formato = diagnosis?.formato_entrada_detectado;
   return (
     <section className="rounded-[1.5rem] overflow-hidden border border-[#5454e9]/20 bg-white" style={{ boxShadow: '0 20px 55px -34px rgba(84,84,233,0.5)' }}>
       <div className="bg-[#5454e9] p-6 text-white">
@@ -116,11 +118,21 @@ function ScoreHero({ diagnosis }: { diagnosis: any }) {
           </div>
         </div>
       </div>
-      <div className={`px-6 py-3 ${toneClass.soft} border-t ${toneClass.border} flex flex-wrap items-center gap-2`}>
+      <div className={`px-6 py-3 ${toneClass.soft} border-t ${toneClass.border} flex flex-wrap items-center gap-3`}>
         <span className={`px-2.5 py-1 rounded-full ${toneClass.bg} text-white text-[10px]`} style={{ fontWeight: 850 }}>
           {valueOrEmpty(diagnosis.suitability_level || diagnosis.nivel_idoneidad)}
         </span>
-        <span className="text-neutral-600 text-[12px]">{textWithFactorNames(diagnosis.justificacion_confiabilidad)}</span>
+        {zonaGeneral && zonaGeneral !== diagnosis.suitability_level && (
+          <span className={`px-2.5 py-1 rounded-full ${toneClass.soft} ${toneClass.text} border ${toneClass.border} text-[10px]`} style={{ fontWeight: 800 }}>
+            Zona: {valueOrEmpty(zonaGeneral)}
+          </span>
+        )}
+        {formato && (
+          <span className="px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-600 text-[10px] border border-neutral-200" style={{ fontWeight: 800 }}>
+            Entrada: {valueOrEmpty(formato)}
+          </span>
+        )}
+        <span className="text-neutral-600 text-[12px] ml-auto">{textWithFactorNames(diagnosis.justificacion_confiabilidad)}</span>
       </div>
     </section>
   );
@@ -178,9 +190,9 @@ function RadarPanel({ radarData, diagnosis }: { radarData: any[]; diagnosis: any
               <PolarGrid stroke="#e5e7eb" />
               <PolarAngleAxis dataKey="subject" tick={{ fill: '#374151', fontSize: 11, fontWeight: 700 }} />
               <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickCount={6} />
-              <Radar name="Zona Predictiva (8-10)" dataKey="PredictiveZone" stroke="#5454e9" strokeWidth={1.5} strokeDasharray="5 3" fill="#5454e9" fillOpacity={0.12} isAnimationActive={false} />
-              <Radar name="Zona Híbrida (4-8)" dataKey="HybridZone" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
-              <Radar name="Zona Ágil (0-4)" dataKey="AgileZone" stroke="#10b981" strokeWidth={1.5} strokeDasharray="5 3" fill="#10b981" fillOpacity={0.22} isAnimationActive={false} />
+              <Radar name="Zona Predictiva (7-10)" dataKey="PredictiveZone" stroke="#5454e9" strokeWidth={1.5} strokeDasharray="5 3" fill="#5454e9" fillOpacity={0.12} isAnimationActive={false} />
+              <Radar name="Zona de transicion (3.1-6.9)" dataKey="TransitionZone" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
+              <Radar name="Zona agil (1-3)" dataKey="AgileZone" stroke="#10b981" strokeWidth={1.5} strokeDasharray="5 3" fill="#10b981" fillOpacity={0.22} isAnimationActive={false} />
               <Radar name="Puntaje Real" dataKey="Puntaje" stroke="#5454e9" strokeWidth={3} fill="#5454e9" fillOpacity={0.18} dot={{ r: 4.5, fill: '#5454e9', stroke: '#fff', strokeWidth: 2 }} isAnimationActive={false} />
               <Tooltip content={<CustomRadarTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '11px', fontWeight: 500 }} />
@@ -298,6 +310,66 @@ function InconsistencyCard({ inconsistency, index }: { inconsistency: any; index
   );
 }
 
+function IndicadoresZona({ diagnosis }: { diagnosis: any }) {
+  // Lee de la raíz del diagnosis (v4) con fallback a insumos_para_agente_4 (v3)
+  const agil = diagnosis.indicadores_agilidad ?? diagnosis.insumos_para_agente_4?.indicadores_agilidad ?? [];
+  const pred = diagnosis.indicadores_predictivos ?? diagnosis.insumos_para_agente_4?.indicadores_predictivos ?? [];
+  const hibr = diagnosis.indicadores_hibridos ?? diagnosis.insumos_para_agente_4?.indicadores_hibridos ?? [];
+  const tensiones = diagnosis.tensiones_criticas_resumen ?? diagnosis.insumos_para_agente_4?.tensiones_criticas_resumen ?? [];
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-green-200 bg-green-50/40 p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-green-700 mb-3" style={{ fontWeight: 800 }}>Indicadores agil (≤3.0)</p>
+          <div className="space-y-2">
+            {agil.length ? agil.map((x: any, i: number) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <span className="text-neutral-700 text-[12px]">{factorName(x.item || x.dimension)}</span>
+                <span className="tabular-nums text-green-700 text-[12px]" style={{ fontWeight: 800 }}>{valueOrEmpty(x.promedio)}</span>
+              </div>
+            )) : <p className="text-neutral-400 text-[12px] italic">Sin indicadores</p>}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-amber-700 mb-3" style={{ fontWeight: 800 }}>Indicadores de transicion</p>
+          <div className="space-y-2">
+            {hibr.length ? hibr.map((x: any, i: number) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <span className="text-neutral-700 text-[12px]">{factorName(x.item_o_dimension || x.dimension)}</span>
+                <span className="tabular-nums text-amber-700 text-[12px]" style={{ fontWeight: 800 }}>{valueOrEmpty(x.promedio)}</span>
+              </div>
+            )) : <p className="text-neutral-400 text-[12px] italic">Sin indicadores</p>}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-red-200 bg-red-50/40 p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-red-700 mb-3" style={{ fontWeight: 800 }}>Indicadores predictivos (≥7.0)</p>
+          <div className="space-y-2">
+            {pred.length ? pred.map((x: any, i: number) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <span className="text-neutral-700 text-[12px]">{factorName(x.item || x.dimension)}</span>
+                <span className="tabular-nums text-red-700 text-[12px]" style={{ fontWeight: 800 }}>{valueOrEmpty(x.promedio)}</span>
+              </div>
+            )) : <p className="text-neutral-400 text-[12px] italic">Sin indicadores</p>}
+          </div>
+        </div>
+      </div>
+      {tensiones.length > 0 && (
+        <div className="rounded-2xl border border-orange-200 bg-orange-50/40 p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-orange-700 mb-3" style={{ fontWeight: 800 }}>Tensiones criticas (Severa)</p>
+          <div className="space-y-2">
+            {tensiones.map((t: any, i: number) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 flex-shrink-0"></span>
+                <span className="text-neutral-700 text-[13px] leading-relaxed">{valueOrEmpty(t)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FactorsPanel({ diagnosis }: { diagnosis: any }) {
   const predictive = diagnosis.factores_criticos?.alta_afinidad_predictiva ?? [];
   const agile = diagnosis.factores_criticos?.alta_afinidad_agil ?? [];
@@ -333,8 +405,83 @@ function FactorsInterpretation({ diagnosis }: { diagnosis: any }) {
   );
 }
 
+function TrazabilidadPanel({ diagnosis }: { diagnosis: any }) {
+  const t = diagnosis?.trazabilidad_calculo;
+  if (!t) return <p className="text-neutral-400 text-sm italic">No hay datos de trazabilidad disponibles.</p>;
+  const itemKeys = Object.keys(t.n_respondentes_por_item ?? t.suma_por_item ?? {}).filter((key) => /^[CEP]\d{2}$/.test(key));
+  return (
+    <div className="space-y-4">
+      <PhaseReportKeyValueGrid rows={[
+        { label: 'Score sin redondear', value: t.suitability_score_sin_redondear, tone: 'blue' },
+        { label: 'Suma 21 promedios', value: t.suma_21_promedios_items, tone: 'blue' },
+        { label: 'Promedio cultura', value: t.promedio_dimension_cultura, tone: zoneTone('cultura') },
+        { label: 'Promedio equipo', value: t.promedio_dimension_equipo, tone: zoneTone('equipo') },
+        { label: 'Promedio proyecto', value: t.promedio_dimension_proyecto, tone: zoneTone('proyecto') },
+        { label: 'Suma cultura', value: t.suma_promedios_cultura_10_items, tone: 'purple' },
+        { label: 'Suma equipo', value: t.suma_promedios_equipo_6_items, tone: 'green' },
+        { label: 'Suma proyecto', value: t.suma_promedios_proyecto_5_items, tone: 'amber' },
+        { label: 'Verificacion rango', value: t.verificacion_rango_superada ? 'Superada ✓' : 'No superada ✗', tone: t.verificacion_rango_superada ? 'green' : 'red' },
+      ]} />
+      {itemKeys.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-100">
+          <table className="w-full text-left border-collapse text-[11px]">
+            <thead>
+              <tr className="border-b border-neutral-100 bg-neutral-50">
+                <th className="px-3 py-2 text-neutral-500 font-semibold">Item</th>
+                <th className="px-3 py-2 text-neutral-500 font-semibold text-right">Suma</th>
+                <th className="px-3 py-2 text-neutral-500 font-semibold text-right">N</th>
+                <th className="px-3 py-2 text-neutral-500 font-semibold text-right">Prom. sin redondear</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-50 bg-white">
+              {itemKeys.map((item) => (
+                <tr key={item} className="hover:bg-neutral-50/60">
+                  <td className="px-3 py-2 text-neutral-800 font-medium">{factorName(item)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-neutral-700">{valueOrEmpty(t.suma_por_item?.[item])}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-neutral-700">{valueOrEmpty(t.n_respondentes_por_item?.[item])}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold text-neutral-900">{valueOrEmpty(t.promedio_por_item_sin_redondear?.[item])}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {t.scores_por_encuestado_por_item?.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-neutral-100">
+          <table className="w-full text-left border-collapse text-[11px]">
+            <thead>
+              <tr className="border-b border-neutral-100 bg-neutral-50">
+                <th className="px-3 py-2 text-neutral-500 font-semibold">Encuestado</th>
+                <th className="px-3 py-2 text-neutral-500 font-semibold">Cargo</th>
+                <th className="px-3 py-2 text-neutral-500 font-semibold text-right">Promedio</th>
+                {itemKeys.map((item) => (
+                  <th key={item} className="px-3 py-2 text-neutral-500 font-semibold text-right">{item}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-50 bg-white">
+              {t.scores_por_encuestado_por_item.map((r: any, i: number) => (
+                <tr key={i} className="hover:bg-neutral-50/60">
+                  <td className="px-3 py-2 text-neutral-800 font-medium">{valueOrEmpty(r.respondent_id)}</td>
+                  <td className="px-3 py-2 text-neutral-600">{valueOrEmpty(r.role)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold text-neutral-900">{valueOrEmpty(r.promedio_individual)}</td>
+                  {itemKeys.map((item) => (
+                    <td key={item} className="px-3 py-2 text-right tabular-nums text-neutral-600">{valueOrEmpty(r.scores?.[item])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResultsTable({ diagnosis }: { diagnosis: any }) {
-  const items = normalizeIdoneidadDiagnosisItems(diagnosis);
+  // Prioriza el array directo del v4 JSON, con fallback al normalizador genérico
+  const directItems: any[] = diagnosis?.resultados_por_item ?? [];
+  const items = directItems.length > 0 ? directItems : normalizeIdoneidadDiagnosisItems(diagnosis);
   const rows = items.length ? items : [{ item: EMPTY_VALUE, dimension: EMPTY_VALUE, promedio: EMPTY_VALUE, minimo: EMPTY_VALUE, maximo: EMPTY_VALUE, desviacion_estandar: EMPTY_VALUE, zona: EMPTY_VALUE, factor_critico: EMPTY_VALUE }];
   return (
     <div className="overflow-x-auto rounded-2xl border border-neutral-100 print:overflow-visible print:border-none print:break-inside-avoid">
@@ -387,16 +534,32 @@ function Agent4Inputs({ diagnosis }: { diagnosis: any }) {
   return (
     <div className="space-y-5">
       <PhaseReportKeyValueGrid rows={[
+        { label: 'Listo para integracion', value: diagnosis?.listo_para_integracion, tone: diagnosis?.listo_para_integracion ? 'green' : 'orange' },
         { label: 'Nivel confiabilidad', value: inputs?.nivel_confiabilidad, tone: levelTone(inputs?.nivel_confiabilidad) },
         { label: 'Comportamiento general', value: inputs?.comportamiento_general, tone: levelTone(inputs?.comportamiento_general) },
-        { label: 'Zona predominante general', value: inputs?.zona_predominante_general, tone: zoneTone(inputs?.zona_predominante_general) },
+        { label: 'Zona predominante general', value: inputs?.zona_predominante_general || diagnosis?.zona_predominante_general, tone: zoneTone(inputs?.zona_predominante_general || diagnosis?.zona_predominante_general) },
+        { label: 'Tiene preproyecto', value: inputs?.tiene_preproyecto === true ? 'Si' : inputs?.tiene_preproyecto === false ? 'No' : 'Sin evidencia', tone: inputs?.tiene_preproyecto ? 'green' : 'amber' },
+        { label: 'Tiene postcierre', value: inputs?.tiene_postcierre === true ? 'Si' : inputs?.tiene_postcierre === false ? 'No' : 'Sin evidencia', tone: inputs?.tiene_postcierre ? 'green' : 'amber' },
       ]} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <PhaseReportMiniList title="Indicadores predictivos" items={(inputs?.indicadores_predictivos ?? []).map((x: any) => `${factorName(x.item || x.dimension)} (${valueOrEmpty(x.promedio)}): ${textWithFactorNames(x.interpretacion_del_factor)}`)} tone="red" />
-        <PhaseReportMiniList title="Indicadores hibridos" items={(inputs?.indicadores_hibridos ?? []).map((x: any) => `${factorName(x.item_o_dimension)} (${valueOrEmpty(x.promedio)}): ${textWithFactorNames(x.interpretacion_del_factor)}`)} tone="amber" />
-        <PhaseReportMiniList title="Indicadores agilidad" items={inputs?.indicadores_agilidad} tone="green" mapItem={textWithFactorNames} />
+        <PhaseReportMiniList title="Indicadores de transicion" items={(inputs?.indicadores_hibridos ?? []).map((x: any) => `${factorName(x.item_o_dimension)} (${valueOrEmpty(x.promedio)}): ${textWithFactorNames(x.interpretacion_del_factor)}`)} tone="amber" />
+        <PhaseReportMiniList title="Indicadores agilidad" items={(inputs?.indicadores_agilidad ?? []).map((x: any) => typeof x === 'string' ? x : `${factorName(x.item || x.dimension)} (${valueOrEmpty(x.promedio)})`)} tone="green" />
         <PhaseReportMiniList title="Inconsistencias criticas" items={inputs?.inconsistencias_criticas_resumen} tone="orange" mapItem={textWithFactorNames} />
+        <PhaseReportMiniList title="Tensiones criticas" items={inputs?.tensiones_criticas_resumen} tone="orange" mapItem={textWithFactorNames} />
       </div>
+      {inputs?.justificacion_preproyecto && (
+        <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 800 }}>Justificacion preproyecto</p>
+          <p className="text-neutral-700 text-[13px]">{inputs.justificacion_preproyecto}</p>
+        </div>
+      )}
+      {inputs?.justificacion_postcierre && (
+        <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-1" style={{ fontWeight: 800 }}>Justificacion postcierre</p>
+          <p className="text-neutral-700 text-[13px]">{inputs.justificacion_postcierre}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -408,6 +571,10 @@ export default function IdoneidadDiagnosisView({ diagnosis, radarData, totalResp
 
       <PhaseReportSection title="Lectura general" eyebrow="Indicadores de idoneidad" icon={<BarChart3 size={18} />} tone="blue">
         <MetricsStrip diagnosis={diagnosis} totalRespondentCount={totalRespondentCount} completedAt={completedAt} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Indicadores por zona" eyebrow="Agil - transicion - predictivo" icon={<Zap size={18} />} tone="green">
+        <IndicadoresZona diagnosis={diagnosis} />
       </PhaseReportSection>
 
       <PhaseReportSection title="Observaciones" eyebrow="Lectura ejecutiva" icon={<Sparkles size={18} />} tone="green">
@@ -483,6 +650,10 @@ export default function IdoneidadDiagnosisView({ diagnosis, radarData, totalResp
 
       <PhaseReportSection title="Resultados por item" eyebrow="Detalle cuantitativo" icon={<ClipboardList size={18} />} tone="blue">
         <ResultsTable diagnosis={diagnosis} />
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Trazabilidad del calculo" eyebrow="Auditoria numerica" icon={<Table2 size={18} />} tone="slate">
+        <TrazabilidadPanel diagnosis={diagnosis} />
       </PhaseReportSection>
 
       <PhaseReportSection title="Cargos representados" eyebrow="Muestra participante" icon={<Users size={18} />} tone="purple">

@@ -31,7 +31,8 @@ export function hasCompletedPhaseData(value: unknown) {
   if (!hasMeaningfulData(value)) return false;
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
-    if (record._error || record._processing) return false;
+    const metadata = record.metadata as Record<string, unknown> | undefined;
+    if (record._error || record._processing || record.error || metadata?.status === "error") return false;
   }
   return true;
 }
@@ -44,4 +45,3 @@ export function phaseProcessingPayload(phaseNumber: number, runId: string) {
     started_at: new Date().toISOString(),
   };
 }
-

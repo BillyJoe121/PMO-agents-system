@@ -10,10 +10,51 @@ export interface EncuestaResponse {
   created_at: string;
 }
 
+export interface AgentErrorPayload {
+  code?: string;
+  message: string;
+  details?: string;
+  retryable?: boolean;
+}
+
+function extractAgentError(value: any): AgentErrorPayload | null {
+  if (!value || typeof value !== 'object') return null;
+
+  if (value._error) {
+    return {
+      message: value.message ?? 'El agente reporto un error durante el procesamiento.',
+      details: value.details,
+      retryable: true,
+    };
+  }
+
+  const nestedError = value.error;
+  if (nestedError && typeof nestedError === 'object' && value.diagnosis === null) {
+    return {
+      code: nestedError.code,
+      message: nestedError.message ?? 'El agente no pudo generar el diagnostico.',
+      details: nestedError.details,
+      retryable: nestedError.retryable,
+    };
+  }
+
+  if (value.metadata?.status === 'error') {
+    return {
+      code: nestedError?.code,
+      message: nestedError?.message ?? 'El agente finalizo con error.',
+      details: nestedError?.details,
+      retryable: nestedError?.retryable,
+    };
+  }
+
+  return null;
+}
+
 export function useIdoneidad(projectId: string | undefined) {
   const [activeLink, setActiveLink] = useState<string | null>(null);
   const [responses, setResponses] = useState<EncuestaResponse[]>([]);
   const [diagnosis, setDiagnosis] = useState<any | null>(null);
+  const [agentError, setAgentError] = useState<AgentErrorPayload | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [externalFile, setExternalFile] = useState<File | null>(null);
   const [existingFileName, setExistingFileName] = useState<string | null>(null);
@@ -60,10 +101,18 @@ export function useIdoneidad(projectId: string | undefined) {
 
       if (faseData?.datos_consolidados) {
         const consolidated = faseData.datos_consolidados as Record<string, any>;
+        const storedError = extractAgentError(consolidated);
+        if (storedError) {
+          setAgentError(storedError);
+          setDiagnosis(null);
+          return;
+        }
         const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
         setDiagnosis(innerDiagnosis);
+        setAgentError(null);
       } else {
         setDiagnosis(null);
+        setAgentError(null);
       }
 
       // 4. Buscar archivos de encuestas offline previos
@@ -151,6 +200,8 @@ export function useIdoneidad(projectId: string | undefined) {
   const processPhase = async (options?: { iteration?: number; comments?: string }) => {
     if (!projectId) return false;
     try {
+      setDiagnosis(null);
+      setAgentError(null);
       // Al confirmar el envío se invalida el enlace activo
       await supabase
         .from('encuestas_links')
@@ -187,7 +238,19 @@ export function useIdoneidad(projectId: string | undefined) {
         }
       });
       if (response.error) throw new Error((response.data as any)?.error || response.error.message);
-      return true;
+      if ((response.data as any)?.success === false) {
+        throw new Error((response.data as any)?.error || 'Error desconocido en el agente');
+      }
+      const resultData = (response.data as any)?.data ?? response.data;
+      const reportedError = extractAgentError(resultData);
+      if (reportedError) {
+        setAgentError(reportedError);
+        throw new Error(reportedError.message);
+      }
+      const innerDiagnosis = resultData?.diagnosis ? resultData.diagnosis : resultData;
+      setDiagnosis(innerDiagnosis);
+      setAgentError(null);
+      return innerDiagnosis;
     } catch (err) {
       console.error(err);
       throw err;
@@ -213,6 +276,7 @@ export function useIdoneidad(projectId: string | undefined) {
     activeLink,
     responses,
     diagnosis,
+    agentError,
     isLoadingData,
     externalFile,
     setExternalFile,

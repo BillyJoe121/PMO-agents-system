@@ -99,7 +99,7 @@ function parseDiagnosisPayload(data: any): any | null {
 
   return {
     pmoType: mappedType,
-    confidence: diag.confidence_level || 0,
+    confidence: diag.confidence_level ?? diag.confidence ?? 0,
     confidence_label: diag.confidence_label,
     justification: diag.justification || '',
     keyFactors: diag.supporting_evidence || [],
@@ -112,6 +112,7 @@ function parseDiagnosisPayload(data: any): any | null {
     version: (payload.metadata?.iteration || 1) > 1 ? 'reprocesado' as DiagnosisVersion : 'original' as DiagnosisVersion,
     iteration: payload.metadata?.iteration || 1,
     estado_integracion: diag.estado_integracion,
+    fases_opcionales: diag.fases_opcionales ?? null,
   };
 }
 
@@ -161,7 +162,9 @@ export default function TipoProyectosModule() {
     const diagnosisFase3 = phase3AgentData?.diagnosis || phase3AgentData;
     if (!diagnosisFase3) return [];
     
-    const items = normalizeIdoneidadDiagnosisItems(diagnosisFase3);
+    const items = Array.isArray(diagnosisFase3.resultados_por_item) && diagnosisFase3.resultados_por_item.length > 0
+      ? diagnosisFase3.resultados_por_item
+      : normalizeIdoneidadDiagnosisItems(diagnosisFase3);
     
     if (items.length === 0 && diagnosisFase3.indicadores) {
       return Object.entries(diagnosisFase3.indicadores).filter(([key]) => key !== 'general').map(([key, data]: [string, any]) => {
@@ -173,8 +176,8 @@ export default function TipoProyectosModule() {
           fullLabel: `Dimensión General: ${key}`,
           dimension: key,
           Puntaje: typeof data.promedio === 'number' ? Number(data.promedio.toFixed(1)) : 0,
-          AgileZone: 4,
-          HybridZone: 8,
+          AgileZone: 3,
+          TransitionZone: 6.9,
           PredictiveZone: 10,
         };
       });
@@ -190,8 +193,8 @@ export default function TipoProyectosModule() {
         fullLabel: factorInfo ? `${itemLabel} - ${factorInfo.name}` : itemLabel,
         dimension: res.dimension ?? inferIdoneidadDimension(itemLabel),
         Puntaje: score,
-        AgileZone: 4,
-        HybridZone: 8,
+        AgileZone: 3,
+        TransitionZone: 6.9,
         PredictiveZone: 10,
       };
     });

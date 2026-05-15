@@ -87,6 +87,7 @@ function buildPhasesFromDB(fasesEstado: Record<string, unknown>[]): Phase[] {
     const idx = (fe.numero_fase as number) - 1;
     if (idx < 0 || idx > 7) continue;
     const datos = (fe.datos_consolidados as Record<string, unknown>) ?? {};
+    const diagnosis = (datos?.diagnosis as Record<string, unknown>) ?? {};
     base[idx] = {
       ...base[idx],
       status: (fe.estado_visual as PhaseStatus) ?? 'bloqueado',
@@ -94,8 +95,12 @@ function buildPhasesFromDB(fasesEstado: Record<string, unknown>[]): Phase[] {
         ? new Date(fe.updated_at as string).toLocaleDateString('es-CO')
         : undefined,
       agentDiagnosis:
-        (datos?.diagnosis as Record<string, unknown>)?.summary as string
+        diagnosis?.summary as string
+        ?? diagnosis?.pmo_type as string
+        ?? diagnosis?.pmoType as string
         ?? (datos?.summary as string)
+        ?? (datos?.pmo_type as string)
+        ?? (datos?.pmoType as string)
         ?? undefined,
       agentData: datos,
     };

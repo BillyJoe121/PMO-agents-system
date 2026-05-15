@@ -22,6 +22,66 @@ function extractCurrentGuideForRevision(comments: unknown): any | null {
   return (record.current_guide_for_revision ?? record.previous_guide ?? record.current_guide ?? null) as any;
 }
 
+function normalizeMethodologyType(value: unknown) {
+  const token = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (token.includes("agil")) return "Agil";
+  if (token.includes("predict")) return "Predictivo";
+  return "Hibrido";
+}
+
+function normalizePhase4Envelope(value: unknown, inputEnvelope: any, processingTimeSeconds: number) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+
+  const record = value as Record<string, any>;
+  const metadata = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata)
+    ? record.metadata
+    : {};
+  const diagnosis = record.diagnosis && typeof record.diagnosis === "object" && !Array.isArray(record.diagnosis)
+    ? record.diagnosis
+    : null;
+
+  const normalized: Record<string, any> = {
+    metadata: {
+      project_id: inputEnvelope?.metadata?.project_id ?? metadata.project_id ?? "",
+      phase: 4,
+      agent_id: "asistente-4",
+      timestamp: new Date().toISOString(),
+      iteration: inputEnvelope?.metadata?.iteration ?? metadata.iteration ?? 1,
+      status: record.error ? "error" : (metadata.status ?? "success"),
+      processing_time_seconds: Number(processingTimeSeconds.toFixed(2)),
+    },
+    diagnosis,
+    error: record.error ?? null,
+  };
+
+  if (diagnosis) {
+    const rawPmoType = diagnosis.pmo_type ?? diagnosis.pmoType;
+    if (rawPmoType !== undefined && rawPmoType !== null) {
+      diagnosis.pmo_type = normalizeMethodologyType(rawPmoType);
+    }
+    if (diagnosis.type_breakdown && typeof diagnosis.type_breakdown === "object") {
+      const agile = Number(diagnosis.type_breakdown.agile_weight);
+      const predictive = Number(diagnosis.type_breakdown.predictive_weight);
+      if (Number.isFinite(agile) && Number.isFinite(predictive) && agile + predictive !== 100) {
+        const agileWeight = Math.max(0, Math.min(100, Math.round(agile)));
+        diagnosis.type_breakdown.agile_weight = agileWeight;
+        diagnosis.type_breakdown.predictive_weight = 100 - agileWeight;
+      }
+      if (diagnosis.pmo_type !== "Hibrido") {
+        diagnosis.type_breakdown.hybrid_rationale = "";
+      }
+    }
+    if (Array.isArray(diagnosis.supporting_evidence)) {
+      diagnosis.supporting_evidence = diagnosis.supporting_evidence.slice(0, 8);
+    }
+  }
+
+  return normalized;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CORS — Permite llamadas desde el Frontend React
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,8 +191,8 @@ async function runAgent(
   // La Edge Function gestiona su propio estado de forma autónoma.
   // Esto garantiza que el check de cancelación posterior siempre encuentre
   // el estado correcto, sin importar el estado previo de la fila en la BD.
-  // Fases 3 y 9 se auto-completan directamente y omiten este paso.
-  if (phaseNumber !== 3 && phaseNumber !== 9) {
+  // Fase 3 se auto-completa directamente y omite este paso.
+  if (phaseNumber !== 3) {
     const activeRunId = runId ?? createRunId(phaseNumber);
     await supabase
       .from("fases_estado")
@@ -141,7 +201,7 @@ async function runAgent(
           proyecto_id: projectId,
           numero_fase: phaseNumber,
           estado_visual: "procesando",
-          datos_consolidados: phaseNumber === 4
+          datos_consolidados: phaseNumber === 4 || phaseNumber === 9
             ? phaseProcessingPayload(phaseNumber, activeRunId)
             : null,
           updated_at: new Date().toISOString(),
@@ -168,9 +228,17 @@ async function runAgent(
   const phase3OutputInstruction = phaseNumber === 3 ? `
 
 REQUISITO ESTRICTO PARA FASE 3:
-El objeto diagnosis.resultados_por_item DEBE incluir un elemento por CADA pregunta de idoneidad encontrada en el JSON de entrada y/o CSV adjunto.
-No resumas esta lista. No incluyas solo ejemplos. Deben estar todos los codigos Cxx, Exx y Pxx con promedio numerico, minimo, maximo, desviacion_estandar, dimension y zona.
-Si existen 23 preguntas en los datos de entrada, resultados_por_item debe tener exactamente 23 objetos.` : "";
+El objeto diagnosis.resultados_por_item DEBE incluir un elemento por CADA item valido de idoneidad encontrado en el JSON de entrada y/o CSV adjunto.
+No resumas esta lista. No incluyas solo ejemplos. Deben estar los codigos C01-C10, E01-E06 y P01-P05 presentes en los datos recibidos, con promedio numerico, minimo, maximo, desviacion_estandar, dimension y zona.
+La escala de zonas es estrictamente: 1.0-3.0 agil, 3.1-6.9 transicion, 7.0-10.0 predictivo. Si existen los 21 items esperados, resultados_por_item debe tener exactamente 21 objetos.` : "";
+
+  const phase4OutputInstruction = phaseNumber === 4 ? `
+
+REQUISITO ESTRICTO PARA FASE 4:
+El JSON DE ENTRADA ya viene consolidado con metadata, payload.phase1_diagnosis, payload.phase2_diagnosis, payload.phase3_diagnosis y comments. No uses documentos crudos ni inventes fuentes.
+Devuelve exclusivamente el objeto JSON del contrato de salida del Asistente 4. metadata.agent_id debe ser "asistente-4"; diagnosis.pmo_type debe ser "Agil", "Hibrido" o "Predictivo"; confidence_label debe ser "Alto", "Medio" o "Bajo".
+diagnosis.justification debe tener minimo 80 palabras con evidencia explicita por fuente disponible y razonamiento de ponderacion. Si pmo_type es "Hibrido", type_breakdown.hybrid_rationale debe tener minimo 50 palabras; si no, debe ser "".
+type_breakdown.agile_weight + type_breakdown.predictive_weight debe sumar exactamente 100. supporting_evidence debe tener maximo 8 strings y referenciar la fuente. No evalues madurez y no incluyas recomendaciones.` : "";
 
   const phase7OutputInstruction = phaseNumber === 7 ? `
 
@@ -195,7 +263,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     inputEnvelope,
     null,
     2
-  )}${phase3OutputInstruction}${phase7OutputInstruction}${enforceJsonInstruction}`;
+  )}${phase3OutputInstruction}${phase4OutputInstruction}${phase7OutputInstruction}${enforceJsonInstruction}`;
 
   // Preparar contenido multimodal
   let parts: any[] = [{ text: fullPrompt }];
@@ -204,7 +272,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   
   if (hasFiles) {
     // Descargar y convertir archivos a base64
-    const filePromises = __fileUrls.map(async (fileData: {url: string, type: string}) => {
+    const filePromises = __fileUrls.map(async (fileData: {url: string, type: string, label?: string}) => {
       try {
         const res = await fetch(fileData.url);
         if (!res.ok) {
@@ -220,9 +288,14 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
           const decoder = new TextDecoder('utf-8');
           const textContent = decoder.decode(bytes);
           if (phaseNumber === 3) csvTextsForPhase3.push(textContent);
-          return {
+          return [
+            {
+              text: `\n\n--- METADATOS DE ARCHIVO ADJUNTO ---\n${fileData.label ?? "Archivo CSV adjunto"}\n`
+            },
+            {
             text: `\n\n--- INICIO CONTENIDO DE ARCHIVO CSV ADJUNTO ---\n${textContent}\n--- FIN CONTENIDO DE ARCHIVO CSV ADJUNTO ---\nPor favor, ten muy en cuenta los datos de este archivo CSV para tu análisis.\n`
-          };
+            }
+          ];
         }
 
         let binary = '';
@@ -234,19 +307,26 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
         const base64 = btoa(binary);
         
         // Formato nativo de la API de Gemini (solo PDFs o imágenes lo soportan de forma nativa en parts)
-        return {
-          inlineData: {
-            mimeType: fileData.type,
-            data: base64
+        return [
+          {
+            text: `\n\n--- METADATOS DE ARCHIVO ADJUNTO ---\n${fileData.label ?? "Archivo PDF adjunto"}\n--- EL SIGUIENTE PDF CORRESPONDE A LOS METADATOS ANTERIORES ---\n`
+          },
+          {
+            inlineData: {
+              mimeType: fileData.type,
+              data: base64,
+              sourceUrl: fileData.url,
+              filename: fileData.label ?? `archivo-adjunto.${fileData.type === "text/csv" ? "csv" : "pdf"}`
+            }
           }
-        };
+        ];
       } catch (e) {
         console.error("Error fetching file", e);
         return null;
       }
     });
 
-    const fileParts = (await Promise.all(filePromises)).filter(Boolean);
+    const fileParts = (await Promise.all(filePromises)).flat().filter(Boolean);
     parts.push(...fileParts);
   }
 
@@ -254,22 +334,28 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   const modelSettings = await getAiModelSettings(supabase);
   const modelsToTry = getModelCandidates(modelSettings);
   const apiKeys = {
-    gemini: Deno.env.get("GOOGLE_API_KEY") ?? "",
-    kimi: Deno.env.get("MOONSHOT_API_KEY") ?? Deno.env.get("KIMI_API_KEY") ?? "",
+    openai: Deno.env.get("OPENAI_API_KEY") ?? "",
+    anthropic: Deno.env.get("ANTHROPIC_API_KEY") ?? "",
+    gemini: Deno.env.get("GOOGLE_API_KEY") ?? Deno.env.get("GEMINI_API_KEY") ?? "",
   };
   
-  // Invocar Gemini a traves de API REST nativa (para soportar PDF inlineData sin problemas de LangChain)
+  // Invocar el proveedor configurado con fallback cruzado OpenAI <-> Anthropic.
+  const providerTimeoutMs =
+    phaseNumber === 9 ? 75000 :
+    phaseNumber === 7 ? 110000 :
+    90000;
   const startTime = Date.now();
-  const geminiResult = await callAiWithFallback(apiKeys, modelsToTry, {
+  const aiResult = await callAiWithFallback(apiKeys, modelsToTry, {
     contents: [{ role: "user", parts }],
     generationConfig: {
       temperature: agentConfig?.temperatura ?? 1,
-      maxOutputTokens: phaseNumber === 7 ? 65536 : undefined,
+      maxOutputTokens: phaseNumber === 7 ? 65536 : phaseNumber === 9 ? 16384 : undefined,
+      providerTimeoutMs,
       responseMimeType: "application/json",
     }
   });
 
-  const geminiData = geminiResult.data;
+  const geminiData = aiResult.data;
   const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
   // Extraer y validar el JSON de la respuesta
@@ -280,7 +366,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
 
   if (finishReason === "MAX_TOKENS") {
     throw new Error(
-      `El modelo ${geminiResult.provider}:${geminiResult.model} corto la respuesta por limite de tokens antes de completar el JSON. Aumenta maxOutputTokens o divide la fase en partes mas pequenas.`
+      `El modelo ${aiResult.provider}:${aiResult.model} corto la respuesta por limite de tokens antes de completar el JSON. Aumenta maxOutputTokens o divide la fase en partes mas pequenas.`
     );
   }
 
@@ -318,7 +404,7 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
 
   const currentData = currentState?.datos_consolidados as any;
   const runMismatch =
-    phaseNumber === 4 &&
+    (phaseNumber === 4 || phaseNumber === 9) &&
     runId &&
     isProcessingMarker(currentData) &&
     currentData._run_id !== runId;
@@ -364,7 +450,18 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
     };
   }
 
-  diagnosisToSave = attachModelMetadata(diagnosisToSave, geminiResult, modelSettings);
+  if (phaseNumber === 4) {
+    diagnosisToSave = normalizePhase4Envelope(diagnosisToSave, inputEnvelope, Number(processingTime));
+  } else {
+    diagnosisToSave = attachModelMetadata(diagnosisToSave, aiResult, modelSettings);
+  }
+
+  const agentReturnedError = Boolean(
+    diagnosisToSave &&
+    typeof diagnosisToSave === "object" &&
+    !Array.isArray(diagnosisToSave) &&
+    ((diagnosisToSave as any).error || (diagnosisToSave as any).metadata?.status === "error")
+  );
 
   // Guardar en fases_estado
   const { error: saveError } = await supabase
@@ -373,7 +470,9 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
       {
         proyecto_id: projectId,
         numero_fase: phaseNumber,
-        estado_visual: (phaseNumber === 3 || phaseNumber === 9) ? "completado" : "disponible", // Phase 3 & 9 auto-complete
+        estado_visual: agentReturnedError
+          ? "error"
+          : (phaseNumber === 3 || phaseNumber === 9) ? "completado" : "disponible", // Phase 3 & 9 auto-complete
         datos_consolidados: diagnosisToSave,
         updated_at: new Date().toISOString(),
       },
@@ -518,8 +617,8 @@ serve(async (req) => {
       }
     }
 
-    if (phaseNumber === 4) {
-      runId = createRunId(4);
+    if (phaseNumber === 4 || phaseNumber === 9) {
+      runId = createRunId(phaseNumber);
     }
 
     // Marcar fase como "procesando" en la UI
@@ -530,7 +629,7 @@ serve(async (req) => {
           proyecto_id: projectId,
           numero_fase: phaseNumber,
           estado_visual: "procesando",
-          datos_consolidados: phaseNumber === 4 && runId
+          datos_consolidados: (phaseNumber === 4 || phaseNumber === 9) && runId
             ? phaseProcessingPayload(phaseNumber, runId)
             : null,
           updated_at: new Date().toISOString(),
@@ -590,11 +689,18 @@ serve(async (req) => {
     if (phaseNumber === 1) {
       const agent9Job = (async () => {
         try {
+          const agent9RunId = createRunId(9);
           await supabase.from("fases_estado").upsert(
-            { proyecto_id: projectId, numero_fase: 9, estado_visual: "procesando", datos_consolidados: null, updated_at: new Date().toISOString() },
+            {
+              proyecto_id: projectId,
+              numero_fase: 9,
+              estado_visual: "procesando",
+              datos_consolidados: phaseProcessingPayload(9, agent9RunId),
+              updated_at: new Date().toISOString(),
+            },
             { onConflict: "proyecto_id,numero_fase" }
           );
-          await runAgent(supabase, projectId, 9, 1, null);
+          await runAgent(supabase, projectId, 9, 1, null, undefined, undefined, agent9RunId);
         } catch (e) {
           console.error("[pmo-agent] Error auto-trigger Agente 9:", e);
           await supabase.from("fases_estado")

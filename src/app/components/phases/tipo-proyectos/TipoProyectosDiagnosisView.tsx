@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CheckCircle2, GitMerge, Info, Lightbulb, MessageSquare, RefreshCw, Save, ShieldAlert, Sparkles, Target, ThumbsUp, Zap } from 'lucide-react';
+import { Calendar, CheckCircle2, GitMerge, Info, Lightbulb, MessageSquare, RefreshCw, Save, ShieldAlert, Sparkles, Target, ThumbsUp, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
   levelTone,
@@ -130,10 +130,12 @@ function BreakdownPanel({ diagnosis }: { diagnosis: any }) {
           <PhaseReportProgressBar label="Predictivo" value={predictive} max={100} tone="blue" />
         </div>
       </div>
-      <div className="rounded-2xl border border-[#e4eb60]/50 bg-[#e4eb60]/25 p-4">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-[#7a7f1e] mb-2" style={{ fontWeight: 850 }}>Racional hibrido</p>
-        <p className="text-neutral-700 text-[13px] leading-relaxed">{valueOrEmpty(breakdown.hybrid_rationale)}</p>
-      </div>
+      {String(breakdown.hybrid_rationale ?? '').trim() && (
+        <div className="rounded-2xl border border-[#e4eb60]/50 bg-[#e4eb60]/25 p-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-[#7a7f1e] mb-2" style={{ fontWeight: 850 }}>Racional hibrido</p>
+          <p className="text-neutral-700 text-[13px] leading-relaxed">{breakdown.hybrid_rationale}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -197,9 +199,71 @@ function IntegrationPanel({ diagnosis }: { diagnosis: any }) {
     <PhaseReportKeyValueGrid rows={[
       { label: 'Coherencia entre fuentes', value: diagnosis.coherencia, tone: levelTone(diagnosis.coherencia) },
       { label: 'Estado de integracion', value: diagnosis.estado_integracion, tone: levelTone(diagnosis.estado_integracion) },
-      { label: 'Confianza', value: `${valueOrEmpty(diagnosis.confidence)}%`, tone: levelTone(diagnosis.confidence_label) },
+      { label: 'Confianza', value: `${valueOrEmpty(diagnosis.confidence ?? diagnosis.confidence_level)}%`, tone: levelTone(diagnosis.confidence_label) },
       { label: 'Tipo PMO', value: diagnosis.pmoType, tone: typeTone(diagnosis.pmoType) },
     ]} />
+  );
+}
+
+function FasesOpcionalesPanel({ diagnosis }: { diagnosis: any }) {
+  const fases = diagnosis.fases_opcionales;
+  if (!fases) return null;
+  const preProyecto = fases.pre_proyecto;
+  const postCierre = fases.post_cierre;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <article className={`rounded-2xl border overflow-hidden ${
+        preProyecto?.aplica ? 'border-green-200 bg-white' : 'border-neutral-100 bg-neutral-50'
+      }`}>
+        <div className={`h-1 ${preProyecto?.aplica ? 'bg-green-500' : 'bg-neutral-200'}`} />
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Calendar size={15} className={preProyecto?.aplica ? 'text-green-600' : 'text-neutral-400'} />
+              <p className="text-neutral-950 text-[14px]" style={{ fontWeight: 800 }}>Pre-proyecto</p>
+            </div>
+            <span className={`px-2.5 py-1 rounded-full text-[10px] border ${
+              preProyecto?.aplica
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : 'bg-neutral-100 text-neutral-500 border-neutral-200'
+            }`} style={{ fontWeight: 800 }}>
+              {preProyecto?.aplica ? 'Aplica' : 'No aplica'}
+            </span>
+          </div>
+          {preProyecto?.justificacion ? (
+            <p className="text-neutral-700 text-[13px] leading-relaxed">{preProyecto.justificacion}</p>
+          ) : (
+            <p className="text-neutral-400 text-[12px] italic">Sin evidencia identificada.</p>
+          )}
+        </div>
+      </article>
+
+      <article className={`rounded-2xl border overflow-hidden ${
+        postCierre?.aplica ? 'border-blue-200 bg-white' : 'border-neutral-100 bg-neutral-50'
+      }`}>
+        <div className={`h-1 ${postCierre?.aplica ? 'bg-blue-500' : 'bg-neutral-200'}`} />
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Calendar size={15} className={postCierre?.aplica ? 'text-blue-600' : 'text-neutral-400'} />
+              <p className="text-neutral-950 text-[14px]" style={{ fontWeight: 800 }}>Post-cierre</p>
+            </div>
+            <span className={`px-2.5 py-1 rounded-full text-[10px] border ${
+              postCierre?.aplica
+                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                : 'bg-neutral-100 text-neutral-500 border-neutral-200'
+            }`} style={{ fontWeight: 800 }}>
+              {postCierre?.aplica ? 'Aplica' : 'No aplica'}
+            </span>
+          </div>
+          {postCierre?.justificacion ? (
+            <p className="text-neutral-700 text-[13px] leading-relaxed">{postCierre.justificacion}</p>
+          ) : (
+            <p className="text-neutral-400 text-[12px] italic">Sin evidencia identificada.</p>
+          )}
+        </div>
+      </article>
+    </div>
   );
 }
 
@@ -302,7 +366,13 @@ export default function TipoProyectosDiagnosisView(props: TipoProyectosDiagnosis
         <BreakdownPanel diagnosis={diagnosis} />
       </PhaseReportSection>
 
-      <PhaseReportSection title="Evidencia principal" eyebrow="Soporte del diagnostico" icon={<Info size={18} />} tone="green">
+      {diagnosis.fases_opcionales && (
+        <PhaseReportSection title="Fases opcionales" eyebrow="Pre-proyecto y post-cierre" icon={<Calendar size={18} />} tone="green">
+          <FasesOpcionalesPanel diagnosis={diagnosis} />
+        </PhaseReportSection>
+      )}
+
+      <PhaseReportSection title="Evidencia de soporte" eyebrow="Maximo 8 items referenciados" icon={<Info size={18} />} tone="green">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {normalizeList(diagnosis.keyFactors).map((factor, i) => (
             <div key={i} className="rounded-2xl border border-[#4cb979]/25 bg-[#4cb979]/10 p-4 flex gap-3">

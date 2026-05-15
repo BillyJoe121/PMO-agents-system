@@ -20,6 +20,25 @@ export interface DocumentoLocal {
 
 export interface AgentDiagnosis {
   summary: string;
+  organizacion?: string;
+  sector?: string;
+  tamano_aproximado?: string;
+  tipo_proyecto_analizado?: string;
+  descripcion_negocio?: string;
+  tipos_de_proyecto?: Array<{ nombre: string; descripcion: string }>;
+  estructura_organizacional?: {
+    roles_identificados: Array<{
+      nombre_cargo: string;
+      area: string;
+      nivel_jerarquico: string;
+      participacion_en_proyectos: string;
+      fuente: string;
+    }>;
+    existe_area_pmo: boolean;
+    niveles_jerarquicos: string[];
+    areas_involucradas_en_proyectos: string[];
+    fuentes_documentales: string[];
+  };
   cobertura_documental: {
     total_esperado: number;
     recibidos_completos: number;
@@ -60,13 +79,47 @@ export interface AgentDiagnosis {
   }>;
   estado_documentos?: Array<{
     document_id: string;
-    codigo_catalogo: string;
-    nombre: string;
+    document_code: string;
+    document_name: string;
+    file_format?: string;
     estado: string;
     vigencia: string;
     valor_analitico: string;
     nivel_analisis: string;
+    observaciones?: string;
   }>;
+  artefactos_identificados?: Array<{
+    nombre: string;
+    nombre_en_empresa: string;
+    tipo: string;
+    fase_del_ciclo: string[];
+    existe_en_empresa: boolean;
+    tiene_datos_reales: boolean;
+    nivel_madurez_artefacto: string;
+    document_id_fuente: string;
+    observaciones: string;
+  }>;
+  herramientas_identificadas?: Array<{
+    nombre: string;
+    tipo: string;
+    uso_identificado: string;
+    fases_donde_se_usa: string[];
+    es_repositorio_digital_principal: boolean;
+    document_id_fuente: string;
+  }>;
+  gobernanza_documental_detectada?: {
+    tiene_sgc: boolean;
+    evidencia_sgc: string;
+    usa_codificacion_documental: boolean;
+    patron_codificacion: string;
+    tiene_repositorio_digital: boolean;
+    herramienta_repositorio: string;
+    tiene_gestion_cambios_formal: boolean;
+    evidencia_gestion_cambios: string;
+    tiene_lecciones_aprendidas: boolean;
+    evidencia_lecciones_aprendidas: string;
+    fuentes_documentales: string[];
+  };
   cobertura_ciclo_vida?: {
     completitud?: string;
     fases_faltantes?: string[];
@@ -83,6 +136,10 @@ export interface AgentDiagnosis {
     procesos_documentados?: string[];
   }>;
   insumos_para_agente_4: {
+    tiene_preproyecto?: boolean | null;
+    justificacion_preproyecto?: string;
+    tiene_postcierre?: boolean | null;
+    justificacion_postcierre?: string;
     nivel_estandarizacion: string;
     nivel_calidad_documental: string;
     hallazgos_clave_resumen?: string[];
@@ -95,6 +152,40 @@ export interface AgentDiagnosis {
     senales_estructuracion_formal: Array<{ descripcion: string; nivel_evidencia: string; documentos_fuente?: string[] }>;
     senales_flexibilidad_agil: Array<{ descripcion: string; nivel_evidencia: string; documentos_fuente?: string[] }>;
   };
+  listo_para_integracion?: boolean;
+}
+
+export interface AgentErrorPayload {
+  code?: string;
+  message: string;
+  details?: string;
+  retryable?: boolean;
+}
+
+function extractAgentError(value: any): AgentErrorPayload | null {
+  if (!value || typeof value !== 'object') return null;
+
+  if (value._error) {
+    return {
+      message: value.message ?? 'El agente reporto un error durante el procesamiento.',
+      details: value.details,
+      retryable: true,
+    };
+  }
+
+  const hasErrorStatus = value.metadata?.status === 'error';
+  const hasErrorTemplate = value.diagnosis === null && value.error;
+  if (hasErrorStatus || hasErrorTemplate) {
+    const error = value.error ?? {};
+    return {
+      code: error.code,
+      message: error.message ?? 'El agente no pudo generar un diagnostico valido.',
+      details: error.details,
+      retryable: error.retryable,
+    };
+  }
+
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,6 +201,7 @@ export function useDocumentacion(projectId: string) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [diagnosis, setDiagnosis] = useState<AgentDiagnosis | null>(null);
+  const [agentError, setAgentError] = useState<AgentErrorPayload | null>(null);
   const [documentos, setDocumentos] = useState<DocumentoLocal[]>([]);
   const [uploadProgress, setUploadProgress] = useState<Record<string, 'pending' | 'uploading' | 'done' | 'error'>>({});
 
@@ -152,8 +244,15 @@ export function useDocumentacion(projectId: string) {
       if (faseData?.datos_consolidados) {
         // La BD guarda el envelope completo { metadata: {...}, diagnosis: {...} }
         const consolidated = faseData.datos_consolidados as Record<string, any>;
+        const storedError = extractAgentError(consolidated);
+        if (storedError) {
+          setAgentError(storedError);
+          setDiagnosis(null);
+          return;
+        }
         const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
         setDiagnosis(innerDiagnosis as AgentDiagnosis);
+        setAgentError(null);
       }
     } catch (err) {
       console.error('Error fetching initial phase 1 data', err);
@@ -255,6 +354,7 @@ export function useDocumentacion(projectId: string) {
   const runAgent = useCallback(async (iteration = 1, comments: string | null = null) => {
     setIsAnalyzing(true);
     setDiagnosis(null);
+    setAgentError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -283,8 +383,15 @@ export function useDocumentacion(projectId: string) {
       }
 
       // El diagnóstico viene en result.data.diagnosis (estructura del Agente 3)
+      const reportedError = extractAgentError(result.data);
+      if (reportedError) {
+        setAgentError(reportedError);
+        throw new Error(reportedError.message);
+      }
+
       const diagnosisData: AgentDiagnosis = result.data?.diagnosis ?? result.data;
       setDiagnosis(diagnosisData);
+      setAgentError(null);
 
       return diagnosisData;
     } catch (err) {
@@ -357,6 +464,7 @@ export function useDocumentacion(projectId: string) {
     isLoadingData,
     isProcessing: isUploading || isAnalyzing,
     uploadProgress,
+    agentError,
     diagnosis,
     documentos,
     setDocumentos,

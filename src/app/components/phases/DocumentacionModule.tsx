@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { motion } from 'motion/react';
+import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { useDocumentacion, type AgentDiagnosis, type DocumentoLocal } from '../../hooks/useDocumentacion';
+import { useDocumentacion, type AgentDiagnosis, type AgentErrorPayload, type DocumentoLocal } from '../../hooks/useDocumentacion';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
@@ -19,6 +20,31 @@ import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
 type Documento = DocumentoLocal;
 
+function AgentErrorCard({ error }: { error: AgentErrorPayload }) {
+  return (
+    <div className="mt-6 rounded-2xl border border-[#ef4444]/25 bg-white overflow-hidden" style={{ boxShadow: '0 18px 44px -30px rgba(239,68,68,0.35)' }}>
+      <div className="h-1.5 bg-[#ef4444]" />
+      <div className="p-5 flex gap-4">
+        <div className="w-10 h-10 rounded-2xl bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 flex items-center justify-center flex-shrink-0">
+          <AlertTriangle size={18} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-[#b91c1c] mb-1" style={{ fontWeight: 800 }}>
+            {error.code ?? 'Error del agente'}
+          </p>
+          <p className="text-neutral-950 text-[15px] leading-snug" style={{ fontWeight: 800 }}>{error.message}</p>
+          {error.details && <p className="mt-2 text-neutral-600 text-[13px] leading-relaxed">{error.details}</p>}
+          {typeof error.retryable === 'boolean' && (
+            <p className="mt-3 text-[11px] text-neutral-500">
+              {error.retryable ? 'Puede reintentarse despues de ajustar la entrada.' : 'El agente marco este error como no reintentable.'}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DocumentacionModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const { getProject, updatePhaseStatus, isLoading } = useApp();
@@ -26,10 +52,8 @@ export default function DocumentacionModule() {
 
   const project = getProject(projectId!);
   const phase = project?.phases.find(p => p.number === 1);
-  const isCompleted = phase?.status === 'completado';
 
-  const { isProcessing: hookIsProcessing, isLoadingData, diagnosis, documentos, setDocumentos, processPhase, fetchInitialData, deleteDocument } = useDocumentacion(projectId!);
-  const isProcessing = phase?.status === 'procesando' || hookIsProcessing;
+  const { isProcessing: hookIsProcessing, isLoadingData, agentError, diagnosis, documentos, setDocumentos, processPhase, fetchInitialData, deleteDocument } = useDocumentacion(projectId!);
 
   const [liveDiagnosis, setLiveDiagnosis] = useState<AgentDiagnosis | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -42,6 +66,10 @@ export default function DocumentacionModule() {
   const agent9PollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const agent9TriggerInFlightRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const visibleDiagnosis = liveDiagnosis ?? diagnosis;
+  const hasDiagnosis = Boolean(visibleDiagnosis);
+  const isCompleted = phase?.status === 'completado' || hasDiagnosis;
+  const isProcessing = !hasDiagnosis && !agentError && (phase?.status === 'procesando' || hookIsProcessing || isSending);
 
   useEffect(() => {
     fetchInitialData();
@@ -81,7 +109,7 @@ export default function DocumentacionModule() {
   }, [projectId]);
 
   useEffect(() => {
-    if (!projectId || (!isCompleted && !diagnosis)) return;
+    if (!projectId || (!isCompleted && !visibleDiagnosis)) return;
 
     const pollAgent9 = async () => {
       const { data, error } = await supabase
@@ -121,7 +149,7 @@ export default function DocumentacionModule() {
       } else if (data?.estado_visual === 'procesando') {
         const updatedAt = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
         const minutesElapsed = (Date.now() - updatedAt) / 1000 / 60;
-        if (minutesElapsed > 3) {
+        if (minutesElapsed > 12) {
           console.warn('[Agent9] Estado procesando > 3 min sin resultado — se considera timeout. Reintentando.');
           agent9TriggerInFlightRef.current = false;
           await supabase.from('fases_estado').upsert(
@@ -141,7 +169,7 @@ export default function DocumentacionModule() {
     agent9PollRef.current = setInterval(pollAgent9, 4000);
 
     return () => { if (agent9PollRef.current) clearInterval(agent9PollRef.current); };
-  }, [projectId, isCompleted, diagnosis, triggerAgent9]);
+  }, [projectId, isCompleted, visibleDiagnosis, triggerAgent9]);
 
   useEffect(() => {
     return () => { if (agent9PollRef.current) clearInterval(agent9PollRef.current); };
@@ -291,6 +319,8 @@ export default function DocumentacionModule() {
           onDelete={handleDelete}
         />
 
+        {agentError && <AgentErrorCard error={agentError} />}
+
         {!isCompleted && !isProcessing && (
           <div className="mt-8 flex justify-end">
             <motion.button
@@ -308,7 +338,7 @@ export default function DocumentacionModule() {
 
         {isCompleted && (
           <CompletedDiagnosisSection
-            diagnosis={liveDiagnosis ?? diagnosis}
+            diagnosis={visibleDiagnosis}
             agent9Status={agent9Status}
             agent9Data={agent9Data}
             expandedDim={expandedDim}

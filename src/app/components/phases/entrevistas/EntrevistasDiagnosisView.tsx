@@ -1,7 +1,7 @@
 import {
-  AlertCircle, AlertTriangle, BarChart3, Briefcase, CheckCircle2, Gauge,
+  AlertCircle, AlertTriangle, BarChart3, Briefcase, Calendar, CheckCircle2, Gauge,
   Layers3, Lightbulb, MessageSquare, Quote, Radio, ShieldAlert, Sparkles,
-  Target, Users
+  Target, Users, Wrench
 } from 'lucide-react';
 import type { EntrevistasDiagnosis } from '../../../hooks/useEntrevistas';
 import {
@@ -80,14 +80,33 @@ function ContextPanel({ diagnosis }: { diagnosis: EntrevistasDiagnosis }) {
   return (
     <div className="space-y-4">
       <PhaseReportKeyValueGrid rows={[
+        { label: 'Organizacion', value: diagnosis.contexto_organizacional?.organizacion, tone: 'slate' },
         { label: 'Sector', value: diagnosis.contexto_organizacional?.sector, tone: 'blue' },
         { label: 'Tamano aproximado', value: diagnosis.contexto_organizacional?.tamanio_aproximado, tone: 'purple' },
+        { label: 'Tipo proyecto analizado', value: diagnosis.contexto_organizacional?.tipo_proyecto_analizado, tone: 'amber' },
         { label: 'Cultura visible', value: diagnosis.contexto_organizacional?.cultura_visible, tone: 'green' },
-        { label: 'Nivel general formalizacion', value: diagnosis.insumos_para_agente_4?.nivel_general_formalizacion, tone: levelTone(diagnosis.insumos_para_agente_4?.nivel_general_formalizacion) },
+        { label: 'Nivel formalizacion general', value: diagnosis.nivel_formalizacion_general ?? diagnosis.insumos_para_agente_4?.nivel_general_formalizacion, tone: levelTone(diagnosis.nivel_formalizacion_general ?? diagnosis.insumos_para_agente_4?.nivel_general_formalizacion) },
       ]} />
       <div>
-        <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-2" style={{ fontWeight: 800 }}>Roles identificados</p>
-        <PhaseReportBadgeList items={diagnosis.roles_identificados} tone="blue" />
+        <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-400 mb-3" style={{ fontWeight: 800 }}>Roles identificados</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {(diagnosis.roles_identificados ?? []).map((rol, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-neutral-100 bg-white">
+              <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center flex-shrink-0">
+                <Briefcase size={14} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-neutral-900 text-[13px] truncate" style={{ fontWeight: 750 }}>{valueOrEmpty(rol.nombre_cargo)}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-neutral-500 text-[11px]">{valueOrEmpty(rol.area)}</span>
+                  <span className="w-1 h-1 rounded-full bg-neutral-300"></span>
+                  <span className="text-neutral-500 text-[11px] capitalize">{valueOrEmpty(rol.nivel_jerarquico)}</span>
+                </div>
+                <p className="text-neutral-600 text-[12px] leading-relaxed mt-1.5 line-clamp-2">{valueOrEmpty(rol.participacion_en_proyectos)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -262,6 +281,74 @@ function GapCard({ gap, index }: { gap: NonNullable<EntrevistasDiagnosis['brecha
   );
 }
 
+function HerramientaCard({ herramienta, index }: { herramienta: NonNullable<EntrevistasDiagnosis['herramientas_identificadas']>[number]; index: number }) {
+  const tone: PhaseReportTone = herramienta.es_repositorio_digital ? 'green' : 'blue';
+  const toneClass = phaseReportToneStyles[tone];
+  return (
+    <article className={`rounded-2xl border ${toneClass.border} bg-white overflow-hidden flex flex-col`}>
+      <div className={`h-1 ${toneClass.bar}`} />
+      <div className="p-4 flex-1 flex flex-col">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <p className="text-neutral-950 text-[15px] leading-snug" style={{ fontWeight: 800 }}>{valueOrEmpty(herramienta.nombre)}</p>
+            <p className={`mt-1 text-[11px] uppercase tracking-[0.08em] ${toneClass.text}`} style={{ fontWeight: 750 }}>Tipo: {valueOrEmpty(herramienta.tipo).replace(/_/g, ' ')}</p>
+          </div>
+          {herramienta.es_repositorio_digital && (
+            <span className={`px-2.5 py-1 rounded-full ${toneClass.soft} ${toneClass.text} border ${toneClass.border} text-[10px] flex-shrink-0`} style={{ fontWeight: 800 }}>
+              Repositorio
+            </span>
+          )}
+        </div>
+        <p className="text-neutral-700 text-[13px] leading-relaxed mb-4">{valueOrEmpty(herramienta.uso_identificado)}</p>
+        
+        <div className="mt-auto space-y-3">
+          <div className={`rounded-2xl border ${toneClass.border} ${toneClass.soft} p-3`}>
+            <p className={`text-[10px] uppercase tracking-[0.12em] ${toneClass.text} mb-2`} style={{ fontWeight: 850 }}>Fases donde se usa</p>
+            <PhaseReportBadgeList items={herramienta.fases_donde_se_usa} tone={tone} />
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.14em] text-neutral-400 mb-2" style={{ fontWeight: 800 }}>Mencionado por</p>
+            <PhaseReportBadgeList items={herramienta.mencionado_por} tone="slate" />
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ReunionCard({ reunion, index }: { reunion: NonNullable<EntrevistasDiagnosis['reuniones_existentes']>[number]; index: number }) {
+  const toneTone = levelTone(reunion.nivel_formalidad);
+  const toneClass = phaseReportToneStyles[toneTone];
+  return (
+    <article className={`rounded-2xl border ${toneClass.border} bg-white overflow-hidden flex flex-col`}>
+      <div className={`h-1 ${toneClass.bar}`} />
+      <div className="p-4 flex-1 flex flex-col">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <p className="text-neutral-950 text-[15px] leading-snug" style={{ fontWeight: 800 }}>{valueOrEmpty(reunion.nombre)}</p>
+            <p className={`mt-1 text-[11px] uppercase tracking-[0.08em] ${toneClass.text}`} style={{ fontWeight: 750 }}>Frecuencia: {valueOrEmpty(reunion.frecuencia)}</p>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full ${toneClass.soft} ${toneClass.text} border ${toneClass.border} text-[10px] flex-shrink-0`} style={{ fontWeight: 800 }}>
+            {valueOrEmpty(reunion.nivel_formalidad)}
+          </span>
+        </div>
+        <p className="text-neutral-700 text-[13px] leading-relaxed mb-4">{valueOrEmpty(reunion.proposito)}</p>
+        
+        <div className="mt-auto space-y-3">
+          <div className={`rounded-2xl border ${toneClass.border} ${toneClass.soft} p-3`}>
+            <p className={`text-[10px] uppercase tracking-[0.12em] ${toneClass.text} mb-2`} style={{ fontWeight: 850 }}>Participantes</p>
+            <PhaseReportBadgeList items={reunion.participantes} tone={toneTone} />
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.14em] text-neutral-400 mb-2" style={{ fontWeight: 800 }}>Mencionada por</p>
+            <PhaseReportBadgeList items={reunion.mencionado_por} tone="slate" />
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function QualityInputPanel({ diagnosis }: { diagnosis: EntrevistasDiagnosis }) {
   return (
     <div className="space-y-4">
@@ -300,7 +387,14 @@ function Agent4Inputs({ diagnosis }: { diagnosis: EntrevistasDiagnosis }) {
   return (
     <div className="space-y-5">
       <PhaseReportKeyValueGrid rows={[
-        { label: 'Nivel general formalizacion', value: inputs?.nivel_general_formalizacion, tone: levelTone(inputs?.nivel_general_formalizacion) },
+        { label: 'Nivel general formalizacion', value: diagnosis.nivel_formalizacion_general ?? inputs?.nivel_general_formalizacion, tone: levelTone(diagnosis.nivel_formalizacion_general ?? inputs?.nivel_general_formalizacion) },
+        { label: 'Listo para integracion', value: diagnosis.listo_para_integracion, tone: diagnosis.listo_para_integracion ? 'green' : 'orange' },
+        { label: 'Tiene preproyecto', value: inputs?.tiene_preproyecto, tone: inputs?.tiene_preproyecto ? 'green' : 'orange' },
+        { label: 'Tiene postcierre', value: inputs?.tiene_postcierre, tone: inputs?.tiene_postcierre ? 'green' : 'orange' },
+      ]} />
+      <PhaseReportKeyValueGrid rows={[
+        { label: 'Justificacion preproyecto', value: inputs?.justificacion_preproyecto, tone: levelTone(inputs?.justificacion_preproyecto) },
+        { label: 'Justificacion postcierre', value: inputs?.justificacion_postcierre, tone: levelTone(inputs?.justificacion_postcierre) },
       ]} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <PhaseReportMiniList title="Patrones clave resumen" items={inputs?.patrones_clave_resumen} tone="blue" />
@@ -378,6 +472,22 @@ export default function EntrevistasDiagnosisView({ diagnosis }: { diagnosis: Ent
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {(diagnosis.brechas?.length ? diagnosis.brechas : [{ dimension_o_fase: EMPTY_VALUE, descripcion: EMPTY_VALUE, evidencia_o_ausencia: EMPTY_VALUE, impacto_potencial: EMPTY_VALUE }]).map((gap, i) => (
             <GapCard key={i} gap={gap} index={i} />
+          ))}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Herramientas identificadas" eyebrow="Ecosistema tecnologico" icon={<Wrench size={18} />} tone="blue">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {(diagnosis.herramientas_identificadas?.length ? diagnosis.herramientas_identificadas : [{ nombre: EMPTY_VALUE, tipo: EMPTY_VALUE, uso_identificado: EMPTY_VALUE, fases_donde_se_usa: [], es_repositorio_digital: false, mencionado_por: [] }]).map((herramienta, i) => (
+            <HerramientaCard key={i} herramienta={herramienta} index={i} />
+          ))}
+        </div>
+      </PhaseReportSection>
+
+      <PhaseReportSection title="Reuniones existentes" eyebrow="Rutinas y ceremonias" icon={<Calendar size={18} />} tone="purple">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {(diagnosis.reuniones_existentes?.length ? diagnosis.reuniones_existentes : [{ nombre: EMPTY_VALUE, frecuencia: EMPTY_VALUE, participantes: [], proposito: EMPTY_VALUE, nivel_formalidad: EMPTY_VALUE, mencionado_por: [] }]).map((reunion, i) => (
+            <ReunionCard key={i} reunion={reunion} index={i} />
           ))}
         </div>
       </PhaseReportSection>

@@ -72,7 +72,7 @@ const focusAreaRows = [
   { key: 'inicio', label: 'Inicio' },
   { key: 'planeacion', label: 'Planeación' },
   { key: 'ejecucion', label: 'Ejecución' },
-  { key: 'monitoreo_control', label: 'Monitoreo y Control' },
+  { key: 'monitoreo_y_control', label: 'Monitoreo y Control' },
   { key: 'cierre', label: 'Cierre' },
 ];
 
@@ -112,7 +112,8 @@ function findScore(map: Record<string, DomainScore> | undefined, key: string): D
   const aliases: Record<string, string[]> = {
     financiero: ['finanzas', 'financiera', 'financiero', 'costos', 'presupuesto'],
     planeacion: ['planeacion', 'planificacion', 'planificación'],
-    monitoreo_control: ['monitoreo_control', 'monitoreo_y_control', 'monitoreo', 'control', 'seguimiento_control'],
+    monitoreo_y_control: ['monitoreo_control', 'monitoreo_y_control', 'monitoreo', 'control', 'seguimiento_control'],
+    monitoreo_control: ['monitoreo_y_control', 'monitoreo_control', 'monitoreo', 'control', 'seguimiento_control'],
   };
 
   for (const [rawKey, value] of Object.entries(map)) {
@@ -264,6 +265,7 @@ export function parseAgentResults(datos: any): FullResults | null {
   const agil = toMaturity(agileSource);
 
   let overallScore = ns(Number(pickFirst(d.overall_maturity_score, d.overallScore, d.overall_score, d.score_global, d.puntuacion_global, 0)));
+  // v3: overall_maturity_score comes directly as 1-5 float; ns() will keep it in range
   if (overallScore === 0) {
     const scores = [predictiva?.score, agil?.score].filter(Boolean) as number[];
     if (scores.length > 0) overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);

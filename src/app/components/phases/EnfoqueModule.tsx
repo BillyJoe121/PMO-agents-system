@@ -43,11 +43,22 @@ function hasUsablePhase6Data(datos: any): boolean {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return false;
   if (d._processing || d._error) return false;
 
+  // v5 structure
   const ga = d.guide_approach ?? {};
   const pc = d.parametros_construccion ?? {};
   const experto = d.diagnostico_experto ?? {};
 
+  // v6 structure — new top-level blocks
+  const hasV6Blocks =
+    hasObjectContent(d.gobernanza_documental) ||
+    hasObjectContent(d.fases_ciclo_vida) ||
+    hasObjectContent(d.repositorio_organizacional) ||
+    hasObjectContent(d.enfoque_guia) ||
+    hasObjectContent(d.insumos_por_seccion) ||
+    hasObjectContent(d.resumen_insumos_utilizados);
+
   return Boolean(
+    hasV6Blocks ||
     ga.type ||
     ga.primary_framework ||
     ga.secondary_framework ||
@@ -110,7 +121,17 @@ interface EnfoqueResult {
 // ---------------------------------------------------------------------------
 // Parsers
 // ---------------------------------------------------------------------------
-function parsePmoType(diag?: string): PmoType {
+function parsePmoType(input?: any): any {
+  const diag = input?.diagnosis ?? input;
+  const raw = typeof diag === 'object'
+    ? diag?.pmo_type ?? diag?.pmoType ?? diag?.summary
+    : diag;
+  if (raw) {
+    const token = String(raw).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (token.includes('agil')) return 'Ágil';
+    if (token.includes('predictiv')) return 'Predictiva';
+  }
+  if (typeof diag !== 'string') return 'Híbrida';
   if (!diag) return 'Híbrida';
   if (diag.includes('Ágil')) return 'Ágil';
   if (diag.includes('Predictiva')) return 'Predictiva';
@@ -155,28 +176,53 @@ function formatSectionLabel(id: string): string {
 
 // ---------------------------------------------------------------------------
 // Agent result adapter: maps real pmo-agent output → EnfoqueResult for the UI
+// Handles both v5 (guide_approach/insumos_por_subagente) and v6 (gobernanza_documental / enfoque_guia) structures
 // ---------------------------------------------------------------------------
 function mapAgentResultV2(datos: any): EnfoqueResult | null {
   if (!hasUsablePhase6Data(datos)) return null;
   const d = datos.diagnosis ?? datos;
 
+  // ── v5 fields (backward compat) ──
   const ga = d.guide_approach ?? {};
   const pc = d.parametros_construccion ?? {};
   const experto = d.diagnostico_experto ?? {};
+
+  // ── v6 fields ──
+  const enfoque_guia = d.enfoque_guia ?? {};
+  const gov = d.gobernanza_documental ?? {};
+  const fases_ciclo = d.fases_ciclo_vida ?? {};
+  const params = d.parametros_construccion ?? {};
+  const seccionesActivadas: Record<string, boolean> = params.secciones_adicionales_activadas ?? {};
+  const resumen = d.resumen_insumos_utilizados ?? {};
+
   const severityMap: Record<string, Criticidad> = {
     critical: 'Alta', high: 'Alta', medium: 'Media', low: 'Baja',
   };
 
+  // ── Derive enfoque tipo (v6 > v5 fallback) ──
+  const enfoqueType = enfoque_guia.tipo ?? ga.type ?? ga.primary_framework ?? 'Enfoque metodologico';
+  const enfoqueOrientacion = enfoque_guia.justificacion ?? ga.strategic_orientation ?? d.summary ?? experto.resumen_diagnostico ?? '';
+
+  // ── Principios: unify v5 guide_approach + v6 enfoque_guia ──
   const principios: { titulo: string; descripcion: string }[] = [
-    ga.type ? { titulo: 'Tipo de enfoque', descripcion: ga.type } : null,
-    ga.primary_framework ? { titulo: 'Marco primario', descripcion: ga.primary_framework } : null,
-    ga.secondary_framework ? { titulo: 'Marco secundario', descripcion: ga.secondary_framework } : null,
-    ga.framework_balance ? { titulo: 'Balance metodologico', descripcion: ga.framework_balance } : null,
-    ga.justification ? { titulo: 'Justificacion', descripcion: ga.justification } : null,
+    enfoqueType ? { titulo: 'Tipo de enfoque', descripcion: enfoqueType } : null,
+    enfoque_guia.marco_primario || ga.primary_framework ? { titulo: 'Marco primario', descripcion: enfoque_guia.marco_primario ?? ga.primary_framework } : null,
+    enfoque_guia.marco_secundario || ga.secondary_framework ? { titulo: 'Marco secundario', descripcion: enfoque_guia.marco_secundario ?? ga.secondary_framework } : null,
+    enfoque_guia.balance_marcos || ga.framework_balance ? { titulo: 'Balance metodologico', descripcion: enfoque_guia.balance_marcos ?? ga.framework_balance } : null,
+    (enfoque_guia.agile_weight != null) ? { titulo: 'Peso agil', descripcion: `${enfoque_guia.agile_weight}%` } : null,
+    (enfoque_guia.predictive_weight != null) ? { titulo: 'Peso predictivo', descripcion: `${enfoque_guia.predictive_weight}%` } : null,
+    ga.justification ? { titulo: 'Justificacion (v5)', descripcion: ga.justification } : null,
+    // Fases opcionales
+    fases_ciclo.tiene_preproyecto === true ? { titulo: 'Pre-proyecto', descripcion: fases_ciclo.evidencia_preproyecto ?? 'Aplica' } : null,
+    fases_ciclo.tiene_postcierre === true ? { titulo: 'Post-cierre', descripcion: fases_ciclo.evidencia_postcierre ?? 'Aplica' } : null,
+    // Gobernanza documental destacada
+    gov.tiene_sgc === true ? { titulo: 'Sistema de Gestion de Calidad', descripcion: gov.evidencia_sgc ?? 'SGC identificado' } : null,
+    gov.tiene_repositorio_digital ? { titulo: 'Repositorio digital', descripcion: gov.repositorio_herramienta ?? gov.evidencia_repositorio ?? 'Identificado' } : null,
     pc.tone ? { titulo: 'Tono de la guia', descripcion: `${pc.tone}. ${pc.tone_justification ?? ''}`.trim() } : null,
     pc.recommended_length ? { titulo: 'Extension recomendada', descripcion: `${pc.recommended_length}. ${pc.length_justification ?? ''}`.trim() } : null,
   ].filter(Boolean) as { titulo: string; descripcion: string }[];
 
+  // ── Puntos débiles: prefer v6 brechas_priorizadas ──
   const puntosDebilesSource = experto.brechas_priorizadas ?? d.critical_weaknesses ?? [];
   const puntosDebiles: PuntoDebil[] = puntosDebilesSource.map((w: any) => ({
     area: w.brecha ?? w.weakness ?? w.tipo ?? '',
@@ -187,10 +233,40 @@ function mapAgentResultV2(datos: any): EnfoqueResult | null {
       (w.secciones_que_la_abordan ?? w.guide_sections_recommended ?? []).length > 0
         ? `Secciones: ${(w.secciones_que_la_abordan ?? w.guide_sections_recommended ?? []).map(formatSectionLabel).join(', ')}`
         : '',
+      w.es_brecha_raiz === true ? '[Brecha raiz]' : '',
     ].filter(Boolean).join(' - '),
   }));
 
-  const adicionales = (d.insumos_base_utilizados?.secciones_adicionales_activadas ?? []) as string[];
+  // ── Instrucciones: v6 secciones_adicionales_activadas + v5 fallback ──
+  const adicionales = Object.entries(seccionesActivadas)
+    .filter(([, active]) => active === true)
+    .map(([key]) => key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+
+  const adicionalesLegacy = (d.insumos_base_utilizados?.secciones_adicionales_activadas ?? []) as string[];
+
+  // Build gobernanza block for instructions
+  const govDirectrices: string[] = [
+    gov.tiene_sgc != null ? `SGC: ${gov.tiene_sgc ? 'Si' : 'No'}${gov.evidencia_sgc ? ` — ${gov.evidencia_sgc}` : ''}` : '',
+    gov.usa_codificacion_documental != null ? `Codificacion documental: ${gov.usa_codificacion_documental ? gov.estructura_codificacion || 'Si' : 'No'}` : '',
+    gov.practicas_gestion_cambios?.existe_proceso != null ? `Gestion de cambios: ${gov.practicas_gestion_cambios.nivel_formalidad ?? (gov.practicas_gestion_cambios.existe_proceso ? 'Existe' : 'No existe')}` : '',
+    gov.practicas_lecciones_aprendidas?.existe_proceso != null ? `Lecciones aprendidas: ${gov.practicas_lecciones_aprendidas.nivel_formalidad ?? (gov.practicas_lecciones_aprendidas.existe_proceso ? 'Existe' : 'No existe')}` : '',
+    gov.tiene_auditoria_proyectos != null ? `Auditoria de proyectos: ${gov.tiene_auditoria_proyectos ? 'Si' : 'No'}` : '',
+    gov.requiere_plan_contingencia != null ? `Plan de contingencia requerido: ${gov.requiere_plan_contingencia ? 'Si' : 'No'}` : '',
+    Array.isArray(gov.categorias_indicadores) && gov.categorias_indicadores.length > 0 ? `Categorias de indicadores: ${gov.categorias_indicadores.join(', ')}` : '',
+    Array.isArray(gov.gap_to_solution_mapping) && gov.gap_to_solution_mapping.length > 0 ? `Gap-to-solution: ${gov.gap_to_solution_mapping.length} mapeos definidos` : '',
+  ].filter(Boolean);
+
+  // Build resumen block
+  const resumenDirectrices: string[] = [
+    resumen.pmo_type ? `Tipo PMO: ${resumen.pmo_type}` : '',
+    resumen.overall_maturity_score != null ? `Score madurez: ${resumen.overall_maturity_score} — ${resumen.overall_maturity_label ?? ''}` : '',
+    resumen.total_actividades_existentes != null ? `Actividades existentes: ${resumen.total_actividades_existentes}` : '',
+    resumen.total_actividades_sugeridas_por_brecha != null ? `Actividades sugeridas: ${resumen.total_actividades_sugeridas_por_brecha}` : '',
+    resumen.total_indicadores_sugeridos != null ? `Indicadores sugeridos: ${resumen.total_indicadores_sugeridos}` : '',
+    resumen.secciones_adicionales_count != null ? `Secciones adicionales activas: ${resumen.secciones_adicionales_count}` : '',
+    Array.isArray(resumen.fases_adicionales_incluidas) && resumen.fases_adicionales_incluidas.length > 0 ? `Fases adicionales: ${resumen.fases_adicionales_incluidas.join(', ')}` : '',
+  ].filter(Boolean);
+
   const subagents = d.insumos_por_subagente ?? {};
   const instrucciones: InstruccionAgente7[] = [
     {
@@ -198,20 +274,35 @@ function mapAgentResultV2(datos: any): EnfoqueResult | null {
       icon: Target,
       directrices: [
         adicionales.length > 0
-          ? `Secciones adicionales activadas: ${adicionales.map(formatSectionLabel).join(', ')}`
-          : 'No se activaron secciones adicionales.',
+          ? `Secciones adicionales activadas: ${adicionales.join(', ')}`
+          : adicionalesLegacy.length > 0
+            ? `Secciones adicionales: ${adicionalesLegacy.map(formatSectionLabel).join(', ')}`
+            : 'No se activaron secciones adicionales.',
         ...(d.secciones ?? []).map((s: any) => `${formatSectionLabel(s.id ?? '')}: ${s.enfasis ?? s.condicion_inclusion ?? ''}`),
+        fases_ciclo.tiene_preproyecto === true ? `Pre-proyecto activo: ${fases_ciclo.nombre_preproyecto_en_organizacion || fases_ciclo.evidencia_preproyecto || 'Si'}` : '',
+        fases_ciclo.tiene_postcierre === true ? `Post-cierre activo: ${fases_ciclo.nombre_postcierre_en_organizacion || fases_ciclo.evidencia_postcierre || 'Si'}` : '',
       ].filter(Boolean),
     },
+    govDirectrices.length > 0 ? {
+      categoria: 'Gobernanza documental',
+      icon: BookOpen,
+      directrices: govDirectrices,
+    } : null,
+    resumenDirectrices.length > 0 ? {
+      categoria: 'Resumen de insumos',
+      icon: ListChecks,
+      directrices: resumenDirectrices,
+    } : null,
     {
       categoria: 'Audiencia, tono y longitud',
       icon: Lightbulb,
       directrices: [
-        `Audiencia objetivo: ${(pc.target_audience ?? []).join(', ') || 'No especificada'}`,
+        `Audiencia objetivo: ${(pc.target_audience ?? params.audiencia_primaria ?? []).join(', ') || 'No especificada'}`,
         pc.tone ? `Tono: ${pc.tone}` : null,
         pc.tone_justification ?? null,
         pc.recommended_length ? `Extension: ${pc.recommended_length}` : null,
         pc.length_justification ?? null,
+        params.nivel_madurez_para_tono ? `Nivel madurez tono: ${params.nivel_madurez_para_tono}` : null,
       ].filter(Boolean) as string[],
     },
     {
@@ -228,12 +319,12 @@ function mapAgentResultV2(datos: any): EnfoqueResult | null {
         .filter(([field]) => field !== 'descripcion_rol')
         .map(([field, fieldValue]) => `${labelFromKey(field)}: ${formatJsonScalar(fieldValue)}`),
     })),
-  ].filter(instr => instr.directrices.length > 0);
+  ].filter(Boolean).filter(instr => (instr as any).directrices.length > 0) as InstruccionAgente7[];
 
   return {
     enfoque: {
-      tipo: ga.type ?? ga.primary_framework ?? 'Enfoque metodologico',
-      orientacion: ga.strategic_orientation ?? d.summary ?? experto.resumen_diagnostico ?? '',
+      tipo: enfoqueType,
+      orientacion: enfoqueOrientacion,
       principios,
     },
     puntosDebiles,
@@ -303,7 +394,7 @@ export default function EnfoqueModule() {
   const phase4 = project?.phases.find(p => p.number === 4);
   const phase5 = project?.phases.find(p => p.number === 5);
 
-  const pmoType: PmoType = parsePmoType(phase4?.agentDiagnosis);
+  const pmoType: PmoType = parsePmoType(phase4?.agentData ?? phase4?.agentDiagnosis);
   const maturityLevel: number = parseMaturityLevel(phase5?.agentDiagnosis);
   const pmoColor = PMO_COLOR[pmoType];
 

@@ -53,9 +53,9 @@ export default function TipoProyectosIdoneidadAnnex({ phase3AgentData, radarData
                   <PolarGrid stroke="#e5e7eb" />
                   <PolarAngleAxis dataKey="subject" tick={{ fill: '#374151', fontSize: 11, fontWeight: 700 }} />
                   <PolarRadiusAxis angle={90} domain={[0, 10]} tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickCount={6} />
-                  <Radar name="Zona Predictiva (8-10)" dataKey="PredictiveZone" stroke="#5454e9" strokeWidth={1.5} strokeDasharray="5 3" fill="#5454e9" fillOpacity={0.12} isAnimationActive={false} />
-                  <Radar name="Zona Híbrida (4-8)" dataKey="HybridZone" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
-                  <Radar name="Zona Ágil (0-4)" dataKey="AgileZone" stroke="#10b981" strokeWidth={1.5} strokeDasharray="5 3" fill="#10b981" fillOpacity={0.22} isAnimationActive={false} />
+                  <Radar name="Zona Predictiva (7-10)" dataKey="PredictiveZone" stroke="#5454e9" strokeWidth={1.5} strokeDasharray="5 3" fill="#5454e9" fillOpacity={0.12} isAnimationActive={false} />
+                  <Radar name="Zona de transicion (3.1-6.9)" dataKey="TransitionZone" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" fill="#f59e0b" fillOpacity={0.18} isAnimationActive={false} />
+                  <Radar name="Zona agil (1-3)" dataKey="AgileZone" stroke="#10b981" strokeWidth={1.5} strokeDasharray="5 3" fill="#10b981" fillOpacity={0.22} isAnimationActive={false} />
                   <Radar name="Puntaje Real" dataKey="Puntaje" stroke="#5454e9" strokeWidth={3} fill="#5454e9" fillOpacity={0.18} dot={{ r: 4.5, fill: '#5454e9', stroke: '#fff', strokeWidth: 2 }} isAnimationActive={false} />
                   <Tooltip content={<CustomRadarTooltip />} />
                   <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '11px', fontWeight: 500 }} />
@@ -129,12 +129,12 @@ export default function TipoProyectosIdoneidadAnnex({ phase3AgentData, radarData
                           const score = getIdoneidadItemScore(res) ?? res.promedio;
                           const code = getIdoneidadItemCode(res);
                           const factorInfo = factorMapping[code] || { name: res.factor || 'Factor desconocido', description: res.interpretacion || 'Sin descripcion' };
-                          const zoneColor = score <= 4
+                          const zoneColor = score <= 3
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            : score <= 8
+                            : score < 7
                               ? 'bg-amber-50 text-amber-700 border-amber-100'
                               : 'bg-rose-50 text-rose-700 border-rose-100';
-                          const zoneText = score <= 4 ? 'Agil' : score <= 8 ? 'Hibrido' : 'Predictivo';
+                          const zoneText = score <= 3 ? 'Agil' : score < 7 ? 'Transicion' : 'Predictivo';
                           return (
                             <tr key={`${groupIndex}-${index}`} className="hover:bg-neutral-50/50 transition-colors">
                               <td className="px-3 py-2 pl-5">

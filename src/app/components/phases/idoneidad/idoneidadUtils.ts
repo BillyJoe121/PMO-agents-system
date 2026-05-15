@@ -7,7 +7,7 @@ export function getIdoneidadItemCode(value: any, fallback = 'Item') {
 export function getIdoneidadItemScore(value: any) {
   const score = value?.promedio ?? value?.puntaje ?? value?.score ?? value?.valor ?? value?.answer_score;
   const numeric = typeof score === 'number' ? score : Number(score);
-  return Number.isFinite(numeric) ? Number(numeric.toFixed(1)) : null;
+  return Number.isFinite(numeric) ? Number(numeric.toFixed(2)) : null;
 }
 
 export function inferIdoneidadDimension(codeOrDimension: string) {
@@ -101,25 +101,25 @@ export function normalizeIdoneidadDiagnosisItems(diagnosis: any): any[] {
 
 // Mapeo de factores de Idoneidad a nombres propuestos y descripciones tecnicas
 export const factorMapping: Record<string, { name: string; description: string }> = {
-  C01: { name: 'Apropiacion de Agilidad', description: 'Porcentaje de adopcion historica de marcos agiles.' },
-  C02: { name: 'Seguridad Psicologica', description: 'Nivel de confianza y entorno colaborativo interno.' },
-  C03: { name: 'Alineacion de Patrocinadores', description: 'Grado de entendimiento y soporte de los stakeholders.' },
-  C04: { name: 'Confianza en la Entrega', description: 'Fe de los patrocinadores en el ciclo de retroalimentacion.' },
-  C05: { name: 'Autonomia Operativa', description: 'Nivel de empoderamiento del equipo para toma de decisiones.' },
-  C06: { name: 'Tolerancia a la Incertidumbre', description: 'Disposicion a ajustar estimaciones segun el aprendizaje.' },
-  C07: { name: 'Compromiso de Recursos', description: 'Disponibilidad de personal y desjerarquizacion funcional.' },
-  C08: { name: 'Priorizacion de Funcionalidad', description: 'Valoracion de la entrega sobre la documentacion exhaustiva.' },
-  C09: { name: 'Aceptacion de Valor Incremental', description: 'Disposicion a recibir el producto por etapas.' },
-  C10: { name: 'Enfoque en Valor de Negocio', description: 'Medicion de exito basada en valor y no solo en cronograma.' },
-  E01: { name: 'Escalabilidad del Equipo', description: 'Tamano y gestion del nucleo de trabajo.' },
-  E02: { name: 'Seniory de Roles Clave', description: 'Nivel de experiencia tecnica en posiciones criticas.' },
-  E03: { name: 'Alfabetizacion Agil', description: 'Experiencia previa acumulada de los integrantes en agilidad.' },
-  E04: { name: 'Cercania con el Cliente', description: 'Frecuencia y calidad del feedback con el negocio.' },
-  E05: { name: 'Sincronia del Entorno', description: 'Factibilidad de co-ubicacion fisica o digital sincrona.' },
-  E06: { name: 'Autoridad del Product Owner', description: 'Capacidad decisoria del PO sin burocracia de comites.' },
-  P01: { name: 'Tasa de Variabilidad', description: 'Porcentaje de cambio mensual en los requisitos.' },
-  P02: { name: 'Viabilidad de MVP', description: 'Aceptacion de construccion por minimos viables evaluables.' },
-  P03: { name: 'Refinamiento Iterativo', description: 'Apertura a la evolucion de requisitos durante el ciclo.' },
-  P04: { name: 'Criticidad del Error', description: 'Magnitud del impacto ante fallos en el producto final.' },
-  P05: { name: 'Estabilidad de Alcance', description: 'Claridad y rigidez de los requisitos en la fase inicial.' },
+  C01: { name: 'Apertura al cambio', description: 'Disposicion organizacional frente a cambios en forma de trabajo, prioridades o decisiones.' },
+  C02: { name: 'Autonomia en decisiones', description: 'Capacidad de los equipos para tomar decisiones sin dependencia excesiva de aprobaciones superiores.' },
+  C03: { name: 'Confianza entre equipos', description: 'Nivel de confianza operativa entre areas y personas involucradas en proyectos.' },
+  C04: { name: 'Orientacion a valor vs. cumplimiento', description: 'Balance entre entregar valor y cumplir planes, procesos o documentacion predefinida.' },
+  C05: { name: 'Adaptacion ante imprevistos', description: 'Capacidad de responder ante cambios, bloqueos o nueva informacion durante el proyecto.' },
+  C06: { name: 'Tolerancia a la ambiguedad', description: 'Comodidad organizacional para trabajar con informacion incompleta o requisitos evolutivos.' },
+  C07: { name: 'Colaboracion entre areas', description: 'Grado de colaboracion transversal entre areas para ejecutar proyectos.' },
+  C08: { name: 'Liderazgo participativo', description: 'Nivel de participacion del liderazgo en decisiones colaborativas y aprendizaje del equipo.' },
+  C09: { name: 'Aprendizaje continuo', description: 'Presencia de practicas de aprendizaje, retroalimentacion y mejora continua.' },
+  C10: { name: 'Orientacion a resultados sobre procesos', description: 'Peso relativo de resultados de negocio frente al seguimiento estricto de procesos.' },
+  E01: { name: 'Capacidades tecnicas', description: 'Nivel de capacidades tecnicas disponibles en los equipos para ejecutar proyectos.' },
+  E02: { name: 'Experiencia en enfoques agiles', description: 'Experiencia del equipo trabajando con enfoques iterativos o agiles.' },
+  E03: { name: 'Acceso al cliente', description: 'Disponibilidad de contacto con cliente o usuario para validar decisiones y entregables.' },
+  E04: { name: 'Estructura del equipo', description: 'Claridad y estabilidad de la estructura del equipo de proyecto.' },
+  E05: { name: 'Dedicacion de roles', description: 'Nivel de dedicacion de los roles clave a las actividades del proyecto.' },
+  E06: { name: 'Nivel de autogestion', description: 'Capacidad del equipo para organizar y coordinar su trabajo.' },
+  P01: { name: 'Nivel de incertidumbre en requisitos', description: 'Grado de incertidumbre inicial sobre necesidades, alcance o requerimientos.' },
+  P02: { name: 'Frecuencia de cambios esperados', description: 'Frecuencia esperada de cambios durante el ciclo de vida del proyecto.' },
+  P03: { name: 'Viabilidad de entrega iterativa', description: 'Factibilidad de entregar resultados por incrementos o versiones parciales.' },
+  P04: { name: 'Criticidad y riesgo del producto', description: 'Nivel de criticidad, riesgo o impacto de fallos del producto o servicio.' },
+  P05: { name: 'Claridad del alcance desde el inicio', description: 'Nivel de claridad inicial del alcance, objetivos y entregables.' },
 };
