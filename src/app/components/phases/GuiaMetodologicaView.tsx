@@ -40,7 +40,7 @@ import {
   isTransientGeminiError,
   parsePmoType,
 } from './guia-metodologica/guideContent';
-import { normalizeChapters, unwrapGuidePayload, versionsFromPayload } from './guia-metodologica/normalizeGuide';
+import { hasUsableGuidePayload, normalizeChapters, unwrapGuidePayload, versionsFromPayload } from './guia-metodologica/normalizeGuide';
 import type { DocVersion, GuideChapter, ModuleView } from './guia-metodologica/types';
 // ---------------------------------------------------------------------------
 // Main module
@@ -59,9 +59,9 @@ export default function GuiaMetodologicaView() {
 
   const deriveView = (): ModuleView => {
     if (!project || !phase) return 'processing';
-    if (phase.status === 'completado') return 'approved';
+    if (phase.status === 'completado' && hasUsableGuidePayload(phase.agentData)) return 'approved';
     if (phase.status === 'procesando') return 'processing';
-    if (phase.agentData && normalizeChapters(unwrapGuidePayload(phase.agentData)).length > 0) return 'results';
+    if (hasUsableGuidePayload(phase.agentData)) return 'results';
     return 'auto-trigger';
   };
 
@@ -210,13 +210,14 @@ export default function GuiaMetodologicaView() {
         .single();
 
       if (error) return;
-      if (data?.updated_at && new Date(data.updated_at).getTime() < pollStartRef.current) return;
+      // Removed: if (data?.updated_at && new Date(data.updated_at).getTime() < pollStartRef.current) return;
 
+      const phase7Data = data?.datos_consolidados as any;
       const lastUpdatedAt = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
       const staleProcessingMs = Date.now() - lastUpdatedAt;
       if (
         data?.estado_visual === 'procesando' &&
-        !data?.datos_consolidados &&
+        (!data?.datos_consolidados || phase7Data?._processing === true) &&
         lastUpdatedAt > 0 &&
         staleProcessingMs > 10 * 60 * 1000
       ) {
@@ -225,6 +226,14 @@ export default function GuiaMetodologicaView() {
         setIsAdjusting(false);
         setView('auto-trigger');
         updatePhaseStatus(projectId, 7, 'disponible');
+        await supabase
+          .from('fases_estado')
+          .update({
+            estado_visual: 'disponible',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('proyecto_id', projectId)
+          .eq('numero_fase', 7);
         toast.error('La ejecucion anterior del Agente 7 quedo sin actividad.', {
           description: 'La fase quedo disponible para intentar generar la guia nuevamente.',
           duration: 9000,
@@ -294,9 +303,12 @@ export default function GuiaMetodologicaView() {
     // The edge function checks DB estado_visual === 'procesando' before saving results.
     // updatePhaseStatus only updates React context; if the DB still says 'bloqueado',
     // the agent will silently discard its result.
+    // Also clear datos_consolidados to remove any stale _processing markers from
+    // previous failed/timed-out runs — otherwise the edge function sees _processing:true
+    // and returns inProgress:true without actually starting a new run.
     await supabase
       .from('fases_estado')
-      .update({ estado_visual: 'procesando', updated_at: new Date().toISOString() })
+      .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
       .eq('proyecto_id', projectId)
       .eq('numero_fase', 7);
 
@@ -363,6 +375,12 @@ export default function GuiaMetodologicaView() {
   useEffect(() => {
     if (!project || !phase) return;
 
+    if (hasUsableGuidePayload(phase.agentData)) {
+      applyGuidePayload(phase.agentData);
+      setView(phase.status === 'completado' ? 'approved' : 'results');
+      return;
+    }
+
     if (phase.status === 'procesando') {
       setView('processing');
       startPolling(0);
@@ -370,14 +388,7 @@ export default function GuiaMetodologicaView() {
     }
 
     if (phase.status === 'completado') {
-      if (phase.agentData) applyGuidePayload(phase.agentData);
-      setView('approved');
-      return;
-    }
-
-    if (phase.agentData && normalizeChapters(unwrapGuidePayload(phase.agentData)).length > 0) {
-      applyGuidePayload(phase.agentData);
-      setView('results');
+      setView('auto-trigger');
       return;
     }
 
@@ -391,7 +402,7 @@ export default function GuiaMetodologicaView() {
     if (!project || !phase || isLoading) return;
     if (phase.status !== 'disponible') return;
     if (autoTriggered.current || hasFailed.current || view !== 'auto-trigger' || chapters.length > 0) return;
-    if (phase.agentData && Object.keys(phase.agentData).length > 0) return;
+    if (hasUsableGuidePayload(phase.agentData)) return;
     autoTriggered.current = true;
     invokeAgent7(1, null);
   }, [chapters.length, invokeAgent7, isLoading, phase, project, view]);
@@ -452,10 +463,11 @@ export default function GuiaMetodologicaView() {
         .eq('proyecto_id', projectId!)
         .gt('numero_fase', 7);
 
-      // 2. Update DB to 'procesando' BEFORE invoking so cancellation check passes
+      // 2. Update DB to 'procesando' BEFORE invoking so cancellation check passes.
+      // Also clear datos_consolidados to remove stale _processing markers.
       await supabase
         .from('fases_estado')
-        .update({ estado_visual: 'procesando', updated_at: new Date().toISOString() })
+        .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
         .eq('proyecto_id', projectId)
         .eq('numero_fase', 7);
 

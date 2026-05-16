@@ -2,11 +2,11 @@ import { Layers } from 'lucide-react';
 import type { DomainScore, FullResults, MaturityResult, MaturityRow, PmoType } from './types';
 
 export const MATURITY_LEVELS = [
-  { level: 1, name: 'Inicial',        color: '#64748b', bg: '#f8fafc', desc: 'Procesos ad-hoc y reactivos. Sin estandarización formal ni visibilidad.' },
-  { level: 2, name: 'En Desarrollo',  color: '#e9683b', bg: '#fff1eb', desc: 'Algunos procesos definidos, pero aplicación inconsistente entre equipos.' },
-  { level: 3, name: 'Definido',       color: '#9aa100', bg: '#fbfdd7', desc: 'Procesos documentados y seguidos de manera consistente en la organización.' },
-  { level: 4, name: 'Gestionado',     color: '#4cb979', bg: '#ecfdf3', desc: 'Procesos medidos y controlados mediante métricas y tableros de indicadores.' },
-  { level: 5, name: 'Optimizado',     color: '#5454e9', bg: '#eceeff', desc: 'Mejora continua e innovación sistemática integradas a la cultura organizacional.' },
+  { level: 1, name: 'Informal',   color: '#64748b', bg: '#f8fafc', desc: 'Practicas inexistentes o completamente ad hoc. No hay conciencia metodologica.' },
+  { level: 2, name: 'Basico',     color: '#e9683b', bg: '#fff1eb', desc: 'Practicas emergentes, inconsistentes y dependientes de personas clave.' },
+  { level: 3, name: 'Estandar',   color: '#9aa100', bg: '#fbfdd7', desc: 'Practicas definidas y aplicadas de forma relativamente consistente.' },
+  { level: 4, name: 'Avanzado',   color: '#4cb979', bg: '#ecfdf3', desc: 'Practicas consolidadas, medibles y gestionadas con criterio.' },
+  { level: 5, name: 'Excelencia', color: '#5454e9', bg: '#eceeff', desc: 'Practicas optimizadas, integradas a la estrategia y en mejora continua.' },
 ];
 
 // No local mock results are used in this module; all diagnostics come from fases_estado.
@@ -93,6 +93,15 @@ function toFivePointScale(value: unknown) {
   return Math.max(0, Math.min(5, Number(scaled.toFixed(1))));
 }
 
+function maturityLevelFromScore(value: unknown) {
+  const score = toFivePointScale(value);
+  if (score >= 4.5) return 5;
+  if (score >= 3.5) return 4;
+  if (score >= 2.5) return 3;
+  if (score >= 1.5) return 2;
+  return score > 0 ? 1 : 0;
+}
+
 export function formatOneDecimal(value: unknown) {
   return toFivePointScale(value).toFixed(1);
 }
@@ -101,7 +110,7 @@ export function formatMaturityLabel(label: string, fallbackScore: number) {
   const raw = String(label || '').trim();
   const withoutPrefix = raw.replace(/^\d+\.\s*/, '');
   const normalized = normalizeKey(withoutPrefix).replace(/_/g, ' ');
-  const prefix = maturityLevelPrefixMap[normalized] ?? maturityLevelPrefixMap[normalizeKey(withoutPrefix)] ?? Math.max(1, Math.min(5, Math.round(toFivePointScale(fallbackScore))));
+  const prefix = maturityLevelPrefixMap[normalized] ?? maturityLevelPrefixMap[normalizeKey(withoutPrefix)] ?? Math.max(1, maturityLevelFromScore(fallbackScore));
   const display = withoutPrefix || MATURITY_LEVELS[prefix - 1]?.name || 'N/A';
   return `${prefix}. ${display}`;
 }
@@ -149,8 +158,13 @@ export function parseAgentResults(datos: any): FullResults | null {
   if (typeof datos === 'string') {
     try { obj = JSON.parse(datos); } catch { return null; }
   }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  if (obj._processing || obj._error) return null;
+  if (obj.metadata?.status === 'processing' || obj.metadata?.status === 'procesando' || obj.metadata?.status === 'error') return null;
+
   const d = obj.diagnosis ?? obj.data?.diagnosis ?? obj.data ?? obj;
-  if (!d) return null;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+  if (d._processing || d._error) return null;
 
   const pickFirst = (...values: any[]) => values.find(v => v !== undefined && v !== null);
   const asArray = (value: any): any[] => Array.isArray(value) ? value : [];
@@ -188,8 +202,8 @@ export function parseAgentResults(datos: any): FullResults | null {
     agileSource != null;
   if (!hasMeaningfulData) return null;
 
-  const labelToLevel = (label: string | number | undefined): number => {
-    if (typeof label === 'number') return Math.max(1, Math.min(5, Math.round(label)));
+  const labelToLevel = (label: string | number | undefined, fallbackScore?: unknown): number => {
+    if (typeof label === 'number') return Math.max(1, Math.min(5, Math.round(toFivePointScale(label))));
     const numeric = String(label ?? '').match(/[1-5]/)?.[0];
     if (numeric) return Number(numeric);
     const map: Record<string, number> = {
@@ -197,9 +211,9 @@ export function parseAgentResults(datos: any): FullResults | null {
       'estándar': 3, 'estandar': 3, 'definido': 3,
       'avanzado': 4, 'gestionado': 4, 'excelencia': 5, 'optimizado': 5,
     };
-    return map[String(label ?? '').toLowerCase().trim()] ?? 1;
+    return map[String(label ?? '').toLowerCase().trim()] ?? Math.max(1, maturityLevelFromScore(fallbackScore));
   };
-  const ns = (raw: number) => raw <= 5 ? Math.round(raw * 20) : Math.round(raw);
+  const ns = (raw: unknown) => toFivePointScale(raw);
   const globalRecs: string[] = asArray(pickFirst(d.recommendations, d.recomendaciones, d.insumos_para_agente_6?.recomendaciones_generales)).map(String);
 
   const parseDomainMap = (map: any): Record<string, DomainScore> | undefined => {
@@ -208,7 +222,7 @@ export function parseAgentResults(datos: any): FullResults | null {
     for (const [k, v] of Object.entries(map)) {
       const val = v as any;
       const rawScore = typeof val === 'number' ? val : pickFirst(val?.score, val?.puntuacion, val?.valor, val?.score_global, 0);
-      result[k] = { score: ns(Number(rawScore)), nivel: String(pickFirst(val?.nivel, val?.level, val?.etiqueta, '')) };
+      result[k] = { score: ns(rawScore), nivel: String(pickFirst(val?.nivel, val?.level, val?.etiqueta, '')) };
     }
     return result;
   };
@@ -219,7 +233,7 @@ export function parseAgentResults(datos: any): FullResults | null {
       : {
         nombre: pickFirst(b.nombre, b.area, b.factor, b.dominio, b.descripcion, ''),
         tipo: pickFirst(b.tipo, b.categoria, ''),
-        score: ns(Number(pickFirst(b.score, b.puntuacion, b.valor, 0))),
+        score: ns(pickFirst(b.score, b.puntuacion, b.valor, 0)),
         nivel: pickFirst(b.nivel, b.level, ''),
         impacto_potencial: pickFirst(b.impacto_potencial, b.impacto, b.descripcion, b.recomendacion, ''),
       }
@@ -231,7 +245,7 @@ export function parseAgentResults(datos: any): FullResults | null {
       : {
         nombre: pickFirst(f.nombre, f.area, f.factor, f.dominio, f.descripcion, ''),
         tipo: pickFirst(f.tipo, f.categoria, ''),
-        score: ns(Number(pickFirst(f.score, f.puntuacion, f.valor, 0))),
+        score: ns(pickFirst(f.score, f.puntuacion, f.valor, 0)),
         nivel: pickFirst(f.nivel, f.level, ''),
       }
     ).filter(f => f.nombre);
@@ -239,8 +253,8 @@ export function parseAgentResults(datos: any): FullResults | null {
   const toMaturity = (src: any): MaturityResult | undefined => {
     if (!src || src.aplica === false) return undefined;
     const rawScore = pickFirst(src.score_global, src.overall_score, src.score, src.puntuacion, src.puntuacion_global, src.maturity_score);
-    const score = ns(Number(rawScore ?? 0));
-    const level = labelToLevel(pickFirst(src.nivel_global, src.overall_level, src.level, src.nivel, src.maturity_level));
+    const score = ns(rawScore ?? 0);
+    const level = labelToLevel(pickFirst(src.nivel_global, src.overall_level, src.level, src.nivel, src.maturity_level), score);
     const gaps = parseGaps(pickFirst(src.brechas, src.gaps, src.brechas_identificadas, src.brechas_criticas, []));
     const fortalezas = parseStrengths(pickFirst(src.fortalezas, src.strengths, src.puntos_fuertes, []));
     const recommendations = asArray(pickFirst(src.recommendations, src.recomendaciones, src.acciones_recomendadas, globalRecs)).map(String);
@@ -264,18 +278,17 @@ export function parseAgentResults(datos: any): FullResults | null {
   const predictiva = toMaturity(predictiveSource);
   const agil = toMaturity(agileSource);
 
-  let overallScore = ns(Number(pickFirst(d.overall_maturity_score, d.overallScore, d.overall_score, d.score_global, d.puntuacion_global, 0)));
-  // v3: overall_maturity_score comes directly as 1-5 float; ns() will keep it in range
+  let overallScore = ns(pickFirst(d.overall_maturity_score, d.overallScore, d.overall_score, d.score_global, d.puntuacion_global, 0));
+  // v3: overall_maturity_score comes directly as 1-5. ns() keeps that scale
+  // while still accepting older 0-100 diagnostics.
   if (overallScore === 0) {
     const scores = [predictiva?.score, agil?.score].filter(Boolean) as number[];
-    if (scores.length > 0) overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    if (scores.length > 0) overallScore = Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
   }
   const rawOverallLevel = pickFirst(d.overall_maturity_level, d.overallLevel, d.overall_level, d.nivel_global, d.level);
   let overallLevel = rawOverallLevel
-    ? labelToLevel(rawOverallLevel)
-    : (overallScore >= 80 ? 5 : overallScore >= 65 ? 4 : overallScore >= 50 ? 3 : overallScore >= 35 ? 2 : 1);
-  if (overallLevel === 1 && overallScore > 20)
-    overallLevel = overallScore >= 80 ? 5 : overallScore >= 65 ? 4 : overallScore >= 50 ? 3 : overallScore >= 35 ? 2 : 1;
+    ? labelToLevel(rawOverallLevel, overallScore)
+    : maturityLevelFromScore(overallScore);
   overallLevel = Math.max(1, Math.min(5, overallLevel));
 
   const overallLabel = pickFirst(d.overall_maturity_label, d.overallLabel, d.etiqueta_global, MATURITY_LEVELS[overallLevel - 1]?.name, '');

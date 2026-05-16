@@ -41,6 +41,18 @@ export default function PhaseHeader({
   const project = getProject(projectId);
   const phase = project?.phases.find(p => p.number === phaseNumber);
   const isProcessing = phase?.status === 'procesando';
+  const agentData = phase?.agentData as any;
+  const hasDisplayableAgentData = Boolean(
+    agentData &&
+    typeof agentData === 'object' &&
+    !Array.isArray(agentData) &&
+    Object.keys(agentData).length > 0 &&
+    agentData._processing !== true &&
+    !agentData._error &&
+    agentData.metadata?.status !== 'processing' &&
+    agentData.metadata?.status !== 'procesando' &&
+    agentData.metadata?.status !== 'error'
+  );
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -126,7 +138,7 @@ export default function PhaseHeader({
 
             {/* ── Botón Descargar PDF ── */}
             <AnimatePresence>
-              {(phase?.status === 'completado' || (phase?.agentData && Object.keys(phase.agentData).length > 0)) && (
+              {hasDisplayableAgentData && (
                 <motion.div
                   key="download-btn-group"
                   initial={{ opacity: 0, scale: 0.9, width: 0 }}
@@ -250,7 +262,7 @@ export default function PhaseHeader({
 
             {/* ── Botón Ver JSON (automático si hay agentData) ── */}
             <AnimatePresence>
-              {phase?.agentData && Object.keys(phase.agentData).length > 0 && (
+              {hasDisplayableAgentData && (
                 <motion.button
                   key="json-btn"
                   initial={{ opacity: 0, scale: 0.9, width: 0 }}
@@ -332,7 +344,9 @@ export default function PhaseHeader({
               {project.phases.map((p) => {
                 const isCurrent = p.number === phaseNumber;
                 const isCompleted = p.status === 'completado';
-                const isBlocked = p.status === 'bloqueado';
+                const previousPhase = project.phases.find(prev => prev.number === p.number - 1);
+                const isEffectivelyAvailable = p.number === 1 || previousPhase?.status === 'completado';
+                const isBlocked = p.status === 'bloqueado' && !isEffectivelyAvailable;
 
                 let itemClass = "";
                 if (isCurrent) {

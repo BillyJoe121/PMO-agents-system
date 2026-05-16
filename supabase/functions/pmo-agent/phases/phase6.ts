@@ -1,5 +1,10 @@
 import { unwrapDiagnosis, type PhasePayloadContext, type PhasePayloadResult } from "./types.ts";
 
+function unwrapPhaseOutput(value: unknown) {
+  const record = value as any;
+  return record?._current ?? record?.diagnosis ?? record?.data?.diagnosis ?? record?.data ?? unwrapDiagnosis(value);
+}
+
 export async function buildPhase6Payload(ctx: PhasePayloadContext): Promise<PhasePayloadResult> {
   const { supabase, projectId, comments, baseMetadata } = ctx;
   const { data: prevFases } = await supabase
@@ -10,7 +15,7 @@ export async function buildPhase6Payload(ctx: PhasePayloadContext): Promise<Phas
 
   const faseMap: Record<number, any> = {};
   for (const f of prevFases ?? []) {
-    faseMap[f.numero_fase] = unwrapDiagnosis(f.datos_consolidados);
+    faseMap[f.numero_fase] = unwrapPhaseOutput(f.datos_consolidados);
   }
 
   return {
@@ -22,4 +27,3 @@ export async function buildPhase6Payload(ctx: PhasePayloadContext): Promise<Phas
     comments,
   };
 }
-

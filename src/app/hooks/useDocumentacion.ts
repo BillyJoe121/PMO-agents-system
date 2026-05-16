@@ -188,6 +188,39 @@ function extractAgentError(value: any): AgentErrorPayload | null {
   return null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isDocumentacionProcessingPayload(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  if (value._processing === true) return true;
+  if (value.metadata?.status === 'processing' || value.metadata?.status === 'procesando') return true;
+  const nested = value.diagnosis ?? value.data?.diagnosis ?? value.data;
+  return nested !== value && isDocumentacionProcessingPayload(nested);
+}
+
+export function normalizeDocumentacionDiagnosis(value: unknown): AgentDiagnosis | null {
+  if (!isPlainObject(value)) return null;
+  if (isDocumentacionProcessingPayload(value) || extractAgentError(value)) return null;
+
+  const candidate = value.diagnosis ?? value.data?.diagnosis ?? value.data ?? value;
+  if (!isPlainObject(candidate)) return null;
+  if (isDocumentacionProcessingPayload(candidate) || extractAgentError(candidate)) return null;
+  if (Object.keys(candidate).length === 0) return null;
+
+  const hasMeaningfulContent = [
+    typeof candidate.summary === 'string' && candidate.summary.trim().length > 0,
+    isPlainObject(candidate.cobertura_documental),
+    isPlainObject(candidate.calidad_documental),
+    Array.isArray(candidate.key_insights) && candidate.key_insights.length > 0,
+    Array.isArray(candidate.estado_documentos) && candidate.estado_documentos.length > 0,
+    isPlainObject(candidate.insumos_para_agente_4),
+  ].some(Boolean);
+
+  return hasMeaningfulContent ? candidate as AgentDiagnosis : null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // NOMBRE DEL BUCKET EN SUPABASE STORAGE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,8 +283,11 @@ export function useDocumentacion(projectId: string) {
           setDiagnosis(null);
           return;
         }
-        const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
-        setDiagnosis(innerDiagnosis as AgentDiagnosis);
+        const storedDiagnosis = normalizeDocumentacionDiagnosis(consolidated);
+        setDiagnosis(storedDiagnosis);
+        setAgentError(null);
+      } else {
+        setDiagnosis(null);
         setAgentError(null);
       }
     } catch (err) {
@@ -389,7 +425,11 @@ export function useDocumentacion(projectId: string) {
         throw new Error(reportedError.message);
       }
 
-      const diagnosisData: AgentDiagnosis = result.data?.diagnosis ?? result.data;
+      const diagnosisData = normalizeDocumentacionDiagnosis(result.data);
+      if (!diagnosisData) {
+        throw new Error('El Agente aun no devolvio un diagnostico documental valido.');
+      }
+
       setDiagnosis(diagnosisData);
       setAgentError(null);
 

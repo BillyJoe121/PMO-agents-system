@@ -8,7 +8,13 @@ import {
 import { toast } from 'sonner';
 import JSZip from 'jszip';
 import { useApp } from '../../context/AppContext';
-import { useEntrevistas, type AgentErrorPayload, type EntrevistaLocal as Entrevista, type EntrevistasDiagnosis } from '../../hooks/useEntrevistas';
+import {
+  normalizeEntrevistasDiagnosis,
+  useEntrevistas,
+  type AgentErrorPayload,
+  type EntrevistaLocal as Entrevista,
+  type EntrevistasDiagnosis,
+} from '../../hooks/useEntrevistas';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
@@ -47,7 +53,7 @@ function AgentErrorCard({ error }: { error: AgentErrorPayload }) {
 export default function EntrevistasModule() {
   const { id: projectId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProject, updatePhaseStatus, isLoading } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playAgentSuccess, playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -89,12 +95,53 @@ export default function EntrevistasModule() {
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const visibleDiagnosis = liveDiagnosis ?? diagnosis;
   const hasDiagnosis = Boolean(visibleDiagnosis);
-  const isCompleted = phase?.status === 'completado' || hasDiagnosis;
+  const isCompleted = hasDiagnosis;
   const isPhaseProcessing = !hasDiagnosis && !agentError && (phase?.status === 'procesando' || isProcessing || isSending);
+
+  useEffect(() => {
+    if (phase?.agentData) {
+      const data = phase.agentData as any;
+      if (data?._error || data?.metadata?.status === 'error') {
+        setLiveDiagnosis(null);
+        setIsSending(false);
+        return;
+      }
+      const parsed = normalizeEntrevistasDiagnosis(data);
+      if (parsed) {
+        setLiveDiagnosis(parsed);
+        setIsSending(false);
+      } else if (phase?.status !== 'procesando') {
+        setLiveDiagnosis(null);
+      }
+    } else if (phase?.status === 'disponible' || phase?.status === 'bloqueado') {
+      setLiveDiagnosis(null);
+      setIsSending(false);
+    }
+  }, [phase?.agentData, phase?.status]);
 
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
+
+  const keepProcessingIfAgentStarted = async () => {
+    if (!projectId) return false;
+    const { data } = await supabase
+      .from('fases_estado')
+      .select('estado_visual')
+      .eq('proyecto_id', projectId)
+      .eq('numero_fase', 2)
+      .single();
+
+    if (data?.estado_visual === 'procesando') {
+      setIsSending(false);
+      toast.info('El Agente 2 sigue en ejecucion.', {
+        description: 'Seguiremos esperando el resultado guardado en Supabase.',
+      });
+      return true;
+    }
+
+    return false;
+  };
 
   // ---- Handlers (declared before early returns) ──────────────────────────────
   const handleDownloadZip = async () => {
@@ -364,6 +411,7 @@ export default function EntrevistasModule() {
         await fetchInitialData();
       }
     } catch {
+      if (await keepProcessingIfAgentStarted()) return;
       updatePhaseStatus(projectId!, 2, 'disponible');
       playProcessError();
     } finally {
@@ -397,6 +445,16 @@ export default function EntrevistasModule() {
         phaseNumber={2}
         phaseName="Registro de Entrevistas"
         eyebrow={isCompleted ? 'Completada' : `${entrevistas.length} entrevistas`}
+        onReprocessed={async () => {
+          await reprocessPhase(projectId!, 2);
+          setLiveDiagnosis(null);
+          setSelectedId(null);
+          setPanelMode('empty');
+          setExpandedId(null);
+          setRegisteredExpanded(false);
+          setIsSending(false);
+          await fetchInitialData();
+        }}
       />
 
       {/* ------------------------------------------------------------------ */}

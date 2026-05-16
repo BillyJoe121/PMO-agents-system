@@ -373,18 +373,25 @@ function unwrapGuidePayload(raw: any) {
   return parsed?._current ?? parsed;
 }
 
+function hasUsableGuidePayload(raw: any) {
+  return normalizeChapters(unwrapGuidePayload(raw)).length > 0;
+}
+
 function versionsFromPayload(raw: any): DocVersion[] {
   if (Array.isArray(raw?._versions) && raw._versions.length > 0) {
-    return raw._versions.map((version: any, index: number) => ({
-      number: Number(version.number ?? index + 1),
-      generatedAt: String(version.generatedAt ?? version.generated_at ?? raw?._generated_at ?? new Date().toISOString()),
-      comment: version.comment ?? undefined,
-      status: version.status === 'revisado' ? 'revisado' : 'generado',
-      data: version.data,
-    }));
+    return raw._versions
+      .filter((version: any) => hasUsableGuidePayload(version.data))
+      .map((version: any, index: number) => ({
+        number: Number(version.number ?? index + 1),
+        generatedAt: String(version.generatedAt ?? version.generated_at ?? raw?._generated_at ?? new Date().toISOString()),
+        comment: version.comment ?? undefined,
+        status: version.status === 'revisado' ? 'revisado' : 'generado',
+        data: version.data,
+      }));
   }
 
   if (!raw) return [];
+  if (!hasUsableGuidePayload(raw)) return [];
   return [{
     number: Number(raw?._latest_version ?? 1),
     generatedAt: String(raw?._generated_at ?? new Date().toISOString()),
@@ -394,4 +401,4 @@ function versionsFromPayload(raw: any): DocVersion[] {
   }];
 }
 
-export { normalizeChapters, unwrapGuidePayload, versionsFromPayload };
+export { hasUsableGuidePayload, normalizeChapters, unwrapGuidePayload, versionsFromPayload };

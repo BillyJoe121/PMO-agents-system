@@ -1,6 +1,6 @@
 import React, {
   createContext, useContext, useState,
-  useEffect, useCallback, ReactNode,
+  useEffect, useCallback, ReactNode, useRef
 } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -253,6 +253,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [session, fetchProjects, fetchCurrentUser]);
 
+  // Debounced fetch para evitar sobrescrituras de estado durante actualizaciones rápidas
+  const debouncedFetchRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ── Suscripción a Realtime para "fases_estado" ──────────────────────────
   useEffect(() => {
     if (!session) return;
     const channel = supabase
@@ -265,8 +269,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           table: 'fases_estado',
         },
         () => {
-          // fetch silente
-          fetchProjects(true);
+          if (debouncedFetchRef.current) clearTimeout(debouncedFetchRef.current);
+          debouncedFetchRef.current = setTimeout(() => {
+            fetchProjects(true);
+          }, 2000);
         }
       )
       .subscribe();
@@ -277,6 +283,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 15000);
 
     return () => {
+      if (debouncedFetchRef.current) clearTimeout(debouncedFetchRef.current);
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
@@ -416,6 +423,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then(({ error }) => {
         if (error) console.error('[AppContext] Error actualizando fase en DB:', error);
       });
+
+    if (status === 'completado' && phaseNumber < PHASE_NAMES.length) {
+      supabase
+        .from('fases_estado')
+        .update({
+          estado_visual: 'disponible',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('proyecto_id', projectId)
+        .eq('numero_fase', phaseNumber + 1)
+        .eq('estado_visual', 'bloqueado')
+        .then(({ error }) => {
+          if (error) console.error('[AppContext] Error desbloqueando siguiente fase en DB:', error);
+        });
+    }
   }, []);
 
   const moveToTrash = useCallback(async (id: string) => {

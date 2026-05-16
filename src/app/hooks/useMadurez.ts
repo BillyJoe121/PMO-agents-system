@@ -123,8 +123,9 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
     if (error) console.error("Error deleting file:", error);
   };
 
-  const uploadFileIfAny = async () => {
-    if (!projectId || externalFiles.length === 0) return existingFiles.length > 0 ? existingFiles[0].url : null;
+  const uploadFileIfAny = async (): Promise<string[]> => {
+    if (!projectId) return [];
+    if (externalFiles.length === 0) return existingFiles.map(f => f.url).filter(Boolean);
     
     const uploadedUrls: string[] = [...existingFiles.map(f => f.url)];
     const filesToUpload = [...externalFiles];
@@ -141,7 +142,7 @@ export function useMadurez(projectId: string | undefined, tipoEncuesta: 'predict
     }
     const uploadedKeys = new Set(filesToUpload.map(fileIdentity));
     setExternalFiles(prev => prev.filter(file => !uploadedKeys.has(fileIdentity(file))));
-    return uploadedUrls.length > 0 ? uploadedUrls[0] : null; // Keep returning one or adapt if needed elsewhere
+    return uploadedUrls;
   };
 
   const addExternalFile = (file: File) => {

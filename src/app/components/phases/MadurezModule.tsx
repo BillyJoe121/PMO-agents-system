@@ -73,11 +73,11 @@ export default function MadurezModule() {
   // State — derive initial view from phase status (same pattern as Phase 4)
   const [view, setView] = useState<ModuleView>(() => {
     if (!phase) return 'overview';
-    if (phase.status === 'completado') return 'approved';
+    if (phase.status === 'completado' && parseAgentResults(phase.agentData)) return 'approved';
     if (phase.status === 'procesando') return 'processing';
     if (phase.status === 'bloqueado') return 'overview';
     // 'disponible' with data = pending review; without data = overview
-    if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'results';
+    if (parseAgentResults(phase.agentData)) return 'results';
     return 'overview';
   });
 
@@ -157,6 +157,11 @@ export default function MadurezModule() {
           setView('overview');
           return;
         }
+        // Processing marker = still running (agent writes this while processing)
+        if ((data.datos_consolidados as any)?._processing === true) {
+          setView('processing');
+          return;
+        }
         const parsed = parseAgentResults(data.datos_consolidados);
         if (parsed) {
           setResults(parsed);
@@ -173,7 +178,7 @@ export default function MadurezModule() {
       }
 
       // disponible with no data = overview (hasn't been processed yet)
-      if (data.estado_visual === 'disponible' && !data.datos_consolidados) {
+      if (data.estado_visual === 'disponible' && !parseAgentResults(data.datos_consolidados)) {
         setResults(null);
         setView('overview');
       }
@@ -203,7 +208,9 @@ export default function MadurezModule() {
       if (error || !isMounted) return;
 
       // Agent finished successfully (completado OR disponible + data)
-      if (data?.datos_consolidados && (data.estado_visual === 'completado' || data.estado_visual === 'disponible')) {
+      // Skip processing markers — they are not real results
+      const isProcessingMarker = (data.datos_consolidados as any)?._processing === true;
+      if (data?.datos_consolidados && !isProcessingMarker && (data.estado_visual === 'completado' || data.estado_visual === 'disponible')) {
         if ((data.datos_consolidados as any)?._error) {
           const message = (data.datos_consolidados as any)?.message || 'Revise la configuración del agente e intente nuevamente.';
           setIsReprocessing(false);
@@ -235,12 +242,12 @@ export default function MadurezModule() {
         return;
       }
 
-      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+      if (data?.estado_visual === 'disponible' && !isProcessingMarker && !parseAgentResults(data?.datos_consolidados) && Date.now() < processingGuardUntilRef.current) {
         return;
       }
 
       // Agent failed (reverted to disponible with no data)
-      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+      if (data?.estado_visual === 'disponible' && !isProcessingMarker && !parseAgentResults(data?.datos_consolidados)) {
         setIsReprocessing(false);
         updatePhaseStatus(projectId!, 5, 'disponible');
         setView('overview');
@@ -281,10 +288,10 @@ export default function MadurezModule() {
     let didInvokeAgent = false;
     
     try {
-      let predictivaFileUrl: string | null = null;
-      let agilFileUrl: string | null = null;
-      if (needsPredictiva) predictivaFileUrl = await predictivaManager.uploadFileIfAny() || null;
-      if (needsAgil) agilFileUrl = await agilManager.uploadFileIfAny() || null;
+      let predictivaFileUrls: string[] = [];
+      let agilFileUrls: string[] = [];
+      if (needsPredictiva) predictivaFileUrls = await predictivaManager.uploadFileIfAny() || [];
+      if (needsAgil) agilFileUrls = await agilManager.uploadFileIfAny() || [];
 
       didInvokeAgent = true;
       const response = await supabase.functions.invoke('pmo-agent', {
@@ -293,8 +300,8 @@ export default function MadurezModule() {
           phaseNumber: 5,
           iteration: 1,
           pmoType,
-          ...(predictivaFileUrl && { predictivaFileUrl }),
-          ...(agilFileUrl && { agilFileUrl }),
+          ...(predictivaFileUrls.length > 0 && { predictivaFileUrls }),
+          ...(agilFileUrls.length > 0 && { agilFileUrls }),
         }
       });
       if (response.error) throw new Error((response.data as any)?.error || response.error.message);
@@ -335,10 +342,10 @@ export default function MadurezModule() {
       // Set view to processing AFTER supabase update so the polling useEffect picks it up
       setView('processing');
 
-      let predictivaFileUrl: string | null = null;
-      let agilFileUrl: string | null = null;
-      if (needsPredictiva) predictivaFileUrl = await predictivaManager.uploadFileIfAny() || null;
-      if (needsAgil) agilFileUrl = await agilManager.uploadFileIfAny() || null;
+      let predictivaFileUrls: string[] = [];
+      let agilFileUrls: string[] = [];
+      if (needsPredictiva) predictivaFileUrls = await predictivaManager.uploadFileIfAny() || [];
+      if (needsAgil) agilFileUrls = await agilManager.uploadFileIfAny() || [];
 
       didInvokeAgent = true;
       const response = await supabase.functions.invoke('pmo-agent', {
@@ -348,8 +355,8 @@ export default function MadurezModule() {
           iteration: 2,
           pmoType,
           comentario_consultor: comment,
-          ...(predictivaFileUrl && { predictivaFileUrl }),
-          ...(agilFileUrl && { agilFileUrl }),
+          ...(predictivaFileUrls.length > 0 && { predictivaFileUrls }),
+          ...(agilFileUrls.length > 0 && { agilFileUrls }),
         }
       });
       if (response.error) throw new Error((response.data as any)?.error || response.error.message);

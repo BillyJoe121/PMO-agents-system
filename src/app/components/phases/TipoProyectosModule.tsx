@@ -84,9 +84,14 @@ function ApproveModal({ open, onCancel, onConfirm, isLoading }: {
 // Helper: parse diagnosis payload from DB into component state
 // ---------------------------------------------------------------------------
 function parseDiagnosisPayload(data: any): any | null {
-  if (!data) return null;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  if (data._processing || data._error) return null;
+  if (data.metadata?.status === 'processing' || data.metadata?.status === 'procesando' || data.metadata?.status === 'error') return null;
+
   const payload = data;
-  const diag = payload.diagnosis || payload;
+  const diag = payload.diagnosis ?? payload.data?.diagnosis ?? payload.data ?? payload;
+  if (!diag || typeof diag !== 'object' || Array.isArray(diag)) return null;
+  if (diag._processing || diag._error) return null;
   if (!diag.pmo_type && !diag.pmoType) return null;
 
   let rawType = String(diag.pmo_type || diag.pmoType || 'Híbrido').toLowerCase();
@@ -203,10 +208,11 @@ export default function TipoProyectosModule() {
   // Derive initial view from phase status
   const deriveInitialView = (): ModuleView => {
     if (!phase) return 'auto-trigger';
-    if (phase.status === 'completado') return 'approved';
+    const parsed = parseDiagnosisPayload(phase.agentData);
+    if (phase.status === 'completado' && parsed) return 'approved';
     if (phase.status === 'procesando') return 'processing';
     if (phase.status === 'error') return 'error';
-    if (phase.agentData && Object.keys(phase.agentData).length > 0) return 'diagnosis';
+    if (parsed) return 'diagnosis';
     return 'auto-trigger';
   };
 
@@ -220,7 +226,7 @@ export default function TipoProyectosModule() {
   const [view, setView] = useState<ModuleView>(() => {
     const initialView = deriveInitialView();
     // If we have parsed diagnosis, force view to diagnosis or approved
-    if (phase?.agentData && Object.keys(phase.agentData).length > 0) {
+    if (parseDiagnosisPayload(phase?.agentData)) {
       return phase.status === 'completado' ? 'approved' : 'diagnosis';
     }
     return initialView;
@@ -250,7 +256,7 @@ export default function TipoProyectosModule() {
       return true;
     }
 
-    if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+    if (data?.estado_visual === 'disponible' && !parseDiagnosisPayload(data?.datos_consolidados) && Date.now() < processingGuardUntilRef.current) {
       setView('processing');
       return true;
     }
@@ -424,12 +430,12 @@ export default function TipoProyectosModule() {
         return;
       }
 
-      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados && Date.now() < processingGuardUntilRef.current) {
+      if (data?.estado_visual === 'disponible' && !parseDiagnosisPayload(data?.datos_consolidados) && Date.now() < processingGuardUntilRef.current) {
         return;
       }
 
       // If reverted to disponible WITHOUT data, the agent truly failed
-      if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+      if (data?.estado_visual === 'disponible' && !parseDiagnosisPayload(data?.datos_consolidados)) {
         setIsReprocessing(false);
         updatePhaseStatus(projectId!, 4, 'disponible');
         setView('error');

@@ -155,6 +155,40 @@ function extractAgentError(value: any): AgentErrorPayload | null {
   return null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isEntrevistasProcessingPayload(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  if (value._processing === true) return true;
+  if (value.metadata?.status === 'processing' || value.metadata?.status === 'procesando') return true;
+  const nested = value.diagnosis ?? value.data?.diagnosis ?? value.data;
+  return nested !== value && isEntrevistasProcessingPayload(nested);
+}
+
+export function normalizeEntrevistasDiagnosis(value: unknown): EntrevistasDiagnosis | null {
+  if (!isPlainObject(value)) return null;
+  if (isEntrevistasProcessingPayload(value) || extractAgentError(value)) return null;
+
+  const candidate = value.diagnosis ?? value.data?.diagnosis ?? value.data ?? value;
+  if (!isPlainObject(candidate)) return null;
+  if (isEntrevistasProcessingPayload(candidate) || extractAgentError(candidate)) return null;
+  if (Object.keys(candidate).length === 0) return null;
+
+  const hasMeaningfulContent = [
+    typeof candidate.summary === 'string' && candidate.summary.trim().length > 0,
+    Number.isFinite(Number(candidate.numero_entrevistados)),
+    isPlainObject(candidate.dimensiones_base),
+    Array.isArray(candidate.roles_identificados) && candidate.roles_identificados.length > 0,
+    Array.isArray(candidate.key_findings) && candidate.key_findings.length > 0,
+    Array.isArray(candidate.recurring_themes) && candidate.recurring_themes.length > 0,
+    isPlainObject(candidate.insumos_para_agente_4),
+  ].some(Boolean);
+
+  return hasMeaningfulContent ? candidate as EntrevistasDiagnosis : null;
+}
+
 export function useEntrevistas(projectId: string) {
   const [entrevistas, setEntrevistas] = useState<EntrevistaLocal[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -204,8 +238,11 @@ export function useEntrevistas(projectId: string) {
           setDiagnosis(null);
           return;
         }
-        const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
-        setDiagnosis(innerDiagnosis as EntrevistasDiagnosis);
+        const storedDiagnosis = normalizeEntrevistasDiagnosis(consolidated);
+        setDiagnosis(storedDiagnosis);
+        setAgentError(null);
+      } else {
+        setDiagnosis(null);
         setAgentError(null);
       }
     } catch (err) {
@@ -360,7 +397,11 @@ export function useEntrevistas(projectId: string) {
         throw new Error(reportedError.message);
       }
 
-      const diagnosisData: EntrevistasDiagnosis = result.data?.diagnosis ?? result.data;
+      const diagnosisData = normalizeEntrevistasDiagnosis(result.data);
+      if (!diagnosisData) {
+        throw new Error('El Agente aun no devolvio un diagnostico de entrevistas valido.');
+      }
+
       setDiagnosis(diagnosisData);
       setAgentError(null);
 

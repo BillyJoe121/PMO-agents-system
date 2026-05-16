@@ -41,14 +41,23 @@ type MaturityRow = {
 };
 
 const maturityLevelPrefixMap: Record<string, number> = {
+  informal: 1,
   inicial: 1,
+  basico: 2,
+  'bÃƒÂ¡sico': 2,
+  'bÃ¡sico': 2,
   repetible: 2,
+  estandar: 3,
+  'estÃƒÂ¡ndar': 3,
+  'estÃ¡ndar': 3,
   definido: 3,
+  avanzado: 4,
   gestionado: 4,
+  excelencia: 5,
   optimizado: 5,
 };
 
-const maturityLevelNames = ['Inicial', 'Repetible', 'Definido', 'Gestionado', 'Optimizado'];
+const maturityLevelNames = ['Informal', 'Basico', 'Estandar', 'Avanzado', 'Excelencia'];
 
 const domainRows = [
   { key: 'gobernanza', label: 'Gobernanza' },
@@ -66,6 +75,15 @@ const focusAreaRows = [
   { key: 'ejecucion', label: 'Ejecucion' },
   { key: 'monitoreo_control', label: 'Monitoreo y Control' },
   { key: 'cierre', label: 'Cierre' },
+];
+
+const agileFactorRows = [
+  { key: 'cultura', label: 'Cultura' },
+  { key: 'equipo', label: 'Equipo' },
+  { key: 'producto', label: 'Producto' },
+  { key: 'interesados', label: 'Interesados' },
+  { key: 'valor', label: 'Valor' },
+  { key: 'adaptabilidad', label: 'Adaptabilidad' },
 ];
 
 function normalizeKey(value: string) {
@@ -286,24 +304,34 @@ function MaturityBISection({
 }
 
 export default function MaturityBIDashboard({ results }: { results: FullResults }) {
-  const primary = results.predictiva ?? results.agil;
-  const domainMap = results.predictiva?.por_dominio ?? results.agil?.por_dominio ?? results.agil?.por_factor ?? primary?.por_dominio;
-  const phaseMap = results.predictiva?.por_fase ?? results.agil?.por_fase ?? primary?.por_fase;
-  const domainData = buildRows(domainRows, domainMap);
-  const focusAreaData = buildRows(focusAreaRows, phaseMap);
+  const predictiveDomainData = buildRows(domainRows, results.predictiva?.por_dominio);
+  const predictivePhaseData = buildRows(focusAreaRows, results.predictiva?.por_fase);
+  const agileFactorData = buildRows(agileFactorRows, results.agil?.por_factor);
+  const hasValues = (rows: MaturityRow[]) => rows.some((row) => row.value > 0);
 
   return (
     <div className="mb-6">
-      <MaturityBISection
-        title="Analisis de madurez por dominio"
-        description="Lectura comparativa de capacidades PMO con acentos de color institucional."
-        rows={domainData}
-      />
-      <MaturityBISection
-        title="Analisis de madurez por area de enfoque"
-        description="Vista de consistencia metodologica por momento del ciclo de vida."
-        rows={focusAreaData}
-      />
+      {hasValues(predictiveDomainData) && (
+        <MaturityBISection
+          title="Analisis predictivo por dominio"
+          description="Lectura comparativa de capacidades predictivas por dominio de gestion."
+          rows={predictiveDomainData}
+        />
+      )}
+      {hasValues(predictivePhaseData) && (
+        <MaturityBISection
+          title="Analisis predictivo por fase"
+          description="Vista de consistencia metodologica por momento del ciclo de vida."
+          rows={predictivePhaseData}
+        />
+      )}
+      {hasValues(agileFactorData) && (
+        <MaturityBISection
+          title="Analisis agil por factor"
+          description="Lectura comparativa de capacidades agiles por cultura, equipo, producto y valor."
+          rows={agileFactorData}
+        />
+      )}
     </div>
   );
 }

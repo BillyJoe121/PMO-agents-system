@@ -50,6 +50,39 @@ function extractAgentError(value: any): AgentErrorPayload | null {
   return null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isIdoneidadProcessingPayload(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  if (value._processing === true) return true;
+  if (value.metadata?.status === 'processing' || value.metadata?.status === 'procesando') return true;
+  const nested = value.diagnosis ?? value.data?.diagnosis ?? value.data;
+  return nested !== value && isIdoneidadProcessingPayload(nested);
+}
+
+export function normalizeIdoneidadDiagnosis(value: unknown): any | null {
+  if (!isPlainObject(value)) return null;
+  if (isIdoneidadProcessingPayload(value) || extractAgentError(value)) return null;
+
+  const candidate = value.diagnosis ?? value.data?.diagnosis ?? value.data ?? value;
+  if (!isPlainObject(candidate)) return null;
+  if (isIdoneidadProcessingPayload(candidate) || extractAgentError(candidate)) return null;
+  if (Object.keys(candidate).length === 0) return null;
+
+  const hasMeaningfulContent = [
+    typeof candidate.summary === 'string' && candidate.summary.trim().length > 0,
+    Number.isFinite(Number(candidate.numero_encuestados)),
+    Array.isArray(candidate.resultados_por_item) && candidate.resultados_por_item.length > 0,
+    isPlainObject(candidate.indicadores),
+    Array.isArray(candidate.recomendaciones) && candidate.recomendaciones.length > 0,
+    Array.isArray(candidate.recommendations) && candidate.recommendations.length > 0,
+  ].some(Boolean);
+
+  return hasMeaningfulContent ? candidate : null;
+}
+
 export function useIdoneidad(projectId: string | undefined) {
   const [activeLink, setActiveLink] = useState<string | null>(null);
   const [responses, setResponses] = useState<EncuestaResponse[]>([]);
@@ -107,8 +140,8 @@ export function useIdoneidad(projectId: string | undefined) {
           setDiagnosis(null);
           return;
         }
-        const innerDiagnosis = consolidated.diagnosis ? consolidated.diagnosis : consolidated;
-        setDiagnosis(innerDiagnosis);
+        const storedDiagnosis = normalizeIdoneidadDiagnosis(consolidated);
+        setDiagnosis(storedDiagnosis);
         setAgentError(null);
       } else {
         setDiagnosis(null);
@@ -247,7 +280,11 @@ export function useIdoneidad(projectId: string | undefined) {
         setAgentError(reportedError);
         throw new Error(reportedError.message);
       }
-      const innerDiagnosis = resultData?.diagnosis ? resultData.diagnosis : resultData;
+      const innerDiagnosis = normalizeIdoneidadDiagnosis(resultData);
+      if (!innerDiagnosis) {
+        throw new Error('El Agente aun no devolvio un diagnostico de idoneidad valido.');
+      }
+
       setDiagnosis(innerDiagnosis);
       setAgentError(null);
       return innerDiagnosis;

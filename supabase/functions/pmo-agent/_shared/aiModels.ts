@@ -108,13 +108,27 @@ export async function getAiModelSettings(supabase: any): Promise<AiModelSettings
   return normalizeAiModelSettings(fallback.data as any);
 }
 
-export function getModelCandidates(settings: AiModelSettings) {
-  const primary: AiModelCandidate = {
+function getPreferredCandidate(preferredModel?: unknown): AiModelCandidate | null {
+  const model = String(preferredModel ?? "").trim();
+  if (!model) return null;
+
+  const provider = inferProviderFromModel(model);
+  if (!provider) return null;
+
+  const normalizedModel = normalizeSelectedModel(provider, model);
+  if (normalizedModel !== model) return null;
+
+  return { provider, model: normalizedModel };
+}
+
+export function getModelCandidates(settings: AiModelSettings, preferredModel?: unknown) {
+  const preferred = getPreferredCandidate(preferredModel);
+  const primary: AiModelCandidate = preferred ?? {
     provider: settings.provider,
     model: settings.selected_model,
   };
 
-  const fallbackCandidates: AiModelCandidate[] = settings.provider === "openai"
+  const fallbackCandidates: AiModelCandidate[] = primary.provider === "openai"
     ? [
         // Fallback OpenAI -> Anthropic desactivado temporalmente para evitar consumo
         // de creditos de Claude cuando GPT falle, tarde demasiado o agote timeout.
@@ -126,7 +140,12 @@ export function getModelCandidates(settings: AiModelSettings) {
       ];
 
   const seen = new Set<string>();
-  return [primary, ...fallbackCandidates].filter((candidate) => {
+  const configuredPrimary: AiModelCandidate = {
+    provider: settings.provider,
+    model: settings.selected_model,
+  };
+
+  return [primary, configuredPrimary, ...fallbackCandidates].filter((candidate) => {
     const key = `${candidate.provider}:${candidate.model}`;
     if (!candidate.model || seen.has(key)) return false;
     seen.add(key);
@@ -144,6 +163,11 @@ function getProviderTimeoutMs(body: Record<string, unknown>) {
   return Number.isFinite(Number(generationConfig.providerTimeoutMs))
     ? Number(generationConfig.providerTimeoutMs)
     : 110000;
+}
+
+function wantsJsonResponse(body: Record<string, unknown>) {
+  const generationConfig = (body as any).generationConfig ?? {};
+  return String(generationConfig.responseMimeType ?? "").toLowerCase() === "application/json";
 }
 
 function getCaughtErrorMessage(error: unknown, attemptId: string, timeoutMs: number) {
@@ -295,6 +319,12 @@ async function callOpenAi(apiKey: string, model: string, body: Record<string, un
 
   if (Number.isFinite(Number(generationConfig.maxOutputTokens))) {
     payload.max_output_tokens = Number(generationConfig.maxOutputTokens);
+  }
+
+  if (wantsJsonResponse(body)) {
+    payload.text = {
+      format: { type: "json_object" },
+    };
   }
 
   const response = await fetch("https://api.openai.com/v1/responses", {

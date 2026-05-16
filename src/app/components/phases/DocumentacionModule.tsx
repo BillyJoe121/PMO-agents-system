@@ -4,7 +4,13 @@ import { motion } from 'motion/react';
 import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { useDocumentacion, type AgentDiagnosis, type AgentErrorPayload, type DocumentoLocal } from '../../hooks/useDocumentacion';
+import {
+  normalizeDocumentacionDiagnosis,
+  useDocumentacion,
+  type AgentDiagnosis,
+  type AgentErrorPayload,
+  type DocumentoLocal,
+} from '../../hooks/useDocumentacion';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import { supabase } from '../../lib/supabase';
 import PhaseHeader from './_shared/PhaseHeader';
@@ -47,7 +53,7 @@ function AgentErrorCard({ error }: { error: AgentErrorPayload }) {
 
 export default function DocumentacionModule() {
   const { id: projectId } = useParams<{ id: string }>();
-  const { getProject, updatePhaseStatus, isLoading } = useApp();
+  const { getProject, updatePhaseStatus, reprocessPhase, isLoading } = useApp();
   const { playProcessError, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
@@ -68,12 +74,53 @@ export default function DocumentacionModule() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const visibleDiagnosis = liveDiagnosis ?? diagnosis;
   const hasDiagnosis = Boolean(visibleDiagnosis);
-  const isCompleted = phase?.status === 'completado' || hasDiagnosis;
+  const isCompleted = hasDiagnosis;
   const isProcessing = !hasDiagnosis && !agentError && (phase?.status === 'procesando' || hookIsProcessing || isSending);
+
+  useEffect(() => {
+    if (phase?.agentData) {
+      const data = phase.agentData as any;
+      if (data?._error || data?.metadata?.status === 'error') {
+        setLiveDiagnosis(null);
+        setIsSending(false);
+        return;
+      }
+      const parsed = normalizeDocumentacionDiagnosis(data);
+      if (parsed) {
+        setLiveDiagnosis(parsed);
+        setIsSending(false);
+      } else if (phase?.status !== 'procesando') {
+        setLiveDiagnosis(null);
+      }
+    } else if (phase?.status === 'disponible' || phase?.status === 'bloqueado') {
+      setLiveDiagnosis(null);
+      setIsSending(false);
+    }
+  }, [phase?.agentData, phase?.status]);
 
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
+
+  const keepProcessingIfAgentStarted = useCallback(async () => {
+    if (!projectId) return false;
+    const { data } = await supabase
+      .from('fases_estado')
+      .select('estado_visual')
+      .eq('proyecto_id', projectId)
+      .eq('numero_fase', 1)
+      .single();
+
+    if (data?.estado_visual === 'procesando') {
+      setIsSending(false);
+      toast.info('El Agente 1 sigue en ejecucion.', {
+        description: 'Seguiremos esperando el resultado guardado en Supabase.',
+      });
+      return true;
+    }
+
+    return false;
+  }, [projectId]);
 
   useEffect(() => {
     if (isProcessing) {
@@ -266,6 +313,7 @@ export default function DocumentacionModule() {
         await fetchInitialData();
       }
     } catch {
+      if (await keepProcessingIfAgentStarted()) return;
       updatePhaseStatus(projectId!, 1, 'disponible');
       playProcessError();
       toast.error('Hubo un error al procesar. Intenta nuevamente.');
@@ -292,6 +340,15 @@ export default function DocumentacionModule() {
         phaseNumber={1}
         phaseName="Gestión Documental"
         eyebrow={isCompleted ? 'Completada' : 'Activa'}
+        onReprocessed={async () => {
+          await reprocessPhase(projectId!, 1);
+          setLiveDiagnosis(null);
+          setAgent9Data(null);
+          setAgent9Status('idle');
+          setDocumentsExpanded(false);
+          if (agent9PollRef.current) clearInterval(agent9PollRef.current);
+          await fetchInitialData();
+        }}
       />
 
       <DocumentacionProcessingOverlay isProcessing={isProcessing} />

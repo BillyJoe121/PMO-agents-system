@@ -132,6 +132,9 @@ function mapArtifactsFromAgentData(agentData: any): Artifact[] {
 
 function hasUsableAgent8Result(agentData: any): boolean {
   const data = agentData?._current ?? agentData?.data ?? agentData?.diagnosis ?? agentData;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (data._processing || data._error) return false;
+  if (data.metadata?.status === 'processing' || data.metadata?.status === 'procesando' || data.metadata?.status === 'error') return false;
   return Array.isArray(data?.artefactos_recomendados) || Array.isArray(data?.otros_artefactos);
 }
 

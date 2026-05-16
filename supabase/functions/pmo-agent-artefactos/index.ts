@@ -126,6 +126,22 @@ function normalizeArtifactList(values: unknown): string[] {
   return [...new Set(rawValues.map(resolveArtifactName).filter((value): value is string => Boolean(value)))];
 }
 
+function stringifyGuideValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    return value.map(stringifyGuideValue).filter(Boolean).join("\n");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([_, nestedValue]) => nestedValue !== null && nestedValue !== undefined && nestedValue !== "")
+      .map(([key, nestedValue]) => `${key}: ${stringifyGuideValue(nestedValue)}`)
+      .join("\n");
+  }
+  return String(value);
+}
+
 function inferRecommendedFromText(text: string): string[] {
   const normalizedText = normalizeText(text);
   if (!normalizedText) return [];
@@ -229,7 +245,7 @@ function extractFase7Content(agentData: any): string {
   if (d.descripcion_general) parts.push(`Descripción: ${d.descripcion_general}`);
 
   // Secciones / capítulos de la guía
-  const secciones = d.capitulos ?? d.chapters ?? d.secciones ?? d.guide_content ?? d.contenido ?? [];
+  const secciones = d.capitulos ?? d.chapters ?? d.secciones ?? d.guide_content ?? d.diagnosis?.guide_content ?? d.contenido ?? [];
   if (Array.isArray(secciones) && secciones.length > 0) {
     parts.push("\nSecciones de la guía:");
     for (const sec of secciones) {
@@ -238,7 +254,7 @@ function extractFase7Content(agentData: any): string {
       } else {
         const titulo = sec.titulo ?? sec.title ?? sec.nombre ?? sec.section_title ?? sec.id ?? sec.section_id ?? "";
         const contenido = sec.contenido ?? sec.content ?? sec.descripcion ?? sec.description ?? sec.enfasis ?? sec.introduccion ?? "";
-        parts.push(`- ${titulo}: ${contenido}`);
+        parts.push(`- ${titulo}: ${stringifyGuideValue(contenido)}`);
 
         // Sub-secciones si existen
         const subsecs = sec.subsecciones ?? sec.subsections ?? sec.secciones ?? [];
@@ -246,10 +262,15 @@ function extractFase7Content(agentData: any): string {
           for (const sub of subsecs) {
             const stit = sub.titulo ?? sub.title ?? "";
             const scont = sub.contenido ?? sub.content ?? sub.descripcion ?? "";
-            if (stit || scont) parts.push(`  · ${stit}: ${scont}`);
+            if (stit || scont) parts.push(`  · ${stit}: ${stringifyGuideValue(scont)}`);
           }
         }
       }
+    }
+  } else if (secciones && typeof secciones === "object") {
+    parts.push("\nSecciones de la guÃ­a:");
+    for (const [key, value] of Object.entries(secciones as Record<string, unknown>)) {
+      parts.push(`- ${key}: ${stringifyGuideValue(value)}`);
     }
   }
 

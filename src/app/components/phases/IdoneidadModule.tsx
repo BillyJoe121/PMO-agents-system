@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { useIdoneidad, type AgentErrorPayload } from '../../hooks/useIdoneidad';
+import { normalizeIdoneidadDiagnosis, useIdoneidad, type AgentErrorPayload } from '../../hooks/useIdoneidad';
 import { useSoundManager } from '../../hooks/useSoundManager';
 import PhaseHeader from './_shared/PhaseHeader';
 import NextPhaseButton from './_shared/NextPhaseButton';
@@ -156,7 +156,7 @@ export default function IdoneidadModule() {
     });
   }, [visibleDiagnosis]);
 
-  const initialState: ModuleState = phase?.status === 'completado' ? 'completed' : 'selection';
+  const initialState: ModuleState = 'selection';
 
   const [moduleState, setModuleState] = useState<ModuleState>(initialState);
   const [entryMethod, setEntryMethod] = useState<EntryMethod>(null);
@@ -171,7 +171,7 @@ export default function IdoneidadModule() {
     : 0;
   const totalRespondentCount = responses.length + externalRespondentCount;
   const hasDiagnosis = Boolean(visibleDiagnosis);
-  const isCompleted = phase?.status === 'completado' || hasDiagnosis;
+  const isCompleted = hasDiagnosis;
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -194,8 +194,6 @@ export default function IdoneidadModule() {
       setModuleState('completed');
     } else if (phase?.status === 'disponible' || phase?.status === 'error') {
       setModuleState('selection');
-    } else if (phase?.status === 'completado') {
-      setModuleState('completed');
     }
   }, [phase?.status, hasDiagnosis]);
 
@@ -233,7 +231,9 @@ export default function IdoneidadModule() {
 
     try {
       const result = await processPhase();
-      if (result && typeof result === 'object') setLiveDiagnosis(result);
+      const parsed = normalizeIdoneidadDiagnosis(result);
+      if (!parsed) throw new Error('El Agente aun no devolvio un diagnostico de idoneidad valido.');
+      setLiveDiagnosis(parsed);
       updatePhaseStatus(projectId!, 3, 'completado', 'Diagnóstico generado.');
       setModuleState('completed');
       playPhaseComplete();
@@ -324,6 +324,10 @@ export default function IdoneidadModule() {
     return isLoading
       ? <LoadingRouteState message="Cargando el proyecto y la fase de idoneidad..." />
       : <MissingProjectState title="Fase no disponible" description="No pudimos encontrar el proyecto o la fase de idoneidad." />;
+  }
+
+  if (isLoadingData) {
+    return <LoadingRouteState message="Cargando datos de la fase de idoneidad..." />;
   }
 
   return (

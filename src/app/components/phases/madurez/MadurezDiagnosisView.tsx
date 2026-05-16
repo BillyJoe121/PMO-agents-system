@@ -59,7 +59,7 @@ type MadurezDiagnosisViewProps = {
   onApprove?: () => void;
 };
 
-const maturityLevelNames = ['Inicial', 'En Desarrollo', 'Definido', 'Gestionado', 'Optimizado'];
+const maturityLevelNames = ['Informal', 'Basico', 'Estandar', 'Avanzado', 'Excelencia'];
 const severityTone: Record<string, PhaseReportTone> = {
   critical: 'red',
   high: 'orange',
@@ -238,9 +238,11 @@ function MaturityHero({ results, pmoType, pmoColor, approved, completedAt }: {
 }
 
 function ExecutiveCharts({ results }: { results: any }) {
-  const primary = getPrimaryMaturity(results);
-  const phaseRows = scoreEntries(primary?.por_fase);
-  const domainRows = scoreEntries(primary?.por_dominio ?? primary?.por_factor);
+  const phaseRows = scoreEntries(results.predictiva?.por_fase).map((row) => ({ ...row, label: `${row.label} Pred.` }));
+  const domainRows = [
+    ...scoreEntries(results.predictiva?.por_dominio).map((row) => ({ ...row, label: `${row.label} Pred.` })),
+    ...scoreEntries(results.agil?.por_factor).map((row) => ({ ...row, label: `${row.label} Agil` })),
+  ];
   const topRows = [...phaseRows, ...domainRows]
     .filter((row) => row.score > 0)
     .sort((a, b) => a.score - b.score)
@@ -331,9 +333,14 @@ function ExecutiveCharts({ results }: { results: any }) {
 }
 
 function GapsAndStrengths({ results }: { results: any }) {
-  const primary = getPrimaryMaturity(results);
-  const gaps = primary?.gaps ?? [];
-  const strengths = primary?.fortalezas ?? [];
+  const gaps = [
+    ...(results.predictiva?.gaps ?? []).map((item: any) => ({ ...item, enfoque: 'Predictivo' })),
+    ...(results.agil?.gaps ?? []).map((item: any) => ({ ...item, enfoque: 'Agil' })),
+  ];
+  const strengths = [
+    ...(results.predictiva?.fortalezas ?? []).map((item: any) => ({ ...item, enfoque: 'Predictivo' })),
+    ...(results.agil?.fortalezas ?? []).map((item: any) => ({ ...item, enfoque: 'Agil' })),
+  ];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -494,7 +501,10 @@ function ConsultantComments({
 
 export default function MadurezDiagnosisView(props: MadurezDiagnosisViewProps) {
   const { results, pmoType, pmoColor, approved, completedAt } = props;
-  const primary = getPrimaryMaturity(results);
+  const structuralPatterns = [
+    results.predictiva?.patrones_estructurales ? `Predictivo: ${results.predictiva.patrones_estructurales}` : '',
+    results.agil?.patrones_estructurales ? `Agil: ${results.agil.patrones_estructurales}` : '',
+  ].filter(Boolean);
 
   return (
     <motion.div key={approved ? 'approved' : 'results'} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-5">
@@ -508,11 +518,11 @@ export default function MadurezDiagnosisView(props: MadurezDiagnosisViewProps) {
           <p className="text-[11px] uppercase tracking-[0.14em] text-[#3838b8]" style={{ fontWeight: 850 }}>Sintesis del diagnostico</p>
         </div>
         <p className="text-neutral-700 text-[14px] leading-relaxed">{getSummaryText(results)}</p>
-        {primary?.patrones_estructurales && (
-          <p className="mt-3 rounded-2xl bg-neutral-50 border border-neutral-200 px-4 py-3 text-[13px] leading-relaxed text-neutral-600">
-            {primary.patrones_estructurales}
+        {structuralPatterns.map((pattern) => (
+          <p key={pattern.slice(0, 80)} className="mt-3 rounded-2xl bg-neutral-50 border border-neutral-200 px-4 py-3 text-[13px] leading-relaxed text-neutral-600">
+            {pattern}
           </p>
-        )}
+        ))}
       </div>
 
       <ModernMaturityBIDashboard results={results} />
