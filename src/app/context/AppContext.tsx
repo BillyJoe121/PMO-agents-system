@@ -60,7 +60,7 @@ const PHASE_NAMES = [
 // ─────────────────────────────────────────────────────────────────────────────
 function computePhaseAvailability(phases: Phase[]): Phase[] {
   return phases.map((phase, idx) => {
-    if (phase.status === 'completado' || phase.status === 'procesando') return phase;
+    if (phase.status === 'completado' || phase.status === 'procesando' || phase.status === 'error') return phase;
     if (idx === 0) return phase.status === 'bloqueado' ? { ...phase, status: 'disponible' } : phase;
     if (idx === 1) return { ...phase, status: phases[0]?.status === 'completado' ? 'disponible' : 'bloqueado' };
     if (idx === 2) return { ...phase, status: phases[1]?.status === 'completado' ? 'disponible' : 'bloqueado' };

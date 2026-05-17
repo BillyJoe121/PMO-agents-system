@@ -42,6 +42,51 @@ import {
 } from './guia-metodologica/guideContent';
 import { hasUsableGuidePayload, normalizeChapters, unwrapGuidePayload, versionsFromPayload } from './guia-metodologica/normalizeGuide';
 import type { DocVersion, GuideChapter, ModuleView } from './guia-metodologica/types';
+
+const PHASE7_PROGRESS_STEPS = [
+  { key: 'part_1a', stage: 'part_1a', label: '7.1A - Introduccion, objetivo y alcance' },
+  { key: 'part_1b', stage: 'part_1b', label: '7.1B - Responsables, marco conceptual y marco de referencia' },
+  { key: 'part_1c', stage: 'part_1c', label: '7.1C - Politicas, roles y comites' },
+  { key: 'part_2a', stage: 'part_2a', label: '7.2A - Flujos de inicio y planificacion' },
+  { key: 'part_2b', stage: 'part_2b', label: '7.2B - Flujos de ejecucion, monitoreo, control y cierre' },
+  { key: 'part_2c', stage: 'part_2c', label: '7.2C - Indicadores predictivos y de control' },
+  { key: 'part_2d', stage: 'part_2d', label: '7.2D - Indicadores agiles, valor y adopcion' },
+  { key: 'part_2e', stage: 'part_2e', label: '7.2E - Documentos de inicio, planificacion y ejecucion' },
+  { key: 'part_2f', stage: 'part_2f', label: '7.2F - Documentos de seguimiento, control, cierre y mejora' },
+];
+
+type Phase7Progress = {
+  current: number;
+  total: number;
+  label: string;
+  detail?: string;
+};
+
+function getPhase7Progress(data: any): Phase7Progress {
+  const total = PHASE7_PROGRESS_STEPS.length;
+  const parts = data?._parts ?? {};
+  const completed = PHASE7_PROGRESS_STEPS.filter(step => parts?.[step.key]?.status === 'success').length;
+  const stage = typeof data?.stage === 'string' ? data.stage : '';
+  const activeIndex = PHASE7_PROGRESS_STEPS.findIndex(step => step.stage === stage);
+  const nextIndex = activeIndex >= 0 ? activeIndex : Math.min(total - 1, completed);
+  const current = Math.min(total, Math.max(1, Math.max(completed + 1, nextIndex + 1)));
+  const active = PHASE7_PROGRESS_STEPS[Math.min(total - 1, current - 1)];
+
+  return {
+    current,
+    total,
+    label: active.label,
+    detail: data?.message || (completed > 0 ? `${completed} subpartes completadas` : 'Preparando la primera subparte'),
+  };
+}
+
+function logPhase7(event: string, details: Record<string, unknown> = {}) {
+  console.info(`[PMO][Phase7][${event}]`, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Main module
 // ---------------------------------------------------------------------------
@@ -52,29 +97,33 @@ export default function GuiaMetodologicaView() {
   const { playAgentSuccess, playPhaseComplete } = useSoundManager();
 
   const project = getProject(projectId!);
-  const phase    = project?.phases.find(p => p.number === 7);
-  const phase4   = project?.phases.find(p => p.number === 4);
+  const phase = project?.phases.find(p => p.number === 7);
+  const phase4 = project?.phases.find(p => p.number === 4);
 
-  const pmoType      = parsePmoType(phase4?.agentData ?? phase4?.agentDiagnosis);
+  const pmoType = parsePmoType(phase4?.agentData ?? phase4?.agentDiagnosis);
 
   const deriveView = (): ModuleView => {
     if (!project || !phase) return 'processing';
+    if ((phase.agentData as any)?._error) return 'error';
+    if (phase.status === 'error') return 'error';
     if (phase.status === 'completado' && hasUsableGuidePayload(phase.agentData)) return 'approved';
     if (phase.status === 'procesando') return 'processing';
     if (hasUsableGuidePayload(phase.agentData)) return 'results';
     return 'auto-trigger';
   };
 
-  const [view, setView]                     = useState<ModuleView>(deriveView);
+  const [view, setView] = useState<ModuleView>(deriveView);
   const [processingStep, setProcessingStep] = useState(1);
-  const [isAdjustment, setIsAdjustment]     = useState(false);
-  const [chapters, setChapters]             = useState<GuideChapter[]>(() => normalizeChapters(unwrapGuidePayload(phase?.agentData)));
-  const [versions, setVersions]             = useState<DocVersion[]>(() => versionsFromPayload(phase?.agentData));
+  const [phase7Progress, setPhase7Progress] = useState<Phase7Progress>(() => getPhase7Progress(null));
+  const [isAdjustment, setIsAdjustment] = useState(false);
+  const [chapters, setChapters] = useState<GuideChapter[]>(() => normalizeChapters(unwrapGuidePayload(phase?.agentData)));
+  const [versions, setVersions] = useState<DocVersion[]>(() => versionsFromPayload(phase?.agentData));
   const [currentVersionIdx, setCurrentVersionIdx] = useState(0);
-  const [adjustText, setAdjustText]         = useState('');
-  const [isAdjusting, setIsAdjusting]       = useState(false);
-  const [showApprove, setShowApprove]       = useState(false);
-  const [isApproving, setIsApproving]       = useState(false);
+  const [adjustText, setAdjustText] = useState('');
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  const [showApprove, setShowApprove] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const autoTriggered = useRef(false);
   const hasFailed = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -84,6 +133,9 @@ export default function GuiaMetodologicaView() {
   const transientRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAgentRequestRef = useRef<{ iteration: number; comments: string | null } | null>(null);
   const guideFinishedRef = useRef(false);
+  const stageTriggerRef = useRef<Record<string, boolean>>({});
+  const lastPollSignatureRef = useRef('');
+  const approvalCommittedRef = useRef(false);
 
   const currentVersion = versions[currentVersionIdx] ?? null;
 
@@ -91,24 +143,38 @@ export default function GuiaMetodologicaView() {
     const current = unwrapGuidePayload(raw);
     const nextChapters = normalizeChapters(current);
     if (nextChapters.length === 0) {
+      logPhase7('apply_payload_failed_empty_chapters', {
+        projectId,
+        rawKeys: raw && typeof raw === 'object' ? Object.keys(raw).slice(0, 12) : typeof raw,
+      });
       return false;
     }
     const nextVersions = versionsFromPayload(raw);
+    logPhase7('apply_payload_ok', {
+      projectId,
+      chapters: nextChapters.length,
+      versions: nextVersions.length,
+    });
     setChapters(nextChapters);
     setVersions(nextVersions);
     setCurrentVersionIdx(Math.max(0, nextVersions.length - 1));
     return true;
-  }, []);
+  }, [projectId]);
 
   const finishGuideGeneration = useCallback((raw: any, status: 'disponible' | 'completado' = 'disponible') => {
     if (guideFinishedRef.current) return true;
     const ok = applyGuidePayload(raw);
     if (!ok) return false;
 
+    logPhase7('finish_generation', {
+      projectId,
+      status,
+    });
     guideFinishedRef.current = true;
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = null;
     setIsAdjusting(false);
+    setErrorMessage('');
     transientRetryCountRef.current = 0;
     setView(status === 'completado' ? 'approved' : 'results');
     updatePhaseStatus(projectId!, 7, status);
@@ -124,6 +190,7 @@ export default function GuiaMetodologicaView() {
     if (!projectId) return;
     if (pollRef.current && !forceRestart) return;
     if (pollRef.current) clearInterval(pollRef.current);
+    logPhase7('poll_start', { projectId, startedAt, forceRestart });
     guideFinishedRef.current = false;
     pollStartRef.current = startedAt;
     pollTimeoutStartRef.current = Date.now();
@@ -147,7 +214,7 @@ export default function GuiaMetodologicaView() {
       setView('processing');
       setProcessingStep(1);
 
-      toast.info(`Gemini esta saturado. Reintentando Agente 7 (${attempt}/${MAX_TRANSIENT_GEMINI_RETRIES})...`, {
+      toast.info(`La IA esta saturada. Reintentando Agente 7 (${attempt}/${MAX_TRANSIENT_GEMINI_RETRIES})...`, {
         description: 'La pantalla seguira en modo de carga y volvera a consultar automaticamente.',
         duration: 7000,
       });
@@ -188,15 +255,60 @@ export default function GuiaMetodologicaView() {
       return true;
     };
 
+    const triggerQueuedStage = async (stage: 'part1' | 'part2', runId: string, queueSignature: string) => {
+      const key = `${runId}:${stage}:${queueSignature}`;
+      if (stageTriggerRef.current[key]) return;
+      stageTriggerRef.current[key] = true;
+
+      try {
+        const request = lastAgentRequestRef.current ?? { iteration: 1, comments: null };
+        logPhase7('trigger_stage', { projectId, stage, runId, queueSignature, iteration: request.iteration });
+        const { error } = await supabase.functions.invoke('pmo-agent', {
+          body: {
+            projectId,
+            phaseNumber: 7,
+            phase7Stage: stage,
+            runId,
+            iteration: request.iteration,
+            comments: request.comments,
+          },
+        });
+        if (error) throw new Error(error.message);
+        logPhase7('trigger_stage_response_ok', { projectId, stage, runId, queueSignature });
+      } catch (err) {
+        delete stageTriggerRef.current[key];
+        logPhase7('trigger_stage_error', { projectId, stage, runId, queueSignature, message: err instanceof Error ? err.message : String(err) });
+      }
+    };
+
     const poll = async () => {
-      if (Date.now() - pollTimeoutStartRef.current > 8 * 60 * 1000) {
+      if (Date.now() - pollTimeoutStartRef.current > 30 * 60 * 1000) {
+        const message = 'El Agente 7 tardo demasiado en responder. La ejecucion se marco como fallida para evitar dejar la fase pegada.';
+        logPhase7('poll_timeout', { projectId, elapsedMs: Date.now() - pollTimeoutStartRef.current });
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
-        setView(chapters.length > 0 ? 'results' : 'auto-trigger');
-        updatePhaseStatus(projectId, 7, 'disponible');
+        hasFailed.current = true;
+        setErrorMessage(message);
+        setView(chapters.length > 0 ? 'results' : 'error');
+        updatePhaseStatus(projectId, 7, 'error');
+        await supabase
+          .from('fases_estado')
+          .update({
+            estado_visual: 'error',
+            datos_consolidados: {
+              _error: true,
+              message,
+              phaseNumber: 7,
+              stage: 'frontend_poll_timeout',
+              timestamp: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('proyecto_id', projectId)
+          .eq('numero_fase', 7);
         toast.error('El Agente 7 tardo demasiado en responder.', {
-          description: 'La fase quedo disponible para reintentar la generacion.',
+          description: 'La fase quedo marcada con error para reintentar sin dejar marcadores viejos.',
           duration: 9000,
         });
         return;
@@ -213,29 +325,81 @@ export default function GuiaMetodologicaView() {
       // Removed: if (data?.updated_at && new Date(data.updated_at).getTime() < pollStartRef.current) return;
 
       const phase7Data = data?.datos_consolidados as any;
+      setPhase7Progress(getPhase7Progress(phase7Data));
       const lastUpdatedAt = data?.updated_at ? new Date(data.updated_at).getTime() : 0;
       const staleProcessingMs = Date.now() - lastUpdatedAt;
+      const pollSignature = [
+        data?.estado_visual ?? 'unknown',
+        phase7Data?.stage ?? 'no-stage',
+        phase7Data?._run_id ?? 'no-run',
+        data?.updated_at ?? 'no-updated',
+      ].join('|');
+      if (pollSignature !== lastPollSignatureRef.current) {
+        lastPollSignatureRef.current = pollSignature;
+        logPhase7('poll_state', {
+          projectId,
+          estado_visual: data?.estado_visual,
+          stage: phase7Data?.stage ?? null,
+          runId: phase7Data?._run_id ?? null,
+          message: phase7Data?.message ?? null,
+          updated_at: data?.updated_at ?? null,
+          staleProcessingMs,
+          hasPart1: Boolean(phase7Data?._parts?.part_1),
+          hasPart2: Boolean(phase7Data?._parts?.part_2),
+        });
+      }
+      if (
+        data?.estado_visual === 'procesando' &&
+        phase7Data?._processing === true &&
+        phase7Data?._run_id &&
+        lastUpdatedAt > 0
+      ) {
+        if ((phase7Data.stage === 'part_1_queued' || phase7Data.stage === 'part_1_combine_queued') && staleProcessingMs > 12_000) {
+          void triggerQueuedStage('part1', String(phase7Data._run_id), `${phase7Data.stage}:${data.updated_at}`);
+        }
+        if ((phase7Data.stage === 'part_2_queued' || phase7Data.stage === 'part_2_combine_queued') && staleProcessingMs > 12_000) {
+          void triggerQueuedStage('part2', String(phase7Data._run_id), `${phase7Data.stage}:${data.updated_at}`);
+        }
+        if (typeof phase7Data.stage === 'string' && phase7Data.stage.startsWith('part_1') && staleProcessingMs > 5 * 60 * 1000) {
+          void triggerQueuedStage('part1', String(phase7Data._run_id), `${phase7Data.stage}:${data.updated_at}`);
+        }
+        if (typeof phase7Data.stage === 'string' && phase7Data.stage.startsWith('part_2') && staleProcessingMs > 5 * 60 * 1000) {
+          void triggerQueuedStage('part2', String(phase7Data._run_id), `${phase7Data.stage}:${data.updated_at}`);
+        }
+      }
       if (
         data?.estado_visual === 'procesando' &&
         (!data?.datos_consolidados || phase7Data?._processing === true) &&
         lastUpdatedAt > 0 &&
-        staleProcessingMs > 10 * 60 * 1000
+        staleProcessingMs > 30 * 60 * 1000
       ) {
+        const message = `La ejecucion anterior del Agente 7 quedo sin actividad en ${phase7Data?.stage ?? 'processing'}.`;
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
-        setView('auto-trigger');
-        updatePhaseStatus(projectId, 7, 'disponible');
+        hasFailed.current = true;
+        setErrorMessage(message);
+        setView('error');
+        updatePhaseStatus(projectId, 7, 'error');
         await supabase
           .from('fases_estado')
           .update({
-            estado_visual: 'disponible',
+            estado_visual: 'error',
+            datos_consolidados: {
+              _error: true,
+              message,
+              phaseNumber: 7,
+              stage: phase7Data?.stage ?? 'stale_processing',
+              _run_id: phase7Data?._run_id ?? null,
+              _parts: phase7Data?._parts ?? {},
+              timestamp: new Date().toISOString(),
+            },
             updated_at: new Date().toISOString(),
           })
           .eq('proyecto_id', projectId)
           .eq('numero_fase', 7);
         toast.error('La ejecucion anterior del Agente 7 quedo sin actividad.', {
-          description: 'La fase quedo disponible para intentar generar la guia nuevamente.',
+          description: 'La fase quedo marcada con error para que puedas reintentar limpiamente.',
           duration: 9000,
         });
         return;
@@ -244,16 +408,20 @@ export default function GuiaMetodologicaView() {
       if (data?.datos_consolidados && (data.estado_visual === 'disponible' || data.estado_visual === 'completado')) {
         if ((data.datos_consolidados as any)?._error) {
           const message = (data.datos_consolidados as any)?.message || 'Revise el prompt del Agente 7 e intente nuevamente.';
+          logPhase7('poll_error_payload', { projectId, message });
           if (scheduleTransientRetry(message)) return;
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           setIsAdjusting(false);
-          setView(chapters.length > 0 ? 'results' : 'auto-trigger');
-          updatePhaseStatus(projectId, 7, 'disponible');
+          hasFailed.current = true;
+          setErrorMessage(message);
+          setView(chapters.length > 0 ? 'results' : 'error');
+          updatePhaseStatus(projectId, 7, 'error');
           toast.error('El Agente 7 encontro un error.', { description: message, duration: 9000 });
           return;
         }
         if (!finishGuideGeneration(data.datos_consolidados, data.estado_visual === 'completado' ? 'completado' : 'disponible')) {
+          logPhase7('poll_result_unusable', { projectId, estado_visual: data.estado_visual });
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           setIsAdjusting(false);
@@ -266,21 +434,27 @@ export default function GuiaMetodologicaView() {
       }
 
       if (data?.estado_visual === 'disponible' && !data?.datos_consolidados) {
+        logPhase7('poll_available_without_data', { projectId });
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
-        setView('auto-trigger');
+        hasFailed.current = true;
+        setErrorMessage('El Agente 7 no genero datos. Revisa el prompt o intenta nuevamente.');
+        setView('error');
         toast.error('El Agente 7 no genero datos. Revisa el prompt o intenta nuevamente.');
       }
 
       if (data?.estado_visual === 'error') {
         const message = (data?.datos_consolidados as any)?.message || 'Revise el prompt del Agente 7 e intente nuevamente.';
+        logPhase7('poll_error_state', { projectId, message });
         if (scheduleTransientRetry(message)) return;
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
         setIsAdjusting(false);
-        setView(chapters.length > 0 ? 'results' : 'auto-trigger');
-        updatePhaseStatus(projectId, 7, 'disponible');
+        hasFailed.current = true;
+        setErrorMessage(message);
+        setView(chapters.length > 0 ? 'results' : 'error');
+        updatePhaseStatus(projectId, 7, 'error');
         toast.error('El Agente 7 encontro un error.', { description: message, duration: 9000 });
       }
     };
@@ -292,12 +466,17 @@ export default function GuiaMetodologicaView() {
   const invokeAgent7 = useCallback(async (iteration = 1, comments: string | null = null) => {
     if (!projectId) return;
     const startedAt = Date.now();
+    logPhase7('invoke_start', { projectId, iteration, hasComments: Boolean(comments) });
     pollStartRef.current = startedAt;
     transientRetryCountRef.current = 0;
     if (transientRetryTimeoutRef.current) clearTimeout(transientRetryTimeoutRef.current);
     transientRetryTimeoutRef.current = null;
     lastAgentRequestRef.current = { iteration, comments };
     guideFinishedRef.current = false;
+    stageTriggerRef.current = {};
+    hasFailed.current = false;
+    setErrorMessage('');
+    setPhase7Progress(getPhase7Progress(null));
 
     // CRITICAL: Update DB directly BEFORE invoking the edge function.
     // The edge function checks DB estado_visual === 'procesando' before saving results.
@@ -311,20 +490,30 @@ export default function GuiaMetodologicaView() {
       .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
       .eq('proyecto_id', projectId)
       .eq('numero_fase', 7);
+    logPhase7('invoke_marked_processing', { projectId, iteration });
 
     updatePhaseStatus(projectId, 7, 'procesando');
     setView('processing');
     setProcessingStep(1);
+    setPhase7Progress(getPhase7Progress(null));
     startPolling(startedAt, true);
     try {
       const { data, error } = await supabase.functions.invoke('pmo-agent', {
         body: { projectId, phaseNumber: 7, iteration, comments },
       });
       if (error) throw new Error(error.message);
+      logPhase7('invoke_response', {
+        projectId,
+        iteration,
+        inProgress: Boolean((data as any)?.inProgress),
+        stage: (data as any)?.stage ?? null,
+        cached: Boolean((data as any)?.cached),
+      });
       const agentPayload = (data as any)?.data ?? (data as any)?.diagnosis;
       if (agentPayload && !(data as any)?.inProgress && finishGuideGeneration(agentPayload, 'disponible')) return;
       startPolling(startedAt, true);
     } catch (err: any) {
+      logPhase7('invoke_error', { projectId, iteration, message: err?.message ?? String(err) });
       if (isTransientGeminiError(err?.message || '')) {
         setView('processing');
         startPolling(startedAt, true);
@@ -353,13 +542,25 @@ export default function GuiaMetodologicaView() {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
       setIsAdjusting(false);
-      setView(versions.length > 0 ? 'results' : 'auto-trigger');
-      updatePhaseStatus(projectId, 7, 'disponible');
+      hasFailed.current = true;
+      setErrorMessage(err.message);
+      setView(versions.length > 0 ? 'results' : 'error');
+      updatePhaseStatus(projectId, 7, 'error');
       toast.error('Error iniciando Agente 7', { description: err.message });
     }
   }, [finishGuideGeneration, projectId, startPolling, updatePhaseStatus, versions.length]);
 
   // ── Processing: advance steps then show results ───────────────────────────
+  useEffect(() => {
+    logPhase7('view_changed', {
+      projectId,
+      view,
+      phaseStatus: phase?.status ?? null,
+      chapters: chapters.length,
+      versions: versions.length,
+    });
+  }, [chapters.length, phase?.status, projectId, versions.length, view]);
+
   useEffect(() => {
     if (view !== 'processing') return;
     const interval = setInterval(() => {
@@ -369,45 +570,77 @@ export default function GuiaMetodologicaView() {
   }, [view]);
 
   useEffect(() => {
-    if (phase?.agentData && chapters.length === 0) applyGuidePayload(phase.agentData);
+    if (phase?.agentData && chapters.length === 0 && hasUsableGuidePayload(phase.agentData)) {
+      applyGuidePayload(phase.agentData);
+    }
   }, [phase?.agentData, chapters.length, applyGuidePayload]);
 
   useEffect(() => {
     if (!project || !phase) return;
+    if (isAdjusting && view === 'processing') return;
+
+    if ((phase.agentData as any)?._error) {
+      const message = (phase.agentData as any)?.message ?? 'El Agente 7 encontro un error.';
+      logPhase7('phase_payload_error', { projectId, message });
+      hasFailed.current = true;
+      setErrorMessage(message);
+      setView(chapters.length > 0 ? 'results' : 'error');
+      return;
+    }
+
+    if (phase.status === 'error') {
+      const message = (phase.agentData as any)?.message ?? 'El Agente 7 encontro un error.';
+      logPhase7('phase_state_error', { projectId, message });
+      hasFailed.current = true;
+      setErrorMessage(message);
+      setView(chapters.length > 0 ? 'results' : 'error');
+      return;
+    }
 
     if (hasUsableGuidePayload(phase.agentData)) {
+      logPhase7('phase_state_has_usable_payload', { projectId, phaseStatus: phase.status });
       applyGuidePayload(phase.agentData);
-      setView(phase.status === 'completado' ? 'approved' : 'results');
+      setView(approvalCommittedRef.current || phase.status === 'completado' ? 'approved' : 'results');
       return;
     }
 
     if (phase.status === 'procesando') {
+      logPhase7('phase_state_processing_resume_poll', { projectId });
       setView('processing');
       startPolling(0);
       return;
     }
 
     if (phase.status === 'completado') {
-      setView('auto-trigger');
+      logPhase7('phase_completed_without_payload', { projectId });
+      setView(chapters.length > 0 ? 'approved' : 'auto-trigger');
       return;
     }
 
     if (phase.status === 'disponible') {
-      setView('auto-trigger');
+      logPhase7('phase_available_waiting_auto_trigger', { projectId });
+      setView(approvalCommittedRef.current && chapters.length > 0 ? 'approved' : chapters.length > 0 ? 'results' : 'auto-trigger');
     }
-  }, [applyGuidePayload, phase, project, startPolling]);
+  }, [applyGuidePayload, chapters.length, isAdjusting, phase, project, startPolling, view]);
 
   // hasFailed prevents re-triggering after a parse failure (would cause infinite loop)
   useEffect(() => {
     if (!project || !phase || isLoading) return;
     if (phase.status !== 'disponible') return;
     if (autoTriggered.current || hasFailed.current || view !== 'auto-trigger' || chapters.length > 0) return;
+    if ((phase.agentData as any)?._error) return;
     if (hasUsableGuidePayload(phase.agentData)) return;
     autoTriggered.current = true;
+    logPhase7('auto_trigger_conditions_met', { projectId });
     invokeAgent7(1, null);
   }, [chapters.length, invokeAgent7, isLoading, phase, project, view]);
 
   useEffect(() => {
+    logPhase7('mount', {
+      projectId,
+      initialPhaseStatus: phase?.status ?? null,
+      hasAgentData: Boolean(phase?.agentData),
+    });
     if (phase?.status === 'procesando') {
       setView('processing');
       startPolling(0);
@@ -432,6 +665,11 @@ export default function GuiaMetodologicaView() {
   // ── Remaining handlers (non-hook, safe after guard) ──────────────────────
   const handleRequestAdjustments = async () => {
     if (!adjustText.trim()) { toast.error('Escriba las instrucciones de ajuste antes de enviar.'); return; }
+    logPhase7('request_adjustments', {
+      projectId,
+      currentVersion: currentVersion?.number ?? null,
+      commentChars: adjustText.trim().length,
+    });
     setIsAdjusting(true);
     setIsAdjustment(true);
     const nextIteration = (currentVersion?.number ?? versions.length) + 1;
@@ -440,19 +678,50 @@ export default function GuiaMetodologicaView() {
     await invokeAgent7(nextIteration, comment);
   };
 
+  const handleRetry = async () => {
+    if (!projectId) return;
+    logPhase7('retry_clicked', { projectId });
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+    hasFailed.current = false;
+    approvalCommittedRef.current = false;
+    autoTriggered.current = true;
+    guideFinishedRef.current = false;
+    stageTriggerRef.current = {};
+    setErrorMessage('');
+    setView('processing');
+    setProcessingStep(1);
+    setPhase7Progress(getPhase7Progress(null));
+    await invokeAgent7(1, null);
+  };
+
   const handleReprocess = async () => {
     if (!adjustText.trim()) { toast.error('Escriba un comentario para reprocesar.'); return; }
+    logPhase7('manual_reprocess', {
+      projectId,
+      currentVersion: currentVersion?.number ?? null,
+      commentChars: adjustText.trim().length,
+    });
     const nextIteration = (currentVersion?.number ?? versions.length) + 1;
     const comment = adjustText;
     setAdjustText('');
     setIsAdjustment(true);
     setIsAdjusting(true);
+    setErrorMessage('');
+    hasFailed.current = false;
+    approvalCommittedRef.current = false;
+    autoTriggered.current = true; // prevent auto-trigger loop during reprocess
+    guideFinishedRef.current = false;
+    setView('processing');
+    setProcessingStep(1);
+    setPhase7Progress(getPhase7Progress(null));
     const startedAt = Date.now();
     pollStartRef.current = startedAt;
     transientRetryCountRef.current = 0;
     if (transientRetryTimeoutRef.current) clearTimeout(transientRetryTimeoutRef.current);
     transientRetryTimeoutRef.current = null;
     lastAgentRequestRef.current = { iteration: nextIteration, comments: comment };
+    stageTriggerRef.current = {};
 
     try {
       // 1. Bloquear fases posteriores sin borrar la guía actual.
@@ -462,6 +731,7 @@ export default function GuiaMetodologicaView() {
         .update({ estado_visual: 'bloqueado', datos_consolidados: null, updated_at: new Date().toISOString() })
         .eq('proyecto_id', projectId!)
         .gt('numero_fase', 7);
+      logPhase7('manual_reprocess_later_phases_blocked', { projectId });
 
       // 2. Update DB to 'procesando' BEFORE invoking so cancellation check passes.
       // Also clear datos_consolidados to remove stale _processing markers.
@@ -470,13 +740,9 @@ export default function GuiaMetodologicaView() {
         .update({ estado_visual: 'procesando', datos_consolidados: null, updated_at: new Date().toISOString() })
         .eq('proyecto_id', projectId)
         .eq('numero_fase', 7);
+      logPhase7('manual_reprocess_marked_processing', { projectId, iteration: nextIteration });
 
       updatePhaseStatus(projectId!, 7, 'procesando');
-      hasFailed.current = false;
-      autoTriggered.current = true; // prevent auto-trigger loop during reprocess
-      guideFinishedRef.current = false;
-      setView('processing');
-      setProcessingStep(1);
       startPolling(startedAt, true);
 
       // 3. Invoke the agent; polling will detect completion
@@ -484,6 +750,12 @@ export default function GuiaMetodologicaView() {
         body: { projectId, phaseNumber: 7, iteration: nextIteration, comments: comment },
       });
       if (error) throw new Error((data as any)?.error || error.message);
+      logPhase7('manual_reprocess_invoke_response', {
+        projectId,
+        iteration: nextIteration,
+        inProgress: Boolean((data as any)?.inProgress),
+        stage: (data as any)?.stage ?? null,
+      });
       const agentPayload = (data as any)?.data ?? (data as any)?.diagnosis;
       if (agentPayload && !(data as any)?.inProgress && finishGuideGeneration(agentPayload, 'disponible')) return;
 
@@ -491,7 +763,7 @@ export default function GuiaMetodologicaView() {
         description: 'El Agente 7 está incorporando las instrucciones del consultor.',
       });
     } catch (e) {
-      console.error('[Phase7] Reprocess error:', e);
+      logPhase7('manual_reprocess_error', { projectId, message: e instanceof Error ? e.message : String(e) });
       if (isTransientGeminiError(e instanceof Error ? e.message : String(e))) {
         setView('processing');
         startPolling(startedAt, true);
@@ -518,8 +790,13 @@ export default function GuiaMetodologicaView() {
   };
 
   const handleApprove = async () => {
+    logPhase7('approve_clicked', {
+      projectId,
+      currentVersion: currentVersion?.number ?? null,
+      chapters: chapters.length,
+    });
     setIsApproving(true);
-    
+
     try {
       // Invocamos el Agente 8 para que empiece a procesar los artefactos en background
       updatePhaseStatus(projectId!, 8, 'procesando');
@@ -528,20 +805,21 @@ export default function GuiaMetodologicaView() {
       }).catch(e => console.error('[Phase7] Agent 8 trigger failed:', e));
 
       await new Promise(r => setTimeout(r, 700));
-      
+
       setIsApproving(false);
       setShowApprove(false);
+      approvalCommittedRef.current = true;
 
       // RF-F7-06: marca Fase 7 completada + desbloquea Fase 8
       updatePhaseStatus(
         projectId!, 7, 'completado',
         `Guía Metodológica aprobada · Versión ${currentVersion?.number} · PMO ${pmoType} · ${chapters.length} capítulos.`
       );
-      
+
       playPhaseComplete(); // Phase_Complete: consultor aprobó definitivamente
       setView('approved');
-      toast.success('¡Fase 7 aprobada!', { 
-        description: 'La Guía Metodológica ha sido completada. El Agente 8 está generando las recomendaciones de artefactos.' 
+      toast.success('¡Fase 7 aprobada!', {
+        description: 'La Guía Metodológica ha sido completada. El Agente 8 está generando las recomendaciones de artefactos.'
       });
     } catch (e) {
       console.error('[Phase7] Approval error:', e);
@@ -551,6 +829,41 @@ export default function GuiaMetodologicaView() {
   };
 
   const isCompleted = view === 'approved';
+
+  if (view === 'error') {
+    return (
+      <div className="h-screen bg-[#f7f8ff] flex flex-col overflow-hidden">
+        <PhaseHeader
+          projectId={projectId!}
+          companyName={project.companyName}
+          phaseNumber={7}
+          phaseName="Guia Metodologica"
+          eyebrow="Revision requerida"
+        />
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="max-w-xl text-center">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-orange-600 mb-3" style={{ fontWeight: 700 }}>
+              Agente detenido
+            </p>
+            <h2 className="text-neutral-900 mb-3" style={{ fontWeight: 600, fontSize: '1.6rem' }}>
+              La Fase 7 no pudo completar la guia
+            </h2>
+            <p className="text-neutral-500 text-sm leading-relaxed mb-7">
+              {errorMessage || 'Revisa la consola del navegador y los logs de Supabase para ver el ultimo paso registrado.'}
+            </p>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="inline-flex items-center justify-center px-5 py-3 rounded-full bg-[#5454e9] text-white text-sm"
+              style={{ fontWeight: 600 }}
+            >
+              Reintentar Agente 7
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Render: auto-trigger → skip straight to processing ───────────────────
   // There is no separate "sending" screen. The moment the component mounts
@@ -564,7 +877,7 @@ export default function GuiaMetodologicaView() {
           phaseNumber={7}
           phaseName="Guía Metodológica"
         />
-        <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={false} />
+        <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={false} phaseProgress={phase7Progress} />
       </div>
     );
   }
@@ -582,7 +895,7 @@ export default function GuiaMetodologicaView() {
           phaseName="Guía Metodológica"
         />
         <div className="flex-1 min-h-0 overflow-hidden">
-          <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={isAdjustment} />
+          <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={isAdjustment} phaseProgress={phase7Progress} />
         </div>
       </div>
     );

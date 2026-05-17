@@ -16,6 +16,13 @@ function extractCommentText(comments: unknown): string | null {
   return null;
 }
 
+function logPhase7(event: string, details: Record<string, unknown> = {}) {
+  console.log(`[pmo-agent][phase7][${event}] ${JSON.stringify({
+    at: new Date().toISOString(),
+    ...details,
+  })}`);
+}
+
 function extractCurrentGuideForRevision(comments: unknown): any | null {
   if (!comments || typeof comments !== "object") return null;
   const record = comments as Record<string, unknown>;
@@ -131,6 +138,90 @@ function normalizePhase6Envelope(value: unknown, inputEnvelope: any, processingT
 const PHASE7_PROMPT_PART_1 = 7;
 const PHASE7_PROMPT_PART_2 = 10;
 
+const PHASE7_PART1_CHUNKS = [
+  {
+    key: "part_1a",
+    stage: "part_1a",
+    phaseLabel: "7.1A",
+    title: "Introduccion, objetivo y alcance",
+    sections: "S1_introduccion, S2_objetivo y S3_alcance",
+    forbidden: "responsables, marco conceptual, marco de referencia, politicas, roles, comites, flujos, indicadores y documentos",
+  },
+  {
+    key: "part_1b",
+    stage: "part_1b",
+    phaseLabel: "7.1B",
+    title: "Responsables, marco conceptual y marco de referencia",
+    sections: "S4_responsables_guia, S5_marco_conceptual y S6_marco_de_referencia",
+    forbidden: "introduccion, objetivo, alcance, politicas, roles, comites, flujos, indicadores y documentos",
+  },
+  {
+    key: "part_1c",
+    stage: "part_1c",
+    phaseLabel: "7.1C",
+    title: "Politicas, roles y comites",
+    sections: "S7_politicas, S8_roles_y_responsabilidades y S9_comites",
+    forbidden: "introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, flujos, indicadores y documentos",
+  },
+];
+
+const PHASE7_PART2_CHUNKS = [
+  {
+    key: "part_2a",
+    stage: "part_2a",
+    phaseLabel: "7.2A",
+    title: "Flujos de procesos - inicio y planificacion",
+    sections: "S10_flujos_de_procesos",
+    focus: "Disena solo los flujos de inicio y planificacion: disparadores, entradas, actividades, decisiones, responsables, salidas y controles minimos.",
+    forbidden: "indicadores de gestion, documentos generados, introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles y comites",
+  },
+  {
+    key: "part_2b",
+    stage: "part_2b",
+    phaseLabel: "7.2B",
+    title: "Flujos de procesos - ejecucion, monitoreo/control y cierre",
+    sections: "S10_flujos_de_procesos",
+    focus: "Disena solo los flujos de ejecucion, monitoreo y control, gestion de cambios/incidencias, cierre y mejora continua.",
+    forbidden: "indicadores de gestion, documentos generados, introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles y comites",
+  },
+  {
+    key: "part_2c",
+    stage: "part_2c",
+    phaseLabel: "7.2C",
+    title: "Indicadores de gestion - predictivos y control",
+    sections: "S11_indicadores_de_gestion",
+    focus: "Define solo indicadores predictivos y de control: alcance, cronograma, costos, riesgos, calidad, cambios, entregables y gobierno.",
+    forbidden: "flujos de procesos, documentos generados, introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles y comites",
+  },
+  {
+    key: "part_2d",
+    stage: "part_2d",
+    phaseLabel: "7.2D",
+    title: "Indicadores de gestion - agiles, valor y adopcion",
+    sections: "S11_indicadores_de_gestion",
+    focus: "Define solo indicadores agiles, de valor, satisfaccion, adopcion, capacidad del equipo, predictibilidad y mejora continua.",
+    forbidden: "flujos de procesos, documentos generados, introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles y comites",
+  },
+  {
+    key: "part_2e",
+    stage: "part_2e",
+    phaseLabel: "7.2E",
+    title: "Documentos generados - inicio, planificacion y ejecucion",
+    sections: "S12_documentos_generados",
+    focus: "Define solo documentos de inicio, planificacion y ejecucion: objetivo, responsable, momento de uso, campos minimos y trazabilidad con procesos.",
+    forbidden: "flujos de procesos, indicadores de gestion, introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles y comites",
+  },
+  {
+    key: "part_2f",
+    stage: "part_2f",
+    phaseLabel: "7.2F",
+    title: "Documentos generados - seguimiento, control, cierre y mejora",
+    sections: "S12_documentos_generados",
+    focus: "Define solo documentos de seguimiento, control, cierre y mejora: objetivo, responsable, momento de uso, campos minimos y trazabilidad con indicadores.",
+    forbidden: "flujos de procesos, indicadores de gestion, introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles y comites",
+  },
+];
+
 function parseJsonIfString(value: unknown): any {
   if (typeof value !== "string") return value;
   try {
@@ -196,6 +287,70 @@ function guideContentToArray(value: unknown) {
     section_title: formatGuideSectionTitle(key),
     contenido,
   }));
+}
+
+function mergeContentValues(existing: unknown, incoming: unknown, suffix = "continuacion"): unknown {
+  const existingRecord = asRecord(existing);
+  const incomingRecord = asRecord(incoming);
+
+  if (existingRecord && incomingRecord) {
+    const merged: Record<string, unknown> = { ...existingRecord };
+    for (const [key, value] of Object.entries(incomingRecord)) {
+      if (merged[key] === undefined) {
+        merged[key] = value;
+      } else {
+        let nextKey = `${key}_${suffix}`;
+        let counter = 2;
+        while (merged[nextKey] !== undefined) {
+          nextKey = `${key}_${suffix}_${counter}`;
+          counter += 1;
+        }
+        merged[nextKey] = value;
+      }
+    }
+    return merged;
+  }
+
+  if (Array.isArray(existing) && Array.isArray(incoming)) return [...existing, ...incoming];
+  if (Array.isArray(existing)) return [...existing, incoming].filter(Boolean);
+  if (Array.isArray(incoming)) return [existing, ...incoming].filter(Boolean);
+  return [existing, incoming].filter(Boolean);
+}
+
+function mergeGuideContentSections(sections: any[]) {
+  const merged = new Map<string, any>();
+  const orderedKeys: string[] = [];
+
+  sections.forEach((section, index) => {
+    const record = asRecord(section);
+    if (!record) {
+      const key = `raw_${index}`;
+      merged.set(key, section);
+      orderedKeys.push(key);
+      return;
+    }
+
+    const key = String(record.section_key ?? record.section_id ?? record.section_title ?? `section_${index}`);
+    const content = record.contenido ?? record.content ?? record;
+    const existing = merged.get(key);
+
+    if (!existing) {
+      merged.set(key, {
+        ...record,
+        section_id: record.section_id ?? sectionIdFromGuideKey(key),
+        section_key: record.section_key ?? key,
+        section_title: record.section_title ?? formatGuideSectionTitle(key),
+        contenido: content,
+      });
+      orderedKeys.push(key);
+      return;
+    }
+
+    existing.contenido = mergeContentValues(existing.contenido, content, `continuacion_${index + 1}`);
+    merged.set(key, existing);
+  });
+
+  return orderedKeys.map((key) => merged.get(key));
 }
 
 function candidateGuideContainers(value: unknown) {
@@ -361,6 +516,69 @@ function phase7ProcessingPayload(
   };
 }
 
+type InternalInvokeAuth = {
+  authorization?: string | null;
+  apikey?: string | null;
+};
+
+async function invokePmoAgentInternally(body: Record<string, unknown>, auth: InternalInvokeAuth = {}) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const authorization = auth.authorization?.trim() || (serviceRoleKey ? `Bearer ${serviceRoleKey}` : "");
+  const apiKey = auth.apikey?.trim() || serviceRoleKey || anonKey;
+
+  if (!supabaseUrl || !authorization || !apiKey) {
+    throw new Error("No se encontro SUPABASE_URL, Authorization o apikey para invocar pmo-agent internamente.");
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/pmo-agent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: apiKey,
+      Authorization: authorization,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Invocacion interna pmo-agent fallo con HTTP ${response.status}: ${text.slice(0, 500)}`);
+  }
+
+  return response.json().catch(() => null);
+}
+
+function schedulePmoAgentContinuation(
+  body: Record<string, unknown>,
+  errorMessage: string,
+  details: Record<string, unknown> = {},
+  auth: InternalInvokeAuth = {},
+) {
+  scheduleBackground(
+    invokePmoAgentInternally(body, auth)
+      .then(() => {
+        logPhase7("internal_invoke_ok", {
+          projectId: body.projectId,
+          phase7Stage: body.phase7Stage,
+          runId: body.runId,
+          ...details,
+        });
+      })
+      .catch((error) => {
+        console.error(`[pmo-agent] ${errorMessage}:`, error);
+        logPhase7("internal_invoke_error", {
+          projectId: body.projectId,
+          phase7Stage: body.phase7Stage,
+          runId: body.runId,
+          message: error instanceof Error ? error.message : String(error),
+          ...details,
+        });
+      })
+  );
+}
+
 async function getAgentConfigForPrompt(supabase: any, promptPhaseNumber: number) {
   const { data: agentConfig, error } = await supabase
     .from("configuracion_agentes")
@@ -382,28 +600,43 @@ async function callJsonPrompt(
   promptPhaseNumber: number,
   inputEnvelope: unknown,
   extraInstruction: string,
+  fallbackOnInvalidJson?: (rawContent: string, cleanedContent: string) => unknown,
 ) {
   const agentConfig = await getAgentConfigForPrompt(supabase, promptPhaseNumber);
-  const fullPrompt = `${agentConfig.prompt_sistema}\n\nJSON DE ENTRADA:\n${JSON.stringify(inputEnvelope, null, 2)}${extraInstruction}
+  const inputJson = promptPhaseNumber === PHASE7_PROMPT_PART_2
+    ? JSON.stringify(inputEnvelope)
+    : JSON.stringify(inputEnvelope, null, 2);
+  const fullPrompt = `${agentConfig.prompt_sistema}\n\nJSON DE ENTRADA:\n${inputJson}${extraInstruction}
 
 IMPORTANTE: DEBES DEVOLVER UNICAMENTE UN OBJETO JSON VALIDO.
 Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto extra.`;
 
   const modelSettings = await getAiModelSettings(supabase);
-  const modelsToTry = getModelCandidates(modelSettings, agentConfig?.modelo);
+  const allCandidates = getModelCandidates(modelSettings);
+  const modelsToTry = allCandidates.slice(0, 1);
   const apiKeys = {
     openai: Deno.env.get("OPENAI_API_KEY") ?? "",
     anthropic: Deno.env.get("ANTHROPIC_API_KEY") ?? "",
     gemini: Deno.env.get("GOOGLE_API_KEY") ?? Deno.env.get("GEMINI_API_KEY") ?? "",
   };
 
+  logPhase7("prompt_start", {
+    promptPhaseNumber,
+    configuredProvider: modelSettings.provider,
+    selectedModel: modelSettings.selected_model,
+    agentConfigModelIgnored: agentConfig?.modelo ?? null,
+    attemptedModel: modelsToTry.map((candidate) => `${candidate.provider}:${candidate.model}`).join(", "),
+    promptChars: fullPrompt.length,
+    providerTimeoutMs: 140000,
+  });
+
   const startTime = Date.now();
   const aiResult = await callAiWithFallback(apiKeys, modelsToTry, {
     contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
     generationConfig: {
-      temperature: agentConfig?.temperatura ?? 1,
-      maxOutputTokens: 65536,
-      providerTimeoutMs: 110000,
+      temperature: promptPhaseNumber === PHASE7_PROMPT_PART_2 ? 0.2 : (agentConfig?.temperatura ?? 1),
+      maxOutputTokens: promptPhaseNumber === PHASE7_PROMPT_PART_2 ? 20000 : 65536,
+      providerTimeoutMs: 140000,
       responseMimeType: "application/json",
     },
   });
@@ -412,6 +645,16 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   const candidate = aiResult.data?.candidates?.[0];
   const finishReason = candidate?.finishReason;
   const rawContent = candidate?.content?.parts?.[0]?.text || "";
+
+  logPhase7("prompt_response", {
+    promptPhaseNumber,
+    provider: aiResult.provider,
+    model: aiResult.model,
+    processingTime,
+    finishReason,
+    rawChars: rawContent.length,
+    fallbackUsed: aiResult.fallbackUsed,
+  });
 
   if (finishReason === "MAX_TOKENS") {
     throw new Error(
@@ -432,10 +675,30 @@ Tu respuesta DEBE empezar con '{' y terminar con '}'. Sin markdown, sin texto ex
   try {
     diagnosis = JSON.parse(cleaned);
   } catch {
-    throw new Error(
-      `La IA devolvio un JSON invalido en el prompt ${promptPhaseNumber}. Tiempo: ${processingTime}s. Respuesta original: ${rawContent.substring(0, 150)}...`
-    );
+    logPhase7("prompt_json_invalid", {
+      promptPhaseNumber,
+      processingTime,
+      rawPreview: rawContent.substring(0, 180),
+    });
+    if (fallbackOnInvalidJson) {
+      diagnosis = fallbackOnInvalidJson(rawContent, cleaned);
+      logPhase7("prompt_json_recovered_with_fallback", {
+        promptPhaseNumber,
+        processingTime,
+        rawChars: rawContent.length,
+      });
+    } else {
+      throw new Error(
+        `La IA devolvio un JSON invalido en el prompt ${promptPhaseNumber}. Tiempo: ${processingTime}s. Respuesta original: ${rawContent.substring(0, 150)}...`
+      );
+    }
   }
+
+  logPhase7("prompt_json_ok", {
+    promptPhaseNumber,
+    processingTime,
+    cleanedChars: cleaned.length,
+  });
 
   return {
     diagnosis: attachModelMetadata(diagnosis, aiResult, modelSettings),
@@ -470,6 +733,7 @@ async function savePhase7Error(
   extra: Record<string, unknown> = {},
 ) {
   const message = error instanceof Error ? error.message : "Error desconocido ejecutando fase 7";
+  logPhase7("save_error", { projectId, runId, stage, message });
   const state = await getPhase7State(supabase, projectId);
   const current = (state?.datos_consolidados as any) ?? {};
   if (current?._run_id && current._run_id !== runId) return;
@@ -500,22 +764,71 @@ async function savePhase7Error(
       .eq("numero_fase", 7);
 }
 
-function phase7Part1Instruction() {
+function phase7Part1Instruction(chunk = PHASE7_PART1_CHUNKS[0]) {
   return `
 
-REQUISITO DE ORQUESTACION PARA FASE 7.1:
-Estas ejecutando el ASISTENTE 7.1 - FUNDAMENTOS DE LA GUIA METODOLOGICA. El JSON DE ENTRADA usa payload.approved_phase4_diagnosis, payload.approved_phase5_diagnosis, payload.approved_phase6_diagnosis, payload.business_rules y payload.comments.
-Genera exclusivamente S1 a S9: introduccion, objetivo, alcance, responsables de la guia, marco conceptual, marco de referencia, politicas, roles y comites. No produzcas flujos, indicadores, artefactos, plantillas ni recomendaciones finales.
-Devuelve exclusivamente el contrato JSON de 7.1 con metadata.phase="7.1", metadata.agent_id="asistente-fundamentos-guia", diagnosis.guide_content.S1_introduccion a diagnosis.guide_content.S9_comites y error=null si es exitoso.`;
+REQUISITO DE ORQUESTACION PARA FASE ${chunk.phaseLabel}:
+Estas ejecutando una subparte del ASISTENTE 7.1 - FUNDAMENTOS DE LA GUIA METODOLOGICA: ${chunk.title}.
+El JSON DE ENTRADA usa payload.approved_phase4_diagnosis, payload.approved_phase5_diagnosis, payload.approved_phase6_diagnosis, payload.reference_guides, payload.business_rules, payload.comments y, si existe, payload.approved_phase71_partial_output.
+Usa payload.reference_guides.pmbok_8, payload.reference_guides.agile_practice_guide y payload.reference_guides.scrum_guide como marco de referencia metodologico. No copies texto extenso literal: sintetiza y adapta al contexto diagnosticado.
+Genera exclusivamente estas secciones: ${chunk.sections}. No produzcas ni repitas ${chunk.forbidden}.
+Escribe contenido profesional pero acotado: cada seccion debe tener contenido suficiente para el visor, sin intentar producir la guia completa en esta llamada.
+Devuelve exclusivamente el contrato JSON de ${chunk.phaseLabel} con metadata.phase="${chunk.phaseLabel}", metadata.agent_id="asistente-fundamentos-guia", diagnosis.guide_content con SOLO las secciones solicitadas y error=null si es exitoso.`;
 }
 
-function phase7Part2Instruction() {
+function phase7Part2Instruction(chunk = PHASE7_PART2_CHUNKS[0]) {
   return `
 
-REQUISITO DE ORQUESTACION PARA FASE 7.2:
-Estas ejecutando el ASISTENTE 7.2 - FLUJOS DE PROCESOS, INDICADORES Y DOCUMENTOS GENERADOS. El JSON DE ENTRADA incluye payload.approved_phase71_output con la primera parte ya generada.
-Genera exclusivamente S10 a S12: flujos de procesos, indicadores de gestion y documentos generados. No repitas ni redefinas introduccion, objetivo, alcance, responsables, marco conceptual, marco de referencia, politicas, roles ni comites.
-Usa los cargos exactos de payload.approved_phase71_output.guide_content.S8_roles_y_responsabilidades y las politicas/comites de S7/S9 como fuente de coherencia. Devuelve exclusivamente el contrato JSON de 7.2 con metadata.phase="7.2", metadata.agent_id="asistente-operativo-guia", diagnosis.guide_content.S10_flujos_de_procesos a diagnosis.guide_content.S12_documentos_generados y error=null si es exitoso.`;
+REQUISITO DE ORQUESTACION PARA FASE ${chunk.phaseLabel}:
+Estas ejecutando una subparte del ASISTENTE 7.2 - FLUJOS DE PROCESOS, INDICADORES Y DOCUMENTOS GENERADOS: ${chunk.title}.
+El JSON DE ENTRADA incluye payload.approved_phase71_output con el contexto operativo de 7.1 y payload.reference_guides con extractos Markdown compactados.
+Usa payload.reference_guides.pmbok_8, payload.reference_guides.agile_practice_guide y payload.reference_guides.scrum_guide como marco de referencia metodologico. No copies texto extenso literal: sintetiza y adapta al contexto diagnosticado.
+Genera exclusivamente estas secciones: ${chunk.sections}. No produzcas ni repitas ${chunk.forbidden}.
+Enfoque obligatorio de esta subparte: ${chunk.focus}
+Usa los cargos exactos de payload.approved_phase71_output.guide_content.S8_roles_y_responsabilidades y las politicas/comites de S7/S9 como fuente de coherencia.
+Escribe contenido profesional pero acotado: maximo 900 palabras para esta llamada completa. No intentes producir toda la guia operativa.
+Devuelve exclusivamente este contrato JSON compacto:
+{
+  "metadata": { "phase": "${chunk.phaseLabel}", "agent_id": "asistente-operativo-guia", "status": "success" },
+  "diagnosis": {
+    "guide_content": {
+      "${chunk.sections}": {
+        "titulo": "${formatGuideSectionTitle(chunk.sections)}",
+        "enfoque": "${chunk.focus}",
+        "contenido": ["punto operativo breve", "punto operativo breve"],
+        "responsables": ["cargo exacto aplicable"],
+        "controles": ["control o criterio aplicable"]
+      }
+    }
+  },
+  "error": null
+}
+No incluyas markdown ni explicaciones fuera del JSON.`;
+}
+
+function phase7Part2InvalidJsonFallback(chunk: any, rawContent: string, cleanedContent: string) {
+  const recoveredText = String(cleanedContent || rawContent || "").trim();
+  const content = recoveredText.length > 20000 ? recoveredText.slice(0, 20000) : recoveredText;
+
+  return {
+    metadata: {
+      phase: chunk.phaseLabel,
+      agent_id: "asistente-operativo-guia",
+      status: "success",
+      recovered_from_invalid_json: true,
+    },
+    diagnosis: {
+      guide_content: {
+        [chunk.sections]: {
+          titulo: formatGuideSectionTitle(chunk.sections),
+          enfoque: chunk.focus,
+          contenido_recuperado: content || "La subparte fue procesada, pero la IA no devolvio contenido parseable como JSON.",
+          nota_tecnica: "La IA devolvio una respuesta no parseable como JSON; el sistema encapsulo el contenido para no perder el avance de la Fase 7.",
+        },
+      },
+    },
+    error: null,
+  };
 }
 
 function normalizePhase71OutputForPart2(part1Data: unknown) {
@@ -539,74 +852,324 @@ function normalizePhase71OutputForPart2(part1Data: unknown) {
   };
 }
 
+function compactJsonForPrompt(value: unknown, maxChars: number) {
+  const parsed = parseJsonIfString(value);
+  const text = JSON.stringify(parsed);
+  if (!text || text.length <= maxChars) return parsed;
+  return {
+    _compactado: true,
+    _chars_originales: text.length,
+    _chars_incluidos: maxChars,
+    excerpt_json: text.slice(0, maxChars),
+  };
+}
+
+function pickGuideContentSections(guideContent: unknown, allowedKeys: string[]) {
+  const allowed = new Set(allowedKeys.map((key) => key.toLowerCase()));
+  const record = asRecord(guideContent);
+  if (record) {
+    return Object.fromEntries(
+      Object.entries(record).filter(([key]) => allowed.has(key.toLowerCase()) || allowed.has(sectionIdFromGuideKey(key).toLowerCase()))
+    );
+  }
+
+  return guideContentToArray(guideContent).filter((section: any) => {
+    const key = String(section?.section_key ?? "");
+    const id = String(section?.section_id ?? "");
+    return allowed.has(key.toLowerCase()) || allowed.has(id.toLowerCase());
+  });
+}
+
+function normalizePhase71OperationalContextForPart2(part1Data: unknown) {
+  const normalized = normalizePhase71OutputForPart2(part1Data);
+  return {
+    ...normalized,
+    guide_content: pickGuideContentSections(normalized.guide_content, [
+      "S4",
+      "S4_responsables_guia",
+      "S7",
+      "S7_politicas",
+      "S8",
+      "S8_roles_y_responsabilidades",
+      "S9",
+      "S9_comites",
+    ]),
+  };
+}
+
+function compactReferenceGuidesForPrompt(referenceGuides: unknown, maxCharsPerGuide = 14000) {
+  const record = asRecord(referenceGuides);
+  if (!record) return referenceGuides;
+
+  return Object.fromEntries(
+    Object.entries(record).map(([key, guide]) => {
+      const guideRecord = asRecord(guide);
+      if (!guideRecord) return [key, compactJsonForPrompt(guide, maxCharsPerGuide)];
+
+      const content = String(guideRecord.content ?? "");
+      return [key, {
+        ...guideRecord,
+        content: content.length > maxCharsPerGuide ? content.slice(0, maxCharsPerGuide) : content,
+        content_truncated: content.length > maxCharsPerGuide,
+        original_characters: guideRecord.characters ?? content.length,
+        included_characters: Math.min(content.length, maxCharsPerGuide),
+      }];
+    })
+  );
+}
+
+function buildPhase7Part2Payload(basePayload: Record<string, any>, part1Data: unknown) {
+  return {
+    project_context: basePayload.project_context ?? null,
+    approved_phase4_diagnosis: compactJsonForPrompt(basePayload.approved_phase4_diagnosis, 6000),
+    approved_phase5_diagnosis: compactJsonForPrompt(basePayload.approved_phase5_diagnosis, 6000),
+    approved_phase6_diagnosis: compactJsonForPrompt(basePayload.approved_phase6_diagnosis, 9000),
+    reference_guides: compactReferenceGuidesForPrompt(basePayload.reference_guides, 6000),
+    approved_phase71_output: normalizePhase71OperationalContextForPart2(part1Data),
+    business_rules: {
+      flujos: {},
+      indicadores: {},
+      documentos_generados: {},
+    },
+    comments: basePayload.comments ?? null,
+  };
+}
+
+function combinePhase7Part1Chunks(parts: Record<string, any>) {
+  const chunks = PHASE7_PART1_CHUNKS
+    .map((chunk) => parts?.[chunk.key]?.data)
+    .filter(Boolean);
+  const guideContent = chunks.flatMap((chunk) => extractGuideContent(chunk));
+  const fallbackChapters = chunks.flatMap((chunk) => extractGuideChapters(chunk));
+
+  const combined: Record<string, any> = {
+    titulo: extractGuideTitle(chunks[0]),
+    resumen_ejecutivo: chunks.map(extractGuideSummary).filter(Boolean).join("\n\n"),
+    artefactos_recomendados: mergeStringArrays("artefactos_recomendados", ...chunks),
+    criterios_implementacion: mergeStringArrays("criterios_implementacion", ...chunks),
+    riesgos_adopcion: mergeStringArrays("riesgos_adopcion", ...chunks),
+    metricas_seguimiento: mergeStringArrays("metricas_seguimiento", ...chunks),
+  };
+
+  if (guideContent.length > 0) {
+    combined.guide_content = guideContent;
+    combined.diagnosis = { guide_content: guideContent };
+  } else {
+    combined.capitulos = fallbackChapters.length > 0
+      ? fallbackChapters.map((chapter, index) => ({ ...(asRecord(chapter) ?? { contenido: chapter }), numero: index + 1 }))
+      : chunks.map((chunk, index) => ({
+          numero: index + 1,
+          titulo: `Parte ${PHASE7_PART1_CHUNKS[index]?.phaseLabel ?? index + 1}`,
+          secciones: [{ titulo: "Contenido", contenido: JSON.stringify(chunk) }],
+        }));
+  }
+
+  return combined;
+}
+
+function combinePhase7Part2Chunks(parts: Record<string, any>) {
+  const chunks = PHASE7_PART2_CHUNKS
+    .map((chunk) => parts?.[chunk.key]?.data)
+    .filter(Boolean);
+  const guideContent = mergeGuideContentSections(chunks.flatMap((chunk) => extractGuideContent(chunk)));
+  const fallbackChapters = chunks.flatMap((chunk) => extractGuideChapters(chunk));
+
+  const combined: Record<string, any> = {
+    titulo: extractGuideTitle(chunks[0]),
+    resumen_ejecutivo: chunks.map(extractGuideSummary).filter(Boolean).join("\n\n"),
+    artefactos_recomendados: mergeStringArrays("artefactos_recomendados", ...chunks),
+    criterios_implementacion: mergeStringArrays("criterios_implementacion", ...chunks),
+    riesgos_adopcion: mergeStringArrays("riesgos_adopcion", ...chunks),
+    metricas_seguimiento: mergeStringArrays("metricas_seguimiento", ...chunks),
+  };
+
+  if (guideContent.length > 0) {
+    combined.guide_content = guideContent;
+    combined.diagnosis = { guide_content: guideContent };
+  } else {
+    combined.capitulos = fallbackChapters.length > 0
+      ? fallbackChapters.map((chapter, index) => ({ ...(asRecord(chapter) ?? { contenido: chapter }), numero: index + 1 }))
+      : chunks.map((chunk, index) => ({
+          numero: index + 1,
+          titulo: `Parte ${PHASE7_PART2_CHUNKS[index]?.phaseLabel ?? index + 1}`,
+          secciones: [{ titulo: "Contenido", contenido: JSON.stringify(chunk) }],
+        }));
+  }
+
+  return combined;
+}
+
 async function runPhase7Part1(
   supabase: any,
   projectId: string,
   runId: string,
   iteration: number,
   comments: unknown,
+  internalAuth: InternalInvokeAuth = {},
 ) {
   try {
-    if (!(await isActivePhase7Run(supabase, projectId, runId))) return;
+    logPhase7("part1_invocation_received", { projectId, runId, iteration });
+    const initialState = await getPhase7State(supabase, projectId);
+    const initialData = (initialState?.datos_consolidados as any) ?? {};
+    if (
+      initialState?.estado_visual !== "procesando" ||
+      initialData?._processing !== true ||
+      initialData?._run_id !== runId
+    ) {
+      logPhase7("part1_skipped_inactive_run", {
+        projectId,
+        runId,
+        estado_visual: initialState?.estado_visual ?? null,
+        dbRunId: initialData?._run_id ?? null,
+        stage: initialData?.stage ?? null,
+      });
+      return;
+    }
 
-    const envelopeData = await getPayloadForPhase(supabase, projectId, 7, iteration, comments);
-    const inputEnvelope = {
-      ...envelopeData,
-      metadata: {
-        ...((envelopeData as any).metadata ?? {}),
-        phase: "7.1",
-        agent_id: "asistente-fundamentos-guia",
-        iteration,
-      },
-      payload: {
-        ...((envelopeData as any).payload ?? {}),
-      },
-    };
+    let currentData = initialData;
+    let parts = (currentData?._parts ?? {}) as Record<string, any>;
+    if (parts.part_1?.status === "success") {
+      logPhase7("part1_skipped_already_success", { projectId, runId, stage: currentData?.stage ?? null });
+      return;
+    }
 
-    const part1 = await callJsonPrompt(supabase, PHASE7_PROMPT_PART_1, inputEnvelope, phase7Part1Instruction());
-    if (!(await isActivePhase7Run(supabase, projectId, runId))) return;
+    const nextChunk = PHASE7_PART1_CHUNKS.find((chunk) => parts?.[chunk.key]?.status !== "success");
+    if (!nextChunk) {
+      const combinedPart1 = combinePhase7Part1Chunks(parts);
+      parts = {
+        ...parts,
+        part_1: {
+          status: "success",
+          prompt_phase: PHASE7_PROMPT_PART_1,
+          generated_at: new Date().toISOString(),
+          data: combinedPart1,
+          chunks: PHASE7_PART1_CHUNKS.map((chunk) => chunk.key),
+        },
+      };
 
-    const currentState = await getPhase7State(supabase, projectId);
-    const currentData = (currentState?.datos_consolidados as any) ?? {};
-    const parts = {
-      ...(currentData?._parts ?? {}),
-      part_1: {
-        status: "success",
-        prompt_phase: PHASE7_PROMPT_PART_1,
-        processing_time_seconds: Number(part1.processingTime),
-        generated_at: new Date().toISOString(),
-        data: part1.diagnosis,
-      },
-    };
+      logPhase7("part1_all_chunks_combined", { projectId, runId, chunks: PHASE7_PART1_CHUNKS.length });
+      await supabase
+        .from("fases_estado")
+        .update({
+          estado_visual: "procesando",
+          datos_consolidados: {
+            ...currentData,
+            stage: "part_2_queued",
+            _parts: parts,
+            message: "La parte 7.1 finalizo en subpartes. Iniciando el prompt 7.2.",
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("proyecto_id", projectId)
+        .eq("numero_fase", 7);
 
+      logPhase7("part1_trigger_part2", { projectId, runId, iteration });
+      schedulePmoAgentContinuation(
+        { projectId, phaseNumber: 7, phase7Stage: "part2", runId, iteration, comments },
+        "Error invocando Fase 7.2",
+        { source: "part1_trigger_part2" },
+        internalAuth
+      );
+      return;
+    }
+
+    if (currentData?.stage === nextChunk.stage && !isProcessingStale(initialState?.updated_at)) {
+      logPhase7("part1_chunk_skipped_fresh_execution", {
+        projectId,
+        runId,
+        chunk: nextChunk.key,
+        updated_at: initialState?.updated_at ?? null,
+      });
+      return;
+    }
+
+    logPhase7("part1_chunk_mark_running", { projectId, runId, chunk: nextChunk.key, previousStage: currentData?.stage ?? null });
     await supabase
       .from("fases_estado")
       .update({
         estado_visual: "procesando",
         datos_consolidados: {
           ...currentData,
-          stage: "part_2_queued",
-          _parts: parts,
-          message: "La parte 7.1 finalizo. Iniciando el prompt 7.2.",
+          stage: nextChunk.stage,
+          message: `La subparte ${nextChunk.phaseLabel} esta en ejecucion: ${nextChunk.title}.`,
         },
         updated_at: new Date().toISOString(),
       })
       .eq("proyecto_id", projectId)
       .eq("numero_fase", 7);
 
-    // Invoke Part 2 as a separate Edge Function execution. Do not await the
-    // response here: Part 2 can take a long time and must own its runtime budget.
-    scheduleBackground(
-      supabase.functions.invoke("pmo-agent", {
-        body: { projectId, phaseNumber: 7, phase7Stage: "part2", runId, iteration, comments },
-      }).then((invokeResult: any) => {
-        if (invokeResult.error) {
-          console.error("[pmo-agent] Error invocando Fase 7.2:", invokeResult.error);
-        }
+    logPhase7("part1_chunk_build_payload", { projectId, runId, iteration, chunk: nextChunk.key });
+    const envelopeData = await getPayloadForPhase(supabase, projectId, 7, iteration, comments);
+    const inputEnvelope = {
+      ...envelopeData,
+      metadata: {
+        ...((envelopeData as any).metadata ?? {}),
+        phase: nextChunk.phaseLabel,
+        agent_id: "asistente-fundamentos-guia",
+        iteration,
+      },
+      payload: {
+        ...((envelopeData as any).payload ?? {}),
+        approved_phase71_partial_output: combinePhase7Part1Chunks(parts),
+      },
+    };
+
+    const part1Chunk = await callJsonPrompt(supabase, PHASE7_PROMPT_PART_1, inputEnvelope, phase7Part1Instruction(nextChunk));
+    if (!(await isActivePhase7Run(supabase, projectId, runId))) {
+      logPhase7("part1_chunk_result_discarded_inactive_run", { projectId, runId, chunk: nextChunk.key });
+      return;
+    }
+    logPhase7("part1_chunk_prompt_completed", {
+      projectId,
+      runId,
+      chunk: nextChunk.key,
+      processingTime: part1Chunk.processingTime,
+      provider: part1Chunk.aiResult.provider,
+      model: part1Chunk.aiResult.model,
+    });
+
+    const currentState = await getPhase7State(supabase, projectId);
+    currentData = (currentState?.datos_consolidados as any) ?? {};
+    parts = {
+      ...(currentData?._parts ?? {}),
+      [nextChunk.key]: {
+        status: "success",
+        prompt_phase: PHASE7_PROMPT_PART_1,
+        phase_label: nextChunk.phaseLabel,
+        processing_time_seconds: Number(part1Chunk.processingTime),
+        generated_at: new Date().toISOString(),
+        data: part1Chunk.diagnosis,
+      },
+    };
+
+    const remainingChunks = PHASE7_PART1_CHUNKS.filter((chunk) => parts?.[chunk.key]?.status !== "success");
+    await supabase
+      .from("fases_estado")
+      .update({
+        estado_visual: "procesando",
+        datos_consolidados: {
+          ...currentData,
+          stage: remainingChunks.length > 0 ? "part_1_queued" : "part_1_combine_queued",
+          _parts: parts,
+          message: remainingChunks.length > 0
+            ? `La subparte ${nextChunk.phaseLabel} finalizo. Continuando con ${remainingChunks[0].phaseLabel}.`
+            : "Las subpartes de 7.1 finalizaron. Consolidando fundamentos.",
+        },
+        updated_at: new Date().toISOString(),
       })
+      .eq("proyecto_id", projectId)
+      .eq("numero_fase", 7);
+
+    logPhase7("part1_trigger_next_step", { projectId, runId, completedChunk: nextChunk.key, remainingChunks: remainingChunks.length });
+    schedulePmoAgentContinuation(
+      { projectId, phaseNumber: 7, phase7Stage: "part1", runId, iteration, comments },
+      "Error invocando siguiente subparte Fase 7.1",
+      { source: "part1_trigger_next_step", completedChunk: nextChunk.key, remainingChunks: remainingChunks.length },
+      internalAuth
     );
   } catch (error) {
     console.error("[pmo-agent] Error Fase 7.1:", error);
+    logPhase7("part1_error", { projectId, runId, message: error instanceof Error ? error.message : String(error) });
     await savePhase7Error(supabase, projectId, runId, "error_part_1", error);
   }
 }
@@ -617,109 +1180,213 @@ async function runPhase7Part2(
   runId: string,
   iteration: number,
   comments: unknown,
+  internalAuth: InternalInvokeAuth = {},
 ) {
   try {
-    if (!(await isActivePhase7Run(supabase, projectId, runId))) return;
+    logPhase7("part2_invocation_received", { projectId, runId, iteration });
     const currentState = await getPhase7State(supabase, projectId);
-    const currentData = (currentState?.datos_consolidados as any) ?? {};
+    let currentData = (currentState?.datos_consolidados as any) ?? {};
+    if (
+      currentState?.estado_visual !== "procesando" ||
+      currentData?._processing !== true ||
+      currentData?._run_id !== runId
+    ) {
+      logPhase7("part2_skipped_inactive_run", {
+        projectId,
+        runId,
+        estado_visual: currentState?.estado_visual ?? null,
+        dbRunId: currentData?._run_id ?? null,
+        stage: currentData?.stage ?? null,
+      });
+      return;
+    }
+
+    let parts = (currentData?._parts ?? {}) as Record<string, any>;
+    if (parts.part_2?.status === "success") {
+      logPhase7("part2_skipped_already_success", { projectId, runId, stage: currentData?.stage ?? null });
+      return;
+    }
+
     const part1Data = currentData?._parts?.part_1?.data;
     if (!part1Data) throw new Error("No se encontro la salida de 7.1 para iniciar 7.2.");
 
+    const nextChunk = PHASE7_PART2_CHUNKS.find((chunk) => parts?.[chunk.key]?.status !== "success");
+    if (!nextChunk) {
+      const combinedPart2 = combinePhase7Part2Chunks(parts);
+      const latestPart1 = currentData?._parts?.part_1?.data ?? part1Data;
+      const assembled = assemblePhase7Guide(latestPart1, combinedPart2);
+
+      const previousVersions = Array.isArray(currentData?._previous_versions) ? currentData._previous_versions : [];
+      const versionNumber = previousVersions.length + 1;
+      const generatedAt = new Date().toISOString();
+      const commentText = extractCommentText(comments);
+      parts = {
+        ...parts,
+        part_2: {
+          status: "success",
+          prompt_phase: PHASE7_PROMPT_PART_2,
+          generated_at: generatedAt,
+          data: combinedPart2,
+          chunks: PHASE7_PART2_CHUNKS.map((chunk) => chunk.key),
+        },
+      };
+
+      logPhase7("part2_all_chunks_combined", { projectId, runId, chunks: PHASE7_PART2_CHUNKS.length });
+      logPhase7("part2_assembled_guide", {
+        projectId,
+        runId,
+        versionNumber,
+        guideContentSections: Array.isArray((assembled as any)?.guide_content) ? (assembled as any).guide_content.length : null,
+        chapters: Array.isArray((assembled as any)?.capitulos) ? (assembled as any).capitulos.length : null,
+      });
+
+      const versionEntry = {
+        number: versionNumber,
+        generatedAt,
+        status: versionNumber > 1 ? "revisado" : "generado",
+        comment: commentText,
+        data: assembled,
+        split_generation: {
+          prompts: [PHASE7_PROMPT_PART_1, PHASE7_PROMPT_PART_2],
+          parts,
+        },
+      };
+
+      await supabase
+        .from("fases_estado")
+        .upsert(
+          {
+            proyecto_id: projectId,
+            numero_fase: 7,
+            estado_visual: "disponible",
+            datos_consolidados: {
+              _current: assembled,
+              _versions: [...previousVersions, versionEntry],
+              _latest_version: versionNumber,
+              _generated_at: generatedAt,
+              _last_comment: commentText,
+              _split_generation: {
+                mode: "7.1_7.2_chunked",
+                run_id: runId,
+                prompts: [PHASE7_PROMPT_PART_1, PHASE7_PROMPT_PART_2],
+                parts,
+              },
+            },
+            updated_at: generatedAt,
+          },
+          { onConflict: "proyecto_id,numero_fase" }
+        );
+      logPhase7("part2_saved_final", { projectId, runId, versionNumber, estado_visual: "disponible" });
+      return;
+    }
+
+    if (currentData?.stage === nextChunk.stage && !isProcessingStale(currentState?.updated_at)) {
+      logPhase7("part2_chunk_skipped_fresh_execution", {
+        projectId,
+        runId,
+        chunk: nextChunk.key,
+        updated_at: currentState?.updated_at ?? null,
+      });
+      return;
+    }
+
+    logPhase7("part2_chunk_mark_running", { projectId, runId, chunk: nextChunk.key, previousStage: currentData?.stage ?? null });
     await supabase
       .from("fases_estado")
       .update({
         estado_visual: "procesando",
         datos_consolidados: {
           ...currentData,
-          stage: "part_2",
-          message: "La parte 7.2 esta en ejecucion.",
+          stage: nextChunk.stage,
+          message: `La subparte ${nextChunk.phaseLabel} esta en ejecucion: ${nextChunk.title}.`,
         },
         updated_at: new Date().toISOString(),
       })
       .eq("proyecto_id", projectId)
       .eq("numero_fase", 7);
 
+    logPhase7("part2_chunk_build_payload", { projectId, runId, iteration, chunk: nextChunk.key });
     const envelopeData = await getPayloadForPhase(supabase, projectId, 7, iteration, comments);
     const inputEnvelope = {
       ...envelopeData,
       metadata: {
         ...((envelopeData as any).metadata ?? {}),
-        phase: "7.2",
+        phase: nextChunk.phaseLabel,
         agent_id: "asistente-operativo-guia",
         iteration,
       },
-      payload: {
-        ...((envelopeData as any).payload ?? {}),
-        approved_phase71_output: normalizePhase71OutputForPart2(part1Data),
-        business_rules: {
-          flujos: {},
-          indicadores: {},
-          documentos_generados: {},
-        },
-      },
+      payload: buildPhase7Part2Payload((envelopeData as any).payload ?? {}, part1Data),
     };
 
-    const part2 = await callJsonPrompt(supabase, PHASE7_PROMPT_PART_2, inputEnvelope, phase7Part2Instruction());
-    if (!(await isActivePhase7Run(supabase, projectId, runId))) return;
+    logPhase7("part2_chunk_payload_ready", {
+      projectId,
+      runId,
+      chunk: nextChunk.key,
+      payloadChars: JSON.stringify(inputEnvelope.payload ?? {}).length,
+    });
+
+    const part2Chunk = await callJsonPrompt(
+      supabase,
+      PHASE7_PROMPT_PART_2,
+      inputEnvelope,
+      phase7Part2Instruction(nextChunk),
+      (rawContent, cleanedContent) => phase7Part2InvalidJsonFallback(nextChunk, rawContent, cleanedContent)
+    );
+    if (!(await isActivePhase7Run(supabase, projectId, runId))) {
+      logPhase7("part2_chunk_result_discarded_inactive_run", { projectId, runId, chunk: nextChunk.key });
+      return;
+    }
+    logPhase7("part2_chunk_prompt_completed", {
+      projectId,
+      runId,
+      chunk: nextChunk.key,
+      processingTime: part2Chunk.processingTime,
+      provider: part2Chunk.aiResult.provider,
+      model: part2Chunk.aiResult.model,
+    });
 
     const latestState = await getPhase7State(supabase, projectId);
-    const latestData = (latestState?.datos_consolidados as any) ?? currentData;
-    const latestPart1 = latestData?._parts?.part_1?.data ?? part1Data;
-    const assembled = assemblePhase7Guide(latestPart1, part2.diagnosis);
-
-    const previousVersions = Array.isArray(latestData?._previous_versions) ? latestData._previous_versions : [];
-    const versionNumber = previousVersions.length + 1;
-    const generatedAt = new Date().toISOString();
-    const commentText = extractCommentText(comments);
-    const parts = {
-      ...(latestData?._parts ?? {}),
-      part_2: {
+    currentData = (latestState?.datos_consolidados as any) ?? currentData;
+    parts = {
+      ...(currentData?._parts ?? {}),
+      [nextChunk.key]: {
         status: "success",
         prompt_phase: PHASE7_PROMPT_PART_2,
-        processing_time_seconds: Number(part2.processingTime),
-        generated_at: generatedAt,
-        data: part2.diagnosis,
+        phase_label: nextChunk.phaseLabel,
+        processing_time_seconds: Number(part2Chunk.processingTime),
+        generated_at: new Date().toISOString(),
+        data: part2Chunk.diagnosis,
       },
     };
 
-    const versionEntry = {
-      number: versionNumber,
-      generatedAt,
-      status: versionNumber > 1 ? "revisado" : "generado",
-      comment: commentText,
-      data: assembled,
-      split_generation: {
-        prompts: [PHASE7_PROMPT_PART_1, PHASE7_PROMPT_PART_2],
-        parts,
-      },
-    };
-
+    const remainingChunks = PHASE7_PART2_CHUNKS.filter((chunk) => parts?.[chunk.key]?.status !== "success");
     await supabase
       .from("fases_estado")
-      .upsert(
-        {
-          proyecto_id: projectId,
-          numero_fase: 7,
-          estado_visual: "disponible",
-          datos_consolidados: {
-            _current: assembled,
-            _versions: [...previousVersions, versionEntry],
-            _latest_version: versionNumber,
-            _generated_at: generatedAt,
-            _last_comment: commentText,
-            _split_generation: {
-              mode: "7.1_7.2",
-              run_id: runId,
-              prompts: [PHASE7_PROMPT_PART_1, PHASE7_PROMPT_PART_2],
-              parts,
-            },
-          },
-          updated_at: generatedAt,
+      .update({
+        estado_visual: "procesando",
+        datos_consolidados: {
+          ...currentData,
+          stage: remainingChunks.length > 0 ? "part_2_queued" : "part_2_combine_queued",
+          _parts: parts,
+          message: remainingChunks.length > 0
+            ? `La subparte ${nextChunk.phaseLabel} finalizo. Continuando con ${remainingChunks[0].phaseLabel}.`
+            : "Las subpartes de 7.2 finalizaron. Consolidando la guia metodologica.",
         },
-        { onConflict: "proyecto_id,numero_fase" }
-      );
+        updated_at: new Date().toISOString(),
+      })
+      .eq("proyecto_id", projectId)
+      .eq("numero_fase", 7);
+
+    logPhase7("part2_trigger_next_step", { projectId, runId, completedChunk: nextChunk.key, remainingChunks: remainingChunks.length });
+    schedulePmoAgentContinuation(
+      { projectId, phaseNumber: 7, phase7Stage: "part2", runId, iteration, comments },
+      "Error invocando siguiente subparte Fase 7.2",
+      { source: "part2_trigger_next_step", completedChunk: nextChunk.key, remainingChunks: remainingChunks.length },
+      internalAuth
+    );
   } catch (error) {
     console.error("[pmo-agent] Error Fase 7.2:", error);
+    logPhase7("part2_error", { projectId, runId, message: error instanceof Error ? error.message : String(error) });
     await savePhase7Error(supabase, projectId, runId, "error_part_2", error);
   }
 }
@@ -1210,13 +1877,25 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+    const internalInvokeAuth: InternalInvokeAuth = {
+      authorization: req.headers.get("Authorization"),
+      apikey: req.headers.get("apikey"),
+    };
 
     if (phaseNumber === 7) {
+      logPhase7("request_received", {
+        projectId,
+        phase7Stage,
+        requestedRunId,
+        iteration,
+        hasComments: Boolean(resolvedComments),
+      });
+
       if (phase7Stage === "part2") {
         if (!requestedRunId) throw new Error("Falta runId para iniciar la Fase 7.2.");
         // Run Part 2 synchronously within this dedicated invocation.
         // This invocation has its own 150s budget so we can await safely.
-        await runPhase7Part2(supabase, projectId, requestedRunId, iteration, resolvedComments);
+        await runPhase7Part2(supabase, projectId, requestedRunId, iteration, resolvedComments, internalInvokeAuth);
         return new Response(
           JSON.stringify({
             success: true,
@@ -1234,7 +1913,7 @@ serve(async (req) => {
         if (!requestedRunId) throw new Error("Falta runId para iniciar la Fase 7.1.");
         // Run Part 1 synchronously within this dedicated invocation.
         // When Part 1 completes, it will invoke a new edge function for Part 2.
-        await runPhase7Part1(supabase, projectId, requestedRunId, iteration, resolvedComments);
+        await runPhase7Part1(supabase, projectId, requestedRunId, iteration, resolvedComments, internalInvokeAuth);
         return new Response(
           JSON.stringify({
             success: true,
@@ -1280,6 +1959,12 @@ serve(async (req) => {
         !isProcessingStale(existingPhase7?.updated_at);
 
       if (alreadyProcessing) {
+        logPhase7("already_processing_returned", {
+          projectId,
+          runId: existingData?._run_id ?? null,
+          stage: existingData?.stage ?? "processing",
+          updated_at: existingPhase7?.updated_at ?? null,
+        });
         return new Response(
           JSON.stringify({
             success: true,
@@ -1313,6 +1998,7 @@ serve(async (req) => {
         "La fase 7 inicio en modo dividido: primero se ejecuta 7.1 y luego 7.2."
       );
 
+      logPhase7("run_created", { projectId, runId: phase7RunId, iteration });
       await supabase
         .from("fases_estado")
         .upsert(
@@ -1326,17 +2012,15 @@ serve(async (req) => {
           { onConflict: "proyecto_id,numero_fase" }
         );
 
+      logPhase7("part1_queued", { projectId, runId: phase7RunId });
       // Invoke Part 1 as a SEPARATE edge function execution.
       // scheduleBackground was unreliable — the runtime could shut down before
       // Part 1 completed. A fresh invocation gets its own 150s budget.
-      scheduleBackground(
-        supabase.functions.invoke("pmo-agent", {
-          body: { projectId, phaseNumber: 7, phase7Stage: "part1", runId: phase7RunId, iteration, comments: commentsForAgent },
-        }).then((invokeResult: any) => {
-          if (invokeResult.error) {
-            console.error("[pmo-agent] Error disparando Fase 7.1:", invokeResult.error);
-          }
-        })
+      schedulePmoAgentContinuation(
+        { projectId, phaseNumber: 7, phase7Stage: "part1", runId: phase7RunId, iteration, comments: commentsForAgent },
+        "Error disparando Fase 7.1",
+        { source: "part1_initial_trigger" },
+        internalInvokeAuth
       );
 
       return new Response(

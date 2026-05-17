@@ -18,6 +18,13 @@ import { supabase } from '../../lib/supabase';
 import EnfoqueDiagnosisView from './enfoque/EnfoqueDiagnosisView';
 import { LoadingRouteState, MissingProjectState } from '../layout/RouteState';
 
+function logPhase6(event: string, details: Record<string, unknown> = {}) {
+  console.info(`[PMO][Phase6][${event}]`, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -1012,8 +1019,14 @@ export default function EnfoqueModule() {
   };
 
   const handleApprove = async () => {
+    logPhase6('approve_instructions_clicked', {
+      projectId,
+      hasResult: Boolean(result),
+      enfoque: result?.enfoque?.tipo ?? null,
+    });
     setIsApproving(true);
     try {
+      logPhase6('approve_phase6_db_start', { projectId });
       const { error: approveError } = await supabase
         .from('fases_estado')
         .update({
@@ -1023,7 +1036,9 @@ export default function EnfoqueModule() {
         .eq('proyecto_id', projectId!)
         .eq('numero_fase', 6);
       if (approveError) throw approveError;
+      logPhase6('approve_phase6_db_ok', { projectId });
 
+      logPhase6('unlock_phase7_db_start', { projectId });
       const { error: unlockError } = await supabase
         .from('fases_estado')
         .update({
@@ -1034,7 +1049,9 @@ export default function EnfoqueModule() {
         .eq('numero_fase', 7)
         .eq('estado_visual', 'bloqueado');
       if (unlockError) throw unlockError;
+      logPhase6('unlock_phase7_db_ok', { projectId });
     } catch (err: any) {
+      logPhase6('approve_error', { projectId, message: err?.message ?? String(err) });
       toast.error('No se pudo aprobar la Fase 6', {
         description: err?.message ?? 'Revise la conexion con Supabase e intente nuevamente.',
       });
@@ -1047,6 +1064,7 @@ export default function EnfoqueModule() {
       `Enfoque aprobado: ${result?.enfoque.tipo} · ${result?.puntosDebiles.length} puntos débiles · ${result?.instrucciones.length} categorías de instrucciones para Agente 7.`
     );
     updatePhaseStatus(projectId!, 7, 'disponible');
+    logPhase6('local_state_phase7_available', { projectId });
     playPhaseComplete(); 
     setView('approved');
     toast.success('¡Fase 6 aprobada!', { description: 'La Fase 7 se ha desbloqueado automáticamente.' });

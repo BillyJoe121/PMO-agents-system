@@ -172,10 +172,10 @@ function wantsJsonResponse(body: Record<string, unknown>) {
 
 function getCaughtErrorMessage(error: unknown, attemptId: string, timeoutMs: number) {
   if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
-    return `Timeout llamando a ${attemptId} despues de ${Math.round(timeoutMs / 1000)} segundos. Se intento pasar al fallback configurado antes de que venciera la Edge Function.`;
+    return `Timeout llamando a ${attemptId} despues de ${Math.round(timeoutMs / 1000)} segundos. La llamada fue cancelada para que la Edge Function pueda guardar el estado final.`;
   }
   if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
-    return `Timeout llamando a ${attemptId} despues de ${Math.round(timeoutMs / 1000)} segundos. Se intento pasar al fallback configurado antes de que venciera la Edge Function.`;
+    return `Timeout llamando a ${attemptId} despues de ${Math.round(timeoutMs / 1000)} segundos. La llamada fue cancelada para que la Edge Function pueda guardar el estado final.`;
   }
   return error instanceof Error ? error.message : "Error desconocido llamando al modelo";
 }

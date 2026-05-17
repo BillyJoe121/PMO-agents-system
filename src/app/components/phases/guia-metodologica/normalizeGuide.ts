@@ -33,6 +33,28 @@ const TITLE_KEYS = new Set([
   'riesgo',
   'weakness',
 ]);
+const INTRO_CONTENT_KEYS = new Set([
+  'descripcion_general',
+  'contexto_organizacional',
+  'descripcion_entorno',
+  'enfoque_propuesto',
+  'enfoque_adoptado',
+  'descripcion_del_modelo',
+]);
+const GUIDE_SECTION_ORDER = [
+  { number: 1, matches: ['introduccion', 's1_introduccion'] },
+  { number: 2, matches: ['objetivo', 's2_objetivo'] },
+  { number: 3, matches: ['alcance', 's3_alcance'] },
+  { number: 4, matches: ['responsables de la guia', 'responsables guia', 'responsables', 's4_responsables_guia'] },
+  { number: 5, matches: ['marco conceptual', 's5_marco_conceptual'] },
+  { number: 6, matches: ['marco de referencia', 's6_marco_de_referencia'] },
+  { number: 7, matches: ['politicas', 'politica', 's7_politicas'] },
+  { number: 8, matches: ['roles y responsabilidades', 'roles responsabilidades', 's8_roles_y_responsabilidades'] },
+  { number: 9, matches: ['comites', 'comite', 's9_comites'] },
+  { number: 10, matches: ['flujos de procesos', 'flujo de procesos', 'flujos', 's10_flujos_de_procesos'] },
+  { number: 11, matches: ['indicadores de gestion', 'indicadores', 's11_indicadores_de_gestion'] },
+  { number: 12, matches: ['documentos generados', 'documentos', 's12_documentos_generados'] },
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +84,10 @@ function isPlainObject(value: any) {
 
 function isScalar(value: any) {
   return value === null || value === undefined || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function isSimpleTableValue(value: any) {
+  return isScalar(value) || (Array.isArray(value) && value.every(isScalar));
 }
 
 function isTechnicalKey(key: string) {
@@ -138,21 +164,113 @@ function formatFieldKey(key: string): string {
     .replace(/\b\w/g, l => l.toUpperCase());
 }
 
+function normalizeSearchText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function guideSectionOrderIndex(section: any, fallbackIndex: number): number {
+  const titleText = normalizeSearchText([
+    section?.section_title,
+    section?.title,
+    section?.titulo,
+    section?.nombre,
+    section?.section_key,
+  ].filter(Boolean).join(' '));
+
+  const titleMatch = GUIDE_SECTION_ORDER.findIndex(order =>
+    order.matches.some(match => titleText.includes(normalizeSearchText(match)))
+  );
+  if (titleMatch >= 0) return titleMatch;
+
+  const idText = String(section?.section_id ?? section?.section_key ?? '');
+  const sectionNumber = idText.match(/^s0?(\d+)/i)?.[1];
+  const numericMatch = GUIDE_SECTION_ORDER.findIndex(order => order.number === Number(sectionNumber));
+  return numericMatch >= 0 ? numericMatch : GUIDE_SECTION_ORDER.length + fallbackIndex;
+}
+
 function tableFromObjectArray(values: any[]): GuideSubsection['table'] | undefined {
   if (!values.length || !values.every(isPlainObject)) return undefined;
-  const scalarKeys = Array.from(new Set(
+  const keys = Array.from(new Set(
     values.flatMap(value =>
       meaningfulEntries(value)
-        .filter(([_, val]) => isScalar(val))
+        .filter(([_, val]) => isSimpleTableValue(val))
         .map(([key]) => key)
     )
   ));
-  if (scalarKeys.length < 2) return undefined;
+  if (keys.length < 2) return undefined;
 
   return {
-    headers: scalarKeys.map(formatFieldKey),
-    rows: values.map(value => scalarKeys.map(key => stringifyDeep(value[key]))),
+    headers: keys.map(formatFieldKey),
+    rows: values.map(value => keys.map(key => stringifyDeep(value[key]))),
   };
+}
+
+function complexSubsectionsFromObjectArray(values: any[], title: string): GuideSubsection[] {
+  if (!values.length || !values.every(isPlainObject)) return [];
+
+  return values.flatMap((item, index) => {
+    const itemTitle = titleFromObject(item, `Elemento ${index + 1}`);
+    return meaningfulEntries(item)
+      .filter(([_, val]) => !isSimpleTableValue(val))
+      .flatMap(([key, val]) => {
+        const nestedTitle = `${title} - ${itemTitle} - ${formatFieldKey(key)}`;
+
+        if (Array.isArray(val)) {
+          if (val.length === 0) return [];
+          if (val.every(isPlainObject)) {
+            const table = tableFromObjectArray(val);
+            return [{
+              title: nestedTitle,
+              content: '',
+              items: table ? undefined : objectArrayToItems(val),
+              table,
+            }];
+          }
+          return [{ title: nestedTitle, content: '', items: val.map(stringifyDeep).filter(Boolean) }];
+        }
+
+        if (isPlainObject(val)) return objectToNestedSubsections(val, nestedTitle);
+
+        return [{ title: nestedTitle, content: stringifyDeep(val) }];
+      });
+  });
+}
+
+function groupFlattenedPhaseFields(value: Record<string, any>) {
+  const result: Record<string, any> = { ...value };
+  const groups = new Map<string, Record<string, any>>();
+  const suffixes = ['nombre', 'introduccion', 'descripcion', 'objetivo', 'entrada', 'salida', 'responsable', 'participantes'];
+
+  for (const [key, val] of meaningfulEntries(value)) {
+    const normalizedKey = key.toLowerCase();
+    const suffix = suffixes.find(candidate => normalizedKey.endsWith(`_${candidate}`));
+    if (!suffix) continue;
+
+    const prefix = key.slice(0, -(suffix.length + 1));
+    if (!/^(fase|etapa)_/i.test(prefix)) continue;
+
+    const group = groups.get(prefix) ?? {};
+    group[suffix] = val;
+    groups.set(prefix, group);
+  }
+
+  for (const [prefix, group] of groups) {
+    if (Object.keys(group).length < 2) continue;
+    for (const suffix of Object.keys(group)) {
+      delete result[`${prefix}_${suffix}`];
+    }
+    result[prefix] = {
+      ...(isPlainObject(result[prefix]) ? result[prefix] : {}),
+      ...group,
+    };
+  }
+
+  return result;
 }
 
 function objectArrayToItems(values: any[]) {
@@ -176,12 +294,13 @@ function objectToNestedSubsections(value: Record<string, any>, titlePrefix = '')
     if (Array.isArray(val)) {
       if (val.length === 0) return [];
       if (val.every(isPlainObject)) {
+        const table = tableFromObjectArray(val);
         return [{
           title,
           content: '',
-          items: objectArrayToItems(val),
-          table: tableFromObjectArray(val),
-        }];
+          items: table ? undefined : objectArrayToItems(val),
+          table,
+        }, ...complexSubsectionsFromObjectArray(val, title)];
       }
       return [{ title, content: '', items: val.map(stringifyDeep).filter(Boolean) }];
     }
@@ -208,8 +327,10 @@ function objectToNestedSubsections(value: Record<string, any>, titlePrefix = '')
  */
 function contenidoToSubsections(contenido: any): GuideChapter['subsections'] {
   if (!contenido || typeof contenido !== 'object') return [];
+  const normalizedContenido = groupFlattenedPhaseFields(contenido);
 
-  return meaningfulEntries(contenido)
+  return meaningfulEntries(normalizedContenido)
+    .filter(([key]) => !INTRO_CONTENT_KEYS.has(key))
     .map(([key, val]: [string, any]) => {
       const title = formatFieldKey(key);
 
@@ -220,12 +341,13 @@ function contenidoToSubsections(contenido: any): GuideChapter['subsections'] {
           return { title, content: '', items: val.map(stringifyDeep).filter(Boolean) };
         }
         // Array of objects — extract most descriptive field per item
-        return {
+        const table = tableFromObjectArray(val);
+        return [{
           title,
           content: '',
-          items: objectArrayToItems(val),
-          table: tableFromObjectArray(val),
-        };
+          items: table ? undefined : objectArrayToItems(val),
+          table,
+        }, ...complexSubsectionsFromObjectArray(val, title)];
       }
 
       if (isPlainObject(val)) {
@@ -245,7 +367,14 @@ function contenidoToSubsections(contenido: any): GuideChapter['subsections'] {
  */
 function normalizeGuideContent(guideContent: any[]): GuideChapter[] {
   // Skip S01 (Portada) — it's just document metadata, not a renderable chapter
-  const sections = guideContent.filter((s: any) => s.section_id !== 'S01');
+  const sections = guideContent
+    .filter((s: any) => s.section_id !== 'S01')
+    .map((section: any, originalIndex: number) => ({ section, originalIndex }))
+    .sort((a, b) =>
+      guideSectionOrderIndex(a.section, a.originalIndex) - guideSectionOrderIndex(b.section, b.originalIndex) ||
+      a.originalIndex - b.originalIndex
+    )
+    .map(({ section }) => section);
   if (sections.length === 0) return [];
 
   return sections.map((section: any, index: number) => {

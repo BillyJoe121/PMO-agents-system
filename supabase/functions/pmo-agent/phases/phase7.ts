@@ -27,6 +27,36 @@ const phase71BusinessRules = {
   comites: {},
 };
 
+const phase7ReferenceGuideUrls = {
+  agile_practice_guide: "https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/Guias_Fase_7/AgilePG_A72.md",
+  pmbok_8: "https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/Guias_Fase_7/PMBOK8_A72.md",
+  scrum_guide: "https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/Guias_Fase_7/ScrumGuide_A72.md",
+};
+
+async function fetchReferenceGuide(name: string, url: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`No se pudo cargar la guia de referencia ${name}: HTTP ${response.status}`);
+  }
+
+  const markdown = (await response.text()).replace(/\r\n/g, "\n").trim();
+  return {
+    name,
+    url,
+    format: "markdown",
+    characters: markdown.length,
+    content: markdown,
+  };
+}
+
+async function loadPhase7ReferenceGuides() {
+  const entries = await Promise.all(
+    Object.entries(phase7ReferenceGuideUrls).map(([name, url]) => fetchReferenceGuide(name, url))
+  );
+
+  return Object.fromEntries(entries.map((entry) => [entry.name, entry]));
+}
+
 export async function buildPhase7Payload(ctx: PhasePayloadContext): Promise<PhasePayloadResult> {
   const { supabase, projectId, comments, baseMetadata } = ctx;
   const consultantComments = normalizeConsultantComments(comments);
@@ -48,6 +78,8 @@ export async function buildPhase7Payload(ctx: PhasePayloadContext): Promise<Phas
     faseMap[f.numero_fase] = unwrapPhaseOutput(f.datos_consolidados);
   }
 
+  const referenceGuides = await loadPhase7ReferenceGuides();
+
   return {
     metadata: { ...baseMetadata, agent_id: "asistente-fundamentos-guia" },
     payload: {
@@ -60,6 +92,7 @@ export async function buildPhase7Payload(ctx: PhasePayloadContext): Promise<Phas
       approved_phase4_diagnosis: faseMap[4] ?? null,
       approved_phase5_diagnosis: faseMap[5] ?? null,
       approved_phase6_diagnosis: faseMap[6] ?? null,
+      reference_guides: referenceGuides,
       business_rules: phase71BusinessRules,
       comments: consultantComments,
     },

@@ -23,78 +23,320 @@ interface Artifact {
   downloadUrl?: string; // URL completa de descarga (firmada o pública)
 }
 
-const MOCK_ARTIFACTS: Artifact[] = [
+const ARTIFACT_ALIASES: Record<string, string[]> = {
+  'Acta de constitución': ['acta de constitucion', 'acta de constitución', 'project charter', 'charter'],
+  'Enunciado de alcance': ['enunciado de alcance', 'declaracion del alcance', 'declaración del alcance', 'scope statement'],
+  'Matriz de riesgos': ['matriz de riesgos', 'registro de riesgos'],
+  'Formato de presupuesto': ['formato de presupuesto', 'presupuesto'],
+  'Matriz de interesados': ['matriz de interesados', 'registro de interesados', 'matriz de stakeholders'],
+  'Informe de avance e indicadores': ['informe de avance e indicadores', 'informe de avance', 'indicadores', 'status report'],
+  'Formato de comunicaciones': ['formato de comunicaciones', 'plan de comunicaciones', 'matriz de comunicaciones'],
+  'Formato de incidencias': ['formato de incidencias', 'registro de incidencias', 'issue log'],
+  'Formato de entregables y validación': ['formato de entregables y validacion', 'formato de entregables y validación', 'validacion de entregables', 'validación de entregables'],
+  'Encuesta de satisfacción': ['encuesta de satisfaccion', 'encuesta de satisfacción'],
+  'Matriz de lecciones aprendidas': ['matriz de lecciones aprendidas', 'lecciones aprendidas'],
+};
+
+const MASTER_ARTIFACTS: Artifact[] = [
   {
-    id: 'a1',
-    name: 'Acta de constitución.xlsx',
+    id: 'caso-negocio',
+    name: 'Caso de negocio',
+    description: 'Justificación estratégica, beneficios esperados y viabilidad de la iniciativa.',
+    format: 'docx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+  {
+    id: 'acta-constitucion',
+    name: 'Acta de constitución',
     description: 'Documento formal que autoriza la existencia del proyecto.',
     format: 'xlsx',
     size: '85 KB',
-    category: 'recommended',
+    category: 'other',
     downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA-%20ACTA%20DE%20CONSTITUCION.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQS0gQUNUQSBERSBDT05TVElUVUNJT04ueGxzeCIsImlhdCI6MTc3ODEzNjYwOCwiZXhwIjoyMDkzNDk2NjA4fQ.6dW7xgLxuNSMCUZT1uUCTIc4kHxXU4LZi3jYjM3N1rU'
   },
   {
-    id: 'a2',
-    name: 'Matriz de interesados.xlsx',
+    id: 'matriz-interesados',
+    name: 'Matriz de interesados',
     description: 'Registro de personas u organizaciones afectadas por el proyecto.',
     format: 'xlsx',
     size: '64 KB',
-    category: 'recommended',
+    category: 'other',
     downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20INTERESADOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBJTlRFUkVTQURPUy54bHN4IiwiaWF0IjoxNzc4MTM2NDY5LCJleHAiOjIwOTM0OTY0Njl9.fys42HxXmRafJZeWlbDTgPx4hdgrOpYhvO1D-8_xExM'
   },
   {
-    id: 'a3',
-    name: 'Matriz de requisitos.xlsx',
-    description: 'Recopilación y seguimiento de las necesidades del negocio y del cliente.',
-    format: 'xlsx',
-    size: '72 KB',
-    category: 'recommended',
-    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20REQUISITOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBSRVFVSVNJVE9TLnhsc3giLCJpYXQiOjE3NzgxMzY0OTEsImV4cCI6MjA5MzQ5NjQ5MX0.QjX_R59hXOOdH4IY_Qo7ceC6pi8Cd9GkyH5ajFC-Gn4'
-  },
-  {
-    id: 'a4',
-    name: 'Declaración del alcance.xlsx',
+    id: 'enunciado-alcance',
+    name: 'Enunciado de alcance',
     description: 'Descripción detallada de los entregables y límites del proyecto.',
     format: 'xlsx',
     size: '95 KB',
-    category: 'recommended',
+    category: 'other',
     downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I-%20PLANTILLA%20-%20DECLARACION%20DEL%20ALCANCE.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSS0gUExBTlRJTExBIC0gREVDTEFSQUNJT04gREVMIEFMQ0FOQ0UueGxzeCIsImlhdCI6MTc3ODEzNjY0OCwiZXhwIjoyMDkzNDk2NjQ4fQ.tlYp4SQ6FAe3X8h3wwh8xRZx76AWsqa1hmUneleTGzY'
   },
   {
-    id: 'a5',
-    name: 'Matriz de riesgos.xlsx',
-    description: 'Identificación, análisis y plan de respuesta a riesgos.',
+    id: 'cronograma',
+    name: 'Cronograma (Sin formato)',
+    description: 'Estructura para planificar actividades, hitos, duraciones y dependencias.',
     format: 'xlsx',
-    size: '76 KB',
-    category: 'recommended',
-    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20RIESGOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBSSUVTR09TLnhsc3giLCJpYXQiOjE3NzgxMzY1MDUsImV4cCI6MjA5MzQ5NjUwNX0.aVHeApBTwNd2ukx7dgsxdJv1yvwTbxuDlPPx-O0Smvo'
+    size: 'Pendiente',
+    category: 'other',
   },
   {
-    id: 'a6',
-    name: 'Formato de presupuesto.xlsx',
+    id: 'presupuesto',
+    name: 'Formato de presupuesto',
     description: 'Control de costos, egresos y proyecciones financieras.',
     format: 'xlsx',
     size: '98 KB',
-    category: 'recommended',
+    category: 'other',
     downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I-%20PLANTILLA%20PRESUPUESTO.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSS0gUExBTlRJTExBIFBSRVNVUFVFU1RPLnhsc3giLCJpYXQiOjE3NzgxMzY2NjEsImV4cCI6MjA5MzQ5NjY2MX0.sAmYPCnkCmKy_0_NhiQMYwDi_UqENlc-bKsOF1dBbqw'
   },
   {
-    id: 'a7',
-    name: 'Registro de cambios.xlsx',
-    description: 'Documentación de todas las modificaciones solicitadas y aprobadas.',
+    id: 'matriz-riesgos',
+    name: 'Matriz de riesgos',
+    description: 'Identificación, análisis y plan de respuesta a riesgos.',
     format: 'xlsx',
-    size: '54 KB',
+    size: '76 KB',
     category: 'other',
-    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20REGISTRO%20DE%20CAMBIOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIFJFR0lTVFJPIERFIENBTUJJT1MueGxzeCIsImlhdCI6MTc3ODEzNjU5NSwiZXhwIjoyMDkzNDk2NTk1fQ.VGxhnfbp4b6qBMA_9DJAhF6Yz6rS5aathCM6tlVMkAU'
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-%20PLANTILLA%20-%20MATRIZ%20DE%20RIESGOS.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtIFBMQU5USUxMQSAtIE1BVFJJWiBERSBSSUVTR09TLnhsc3giLCJpYXQiOjE3NzgxMzY1MDUsImV4cCI6MjA5MzQ5NjUwNX0.aVHeApBTwNd2ukx7dgsxdJv1yvwTbxuDlPPx-O0Smvo'
   },
   {
-    id: 'a8',
-    name: 'Plantilla de abastecimiento.xlsx',
-    description: 'Gestión de compras, proveedores y suministros externos.',
+    id: 'comunicaciones',
+    name: 'Formato de comunicaciones',
+    description: 'Plan para definir audiencias, mensajes, canales, frecuencia y responsables.',
     format: 'xlsx',
-    size: '110 KB',
+    size: 'Pendiente',
     category: 'other',
-    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/sign/plantillas_artefactos_pmo/F&I%20-PLANTILLA%20ABASTECIMIENTO.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV85ZjE5MmVlNC1hY2Q4LTRlZDAtYmIyMy1jYjNkMDIwODFkODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwbGFudGlsbGFzX2FydGVmYWN0b3NfcG1vL0YmSSAtUExBTlRJTExBIEFCQVNURUNJTUlFTlRPLnhsc3giLCJpYXQiOjE3NzgxMzY2MjEsImV4cCI6MjA5MzQ5NjYyMX0.IHk1Phrhu36v206z994sD8NY4ElL4wPrItY-SCUO0no'
+  },
+  {
+    id: 'incidencias',
+    name: 'Formato de incidencias',
+    description: 'Registro y seguimiento de problemas, impedimentos y acciones correctivas.',
+    format: 'xlsx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+  {
+    id: 'entregables-validacion',
+    name: 'Formato de entregables y validación',
+    description: 'Control de entregables, criterios de aceptación y validación formal.',
+    format: 'xlsx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+  {
+    id: 'informe-avance-indicadores',
+    name: 'Informe de avance e indicadores',
+    description: 'Reporte de estado, desempeño, KPIs, avances, alertas y decisiones.',
+    format: 'xlsx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+  {
+    id: 'acta-cierre',
+    name: 'Acta de cierre',
+    description: 'Documento de cierre formal, aceptación final y liberación administrativa.',
+    format: 'docx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+  {
+    id: 'encuesta-satisfaccion',
+    name: 'Encuesta de satisfacción',
+    description: 'Instrumento para recoger retroalimentación del cliente y usuarios clave.',
+    format: 'xlsx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+  {
+    id: 'lecciones-aprendidas',
+    name: 'Matriz de lecciones aprendidas',
+    description: 'Registro de aprendizajes, causas, recomendaciones y acciones de mejora.',
+    format: 'xlsx',
+    size: 'Pendiente',
+    category: 'other',
+  },
+];
+
+const ACTIVE_ARTIFACT_ALIASES: Record<string, string[]> = {
+  'Acta de constitucion': ['acta de constitucion', 'acta de constitución', 'project charter', 'charter'],
+  'Acta de reunion': ['acta de reunion', 'acta de reunión', 'minuta', 'minutes', 'meeting minutes'],
+  'Declaracion de alcance': ['declaracion de alcance', 'declaración de alcance', 'declaracion del alcance', 'scope statement'],
+  'Enunciado del alcance': ['enunciado de alcance', 'enunciado del alcance', 'scope statement'],
+  'Registro de riesgos': ['matriz de riesgos', 'registro de riesgos', 'risk register'],
+  'Presupuesto general': ['formato de presupuesto', 'presupuesto', 'budget', 'control de costos'],
+  'Presupuesto por hito': ['presupuesto por hito', 'presupuesto por hitos', 'costos por hito'],
+  'Matriz de interesados': ['matriz de interesados', 'registro de interesados', 'matriz de stakeholders'],
+  'Informe de avance': ['informe de avance e indicadores', 'informe de avance', 'indicadores', 'status report'],
+  'Registro de incidencias': ['formato de incidencias', 'registro de incidencias', 'issue log'],
+  'Control de entregables': ['formato de entregables y validacion', 'control de entregables', 'validacion de entregables', 'validación de entregables'],
+  'Lecciones aprendidas': ['matriz de lecciones aprendidas', 'lecciones aprendidas', 'lessons learned'],
+  'Registro de cambios': ['registro de cambios', 'control de cambios', 'change log'],
+  'Matriz de requisitos': ['matriz de requisitos', 'requirements matrix', 'requisitos'],
+  'Plan de direccion de proyectos': ['plan de direccion de proyectos', 'plan de dirección de proyectos', 'project management plan'],
+};
+
+const ACTIVE_ARTIFACTS: Artifact[] = [
+  {
+    id: 'abastecimiento',
+    name: 'Abastecimiento',
+    description: 'Plantilla para gestionar compras, proveedores, adquisiciones y seguimiento de abastecimiento del proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Abastecimiento.xlsx',
+  },
+  {
+    id: 'acta-constitucion',
+    name: 'Acta de constitucion',
+    description: 'Documento formal que autoriza la existencia del proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Acta%20de%20constitucion.xlsx',
+  },
+  {
+    id: 'acta-reunion',
+    name: 'Acta de reunion',
+    description: 'Registro de acuerdos, decisiones, compromisos y responsables definidos en sesiones de trabajo.',
+    format: 'docx',
+    size: 'DOCX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Acta%20de%20Reunion.docx',
+  },
+  {
+    id: 'caso-negocio',
+    name: 'Caso de negocio',
+    description: 'Justificacion estrategica, beneficios esperados y viabilidad de la iniciativa.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Caso%20de%20negocio.xlsx',
+  },
+  {
+    id: 'control-entregables',
+    name: 'Control de entregables',
+    description: 'Control de entregables, responsables, criterios de aceptacion, validacion y estado de aprobacion.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Control%20de%20entregables.xlsx',
+  },
+  {
+    id: 'cronograma',
+    name: 'Cronograma',
+    description: 'Estructura para planificar actividades, hitos, duraciones y dependencias.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Cronograma.xlsx',
+  },
+  {
+    id: 'declaracion-alcance',
+    name: 'Declaracion de alcance',
+    description: 'Declaracion formal del alcance, entregables, restricciones, supuestos y exclusiones del proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Declaracion%20de%20alcance.xlsx',
+  },
+  {
+    id: 'enunciado-alcance',
+    name: 'Enunciado del alcance',
+    description: 'Descripcion detallada de entregables, limites, criterios de aceptacion y trabajo incluido.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Enunciado%20del%20alcance.xlsx',
+  },
+  {
+    id: 'informe-avance',
+    name: 'Informe de avance',
+    description: 'Reporte de estado, desempeno, avances, indicadores, alertas y decisiones del proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Informe%20de%20avance.xlsx',
+  },
+  {
+    id: 'lecciones-aprendidas',
+    name: 'Lecciones aprendidas',
+    description: 'Registro de aprendizajes, causas, recomendaciones y acciones de mejora continua.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Lecciones%20aprendidas.xlsx',
+  },
+  {
+    id: 'matriz-interesados',
+    name: 'Matriz de interesados',
+    description: 'Registro de personas u organizaciones afectadas por el proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Matriz%20de%20Interesados.xlsx',
+  },
+  {
+    id: 'matriz-requisitos',
+    name: 'Matriz de requisitos',
+    description: 'Matriz para documentar requisitos, fuente, prioridad, trazabilidad y estado de cumplimiento.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Matriz%20de%20requisitos.xlsx',
+  },
+  {
+    id: 'plan-direccion-proyectos',
+    name: 'Plan de direccion de proyectos',
+    description: 'Documento integrador para dirigir, ejecutar, monitorear, controlar y cerrar el proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Plan%20de%20direccion%20de%20proyectos.xlsx',
+  },
+  {
+    id: 'presupuesto-general',
+    name: 'Presupuesto general',
+    description: 'Control general de costos, rubros, egresos, estimaciones y seguimiento presupuestal.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Presupuesto%20general.xlsx',
+  },
+  {
+    id: 'presupuesto-hito',
+    name: 'Presupuesto por hito',
+    description: 'Planificacion y control de costos asociados a hitos o entregables del proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Presupuesto%20por%20hito.xlsx',
+  },
+  {
+    id: 'registro-cambios',
+    name: 'Registro de cambios',
+    description: 'Registro para documentar solicitudes de cambio, analisis de impacto, aprobaciones y estado.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Registro%20de%20Cambios.xlsx',
+  },
+  {
+    id: 'registro-incidencias',
+    name: 'Registro de incidencias',
+    description: 'Registro y seguimiento de problemas, impedimentos, acciones correctivas y responsables.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Registro%20de%20incidencias.xlsx',
+  },
+  {
+    id: 'registro-riesgos',
+    name: 'Registro de riesgos',
+    description: 'Identificacion, analisis, priorizacion, respuesta y seguimiento de riesgos del proyecto.',
+    format: 'xlsx',
+    size: 'XLSX',
+    category: 'other',
+    downloadUrl: 'https://iubexbqhmlerfkjrkoro.supabase.co/storage/v1/object/public/plantillas_artefactos_pmo/Registro%20de%20Riesgos.xlsx',
   },
 ];
 
@@ -108,6 +350,10 @@ function normalizeArtifactName(value: string): string {
     .trim();
 }
 
+function artifactMatchKeys(name: string): string[] {
+  return [name, ...(ACTIVE_ARTIFACT_ALIASES[name] ?? ARTIFACT_ALIASES[name] ?? [])].map(normalizeArtifactName);
+}
+
 function mapArtifactsFromAgentData(agentData: any): Artifact[] {
   const data = agentData?._current ?? agentData?.data ?? agentData?.diagnosis ?? agentData;
   const recommended = Array.isArray(data?.artefactos_recomendados)
@@ -115,11 +361,8 @@ function mapArtifactsFromAgentData(agentData: any): Artifact[] {
     : [];
   const recommendedSet = new Set(recommended.map((name: string) => normalizeArtifactName(name)));
 
-  return MOCK_ARTIFACTS.map(artifact => {
-    const baseName = artifact.name.replace(/\.(docx|xlsx|pdf)$/i, '');
-    const isRecommended =
-      recommendedSet.has(normalizeArtifactName(baseName)) ||
-      recommendedSet.has(normalizeArtifactName(artifact.name));
+  return ACTIVE_ARTIFACTS.map(artifact => {
+    const isRecommended = artifactMatchKeys(artifact.name).some(key => recommendedSet.has(key));
 
     return {
       ...artifact,
@@ -328,7 +571,7 @@ export default function ArtefactosView() {
       return;
     }
 
-    setRealArtifacts(MOCK_ARTIFACTS.map(a => ({ ...a, category: 'other' })));
+    setRealArtifacts(ACTIVE_ARTIFACTS.map(a => ({ ...a, category: 'other' })));
     setHasLoadedArtifacts(true);
   }, [projectId, startPolling, updatePhaseStatus]);
 
@@ -467,7 +710,7 @@ export default function ArtefactosView() {
           <div className="bg-white border-b border-neutral-100 px-8 py-5 flex items-center justify-between flex-shrink-0">
             <div>
               <h2 className="text-neutral-900 text-2xl tracking-tight" style={{ fontWeight: 850 }}>Catálogo de Entregables</h2>
-              <p className="text-neutral-500 text-[13px] mt-1">Se han generado {MOCK_ARTIFACTS.length} plantillas personalizadas para su gestión operativa.</p>
+              <p className="text-neutral-500 text-[13px] mt-1">Se han generado {ACTIVE_ARTIFACTS.length} plantillas personalizadas para su gestión operativa.</p>
             </div>
             <div className="flex items-center gap-3">
               <button

@@ -9,14 +9,22 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
+function formatInlineMarkdown(value: unknown): string {
+  return escapeHtml(value).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
 function htmlParagraphs(value?: string): string {
   const lines = String(value ?? '').split(/\n+/).map(line => line.trim()).filter(Boolean);
-  return lines.map(line => `<p>${escapeHtml(line)}</p>`).join('');
+  return lines.map(line => `<p>${formatInlineMarkdown(line)}</p>`).join('');
 }
 
 function htmlList(items?: string[]): string {
   if (!items?.length) return '';
-  return `<ul>${items.map(item => `<li>${escapeHtml(item).replace(/\n/g, '<br>')}</li>`).join('')}</ul>`;
+  return `<ul>${items.map(item => `<li>${formatInlineMarkdown(item).replace(/\n/g, '<br>')}</li>`).join('')}</ul>`;
+}
+
+function tableColumnCount(table: NonNullable<GuideChapter['subsections'][number]['table']>): number {
+  return Math.max(1, table.headers.length);
 }
 
 function generateDownloadHTML(
@@ -29,8 +37,8 @@ function generateDownloadHTML(
     const secHtml = ch.subsections.map(s => {
       const listHtml = htmlList(s.items);
       const tblHtml = s.table
-        ? `<table><thead><tr>${s.table.headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
-           <tbody>${s.table.rows.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c).replace(/\n/g, '<br>')}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+        ? `<div class="table-wrap"><table class="cols-${tableColumnCount(s.table)}"><thead><tr>${s.table.headers.map(h => `<th>${formatInlineMarkdown(h)}</th>`).join('')}</tr></thead>
+           <tbody>${s.table.rows.map(r => `<tr>${s.table!.headers.map((_, index) => `<td>${formatInlineMarkdown(r[index] ?? '').replace(/\n/g, '<br>')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
         : '';
       return `<h3>${escapeHtml(s.title)}</h3>${htmlParagraphs(s.content)}${listHtml}${tblHtml}`;
     }).join('');
@@ -43,7 +51,8 @@ function generateDownloadHTML(
 <meta charset="UTF-8"><title>Guía Metodológica — ${org}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Georgia, serif; font-size: 13px; color: #1f2937; line-height: 1.7; }
+  @page { size: A4; margin: 12mm 10mm; }
+  body { font-family: Georgia, serif; font-size: 13px; color: #1f2937; line-height: 1.7; overflow-wrap: anywhere; }
   .cover { background: #5454e9; color: #fff; padding: 80px 60px; min-height: 200px; }
   .cover h1 { font-size: 2.2em; font-weight: 700; margin-bottom: 12px; }
   .cover p { opacity: 0.7; font-size: 1em; margin-bottom: 6px; }
@@ -52,19 +61,57 @@ function generateDownloadHTML(
   .toc { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 40px; }
   .toc h2 { font-size: 1em; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin-bottom: 12px; }
   .toc-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dotted #d1d5db; color: #374151; }
-  .chapter { margin-bottom: 48px; }
+  .chapter { margin-bottom: 48px; break-inside: auto; }
   h2 { font-size: 1.25em; color: #5454e9; font-weight: 700; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #5454e9; }
+  h2, h3 { break-after: avoid; }
   h3 { font-size: 1em; color: #374151; font-weight: 700; margin: 20px 0 8px; }
   p { margin-bottom: 12px; color: #374151; }
   .intro p { color: #4b5563; font-style: italic; }
   ul { margin: 8px 0 16px 20px; }
   li { margin-bottom: 5px; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+  .table-wrap { width: 100%; overflow-x: auto; margin: 16px 0; break-inside: auto; }
+  table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 0.76em; table-layout: auto; }
+  table.cols-1, table.cols-2, table.cols-3, table.cols-4 { width: 100%; table-layout: fixed; }
   th { background: #5454e9; color: #fff; padding: 8px 12px; text-align: left; }
-  td { border: 1px solid #e5e7eb; padding: 7px 12px; }
+  td { border: 1px solid #e5e7eb; padding: 7px 12px; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
   tr:nth-child(even) td { background: #f9fafb; }
   .footer { text-align: center; color: #9ca3af; font-size: 0.8em; margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
-  @media print { body { font-size: 11px; } .cover { min-height: auto; } }
+  @media print {
+    body { font-size: 10.5px; line-height: 1.45; }
+    .cover { min-height: auto; padding: 32px 28px; break-after: page; }
+    .content { max-width: none; width: 100%; padding: 0; }
+    .toc { break-after: page; }
+    .chapter { margin-bottom: 28px; }
+    h2 { font-size: 1.12em; margin-top: 10px; }
+    h3 { font-size: 1em; margin-top: 14px; }
+    p { margin-bottom: 8px; }
+    ul { margin-bottom: 10px; }
+    li { margin-bottom: 3px; }
+    .table-wrap { overflow: visible; margin: 10px 0 14px; }
+    table {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      table-layout: fixed !important;
+      font-size: 5.8px;
+      line-height: 1.18;
+      break-inside: auto;
+      page-break-inside: auto;
+    }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    th, td {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      padding: 2px 3px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      hyphens: auto;
+    }
+    .print-btn { display: none; }
+  }
   @media screen { .print-btn { position: fixed; top: 20px; right: 20px; background: #5454e9; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; } }
 </style>
 </head>

@@ -3,11 +3,22 @@ import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import type { ProcessingStep } from './types';
 
 function ProcessingView({
-  steps, currentStep, isAdjustment,
+  steps, currentStep, isAdjustment, phaseProgress,
 }: {
-  steps: ProcessingStep[]; currentStep: number; isAdjustment: boolean;
+  steps: ProcessingStep[];
+  currentStep: number;
+  isAdjustment: boolean;
+  phaseProgress?: {
+    current: number;
+    total: number;
+    label: string;
+    detail?: string;
+  };
 }) {
   const pct = Math.min(100, Math.round((currentStep / steps.length) * 100));
+  const phasePct = phaseProgress
+    ? Math.min(100, Math.max(0, Math.round((phaseProgress.current / phaseProgress.total) * 100)))
+    : pct;
   return (
     <AnimatePresence>
       <motion.div 
@@ -36,6 +47,37 @@ function ProcessingView({
             ? 'El Agente esta incorporando los ajustes del consultor y generando una nueva version extensa. Este proceso puede tardar varios minutos.'
             : 'La guia se esta construyendo de acuerdo al enfoque aprobado en la Fase 6. Este proceso puede tardar varios minutos.'}
         </p>
+
+        {phaseProgress && (
+          <div className="w-[min(420px,calc(100vw-48px))] mb-4">
+            <div className="flex items-end justify-between gap-4 mb-2">
+              <div className="min-w-0">
+                <p className="text-neutral-900 text-sm leading-tight" style={{ fontWeight: 600 }}>
+                  {phaseProgress.current}/{phaseProgress.total}
+                </p>
+                <p className="text-neutral-500 text-[12px] leading-snug truncate">
+                  {phaseProgress.label}
+                </p>
+              </div>
+              <span className="text-neutral-400 text-[11px] tabular-nums" style={{ fontWeight: 600 }}>
+                {phasePct}%
+              </span>
+            </div>
+            <div className="h-2 bg-white border border-neutral-200 rounded-full overflow-hidden shadow-sm">
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: '#5454e9' }}
+                animate={{ width: `${phasePct}%` }}
+                transition={{ duration: 0.45, ease: 'easeOut' }}
+              />
+            </div>
+            {phaseProgress.detail && (
+              <p className="mt-2 text-[11px] text-neutral-400 text-center leading-snug">
+                {phaseProgress.detail}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="hidden">
           <div className="flex items-center justify-between mb-2">

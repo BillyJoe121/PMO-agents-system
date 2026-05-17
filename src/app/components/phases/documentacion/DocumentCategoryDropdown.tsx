@@ -28,7 +28,11 @@ export default function DocumentCategoryDropdown({ value, onChange }: DocumentCa
   const normalize = (s: string) =>
     s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-  const filtered = DOCUMENT_CATEGORIES.filter((cat) =>
+  const sortedCategories = [...DOCUMENT_CATEGORIES].sort((a, b) =>
+    normalize(a.label).localeCompare(normalize(b.label), 'es')
+  );
+
+  const filtered = sortedCategories.filter((cat) =>
     normalize(cat.label).includes(normalize(query))
   );
 

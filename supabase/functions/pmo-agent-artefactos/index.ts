@@ -29,6 +29,13 @@ interface AiTextResult {
   fallbackUsed: boolean;
 }
 
+function logPhase8(event: string, details: Record<string, unknown> = {}) {
+  console.info(`[pmo-agent-artefactos][phase8][${event}]`, {
+    at: new Date().toISOString(),
+    ...details,
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Lista maestra de artefactos PMO
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +84,57 @@ const ARTIFACT_ALIASES: Record<string, string[]> = {
   "Matriz de lecciones aprendidas": ["lecciones aprendidas", "lessons learned", "retrospectiva", "mejora continua", "conocimiento adquirido"],
 };
 
+const ACTIVE_ARTEFACTOS_MAESTROS = [
+  "Abastecimiento",
+  "Acta de constitucion",
+  "Acta de reunion",
+  "Caso de negocio",
+  "Control de entregables",
+  "Cronograma",
+  "Declaracion de alcance",
+  "Enunciado del alcance",
+  "Informe de avance",
+  "Lecciones aprendidas",
+  "Matriz de interesados",
+  "Matriz de requisitos",
+  "Plan de direccion de proyectos",
+  "Presupuesto general",
+  "Presupuesto por hito",
+  "Registro de cambios",
+  "Registro de incidencias",
+  "Registro de riesgos",
+];
+
+const ACTIVE_ARTEFACTOS_BASE_RECOMENDADOS = [
+  "Acta de constitucion",
+  "Caso de negocio",
+  "Cronograma",
+  "Enunciado del alcance",
+  "Informe de avance",
+  "Matriz de interesados",
+  "Plan de direccion de proyectos",
+  "Presupuesto general",
+  "Registro de riesgos",
+];
+
+const ACTIVE_ARTIFACT_ALIASES: Record<string, string[]> = {
+  "Acta de constitucion": ["acta de constitucion", "acta de constitución del proyecto", "project charter", "charter", "documento de inicio"],
+  "Acta de reunion": ["acta de reunion", "acta de reunión", "minuta", "meeting minutes"],
+  "Declaracion de alcance": ["declaracion de alcance", "declaración de alcance", "declaracion del alcance", "scope statement"],
+  "Enunciado del alcance": ["enunciado de alcance", "enunciado del alcance", "scope statement", "gestion del alcance"],
+  "Registro de riesgos": ["matriz de riesgos", "registro de riesgos", "risk register", "gestion de riesgos", "analisis de riesgos"],
+  "Presupuesto general": ["formato de presupuesto", "presupuesto", "budget", "control de costos", "linea base de costos"],
+  "Presupuesto por hito": ["presupuesto por hito", "presupuesto por hitos", "costos por hito"],
+  "Matriz de interesados": ["matriz de stakeholders", "registro de interesados", "stakeholder register", "gestion de interesados"],
+  "Informe de avance": ["informe de avance e indicadores", "informe de avance", "informe de estado", "status report", "indicadores", "kpi", "metricas", "dashboard"],
+  "Registro de incidencias": ["formato de incidencias", "registro de incidencias", "issue log", "gestion de incidencias", "problemas", "impedimentos"],
+  "Control de entregables": ["formato de entregables y validacion", "validacion de entregables", "aceptacion de entregables", "control de entregables", "criterios de aceptacion"],
+  "Lecciones aprendidas": ["matriz de lecciones aprendidas", "lecciones aprendidas", "lessons learned", "retrospectiva", "mejora continua"],
+  "Registro de cambios": ["registro de cambios", "control de cambios", "solicitudes de cambio", "change log"],
+  "Matriz de requisitos": ["matriz de requisitos", "requirements matrix", "requisitos", "trazabilidad de requisitos"],
+  "Plan de direccion de proyectos": ["plan de direccion de proyectos", "plan de dirección de proyectos", "project management plan", "plan para la direccion"],
+};
+
 function normalizeText(value: unknown): string {
   return String(value ?? "")
     .normalize("NFD")
@@ -111,8 +169,8 @@ function resolveArtifactName(value: unknown): string | null {
   const normalized = normalizeText(value);
   if (!normalized) return null;
 
-  for (const artifact of ARTEFACTOS_MAESTROS) {
-    const candidates = [artifact, ...(ARTIFACT_ALIASES[artifact] ?? [])].map(normalizeText);
+  for (const artifact of ACTIVE_ARTEFACTOS_MAESTROS) {
+    const candidates = [artifact, ...(ACTIVE_ARTIFACT_ALIASES[artifact] ?? ARTIFACT_ALIASES[artifact] ?? [])].map(normalizeText);
     if (candidates.some(candidate => normalized === candidate || normalized.includes(candidate) || candidate.includes(normalized))) {
       return artifact;
     }
@@ -146,8 +204,8 @@ function inferRecommendedFromText(text: string): string[] {
   const normalizedText = normalizeText(text);
   if (!normalizedText) return [];
 
-  return ARTEFACTOS_MAESTROS.filter(artifact => {
-    const candidates = [artifact, ...(ARTIFACT_ALIASES[artifact] ?? [])].map(normalizeText);
+  return ACTIVE_ARTEFACTOS_MAESTROS.filter(artifact => {
+    const candidates = [artifact, ...(ACTIVE_ARTIFACT_ALIASES[artifact] ?? ARTIFACT_ALIASES[artifact] ?? [])].map(normalizeText);
     return candidates.some(candidate => candidate.length > 3 && normalizedText.includes(candidate));
   });
 }
@@ -157,6 +215,9 @@ function inferRecommendedFromText(text: string): string[] {
 // ─────────────────────────────────────────────────────────────────────────────
 function buildPrompt(fase7Content: string, systemPrompt?: string): string {
   if (systemPrompt) {
+    if (systemPrompt.includes("${fase7Content}")) {
+      return systemPrompt.replaceAll("${fase7Content}", fase7Content);
+    }
     return `${systemPrompt}\n\nDOCUMENTO DE LA FASE 7:\n---\n${fase7Content}\n---`;
   }
   return `Eres un experto en gestión de proyectos y oficinas de proyectos (PMO). 
@@ -168,7 +229,7 @@ Tu tarea es analizar ese documento y, tomando como base la siguiente lista EXACT
 2. **otros_artefactos**: Los artefactos de la lista maestra que NO están directamente recomendados o que son complementarios / opcionales según el contexto del documento.
 
 LISTA MAESTRA DE ARTEFACTOS (debes usar los nombres EXACTAMENTE como aparecen aquí):
-${ARTEFACTOS_MAESTROS.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+${ACTIVE_ARTEFACTOS_MAESTROS.map((a, i) => `${i + 1}. ${a}`).join("\n")}
 
 REGLAS:
 - Cada artefacto de la lista maestra debe aparecer en EXACTAMENTE UNA de las dos listas.
@@ -318,6 +379,7 @@ serve(async (req: Request) => {
   try {
     const body = await req.json();
     projectId = body.projectId;
+    logPhase8("request_received", { projectId });
 
     if (!projectId) {
       return new Response(
@@ -344,6 +406,13 @@ serve(async (req: Request) => {
       .single();
     const modelSettings = await getAiModelSettings(supabase);
     const modelsToTry = getModelCandidates(modelSettings);
+    logPhase8("model_config_loaded", {
+      projectId,
+      configuredProvider: modelSettings.provider,
+      selectedModel: modelSettings.selected_model,
+      attemptedModels: modelsToTry.map((model) => `${model.provider}:${model.model}`),
+      hasAgentPrompt: Boolean(agentConfig?.prompt_sistema),
+    });
 
     // ── 1. Marcar fase 8 como procesando ────────────────────────────────────
     await supabase
@@ -355,6 +424,7 @@ serve(async (req: Request) => {
       })
       .eq("proyecto_id", projectId)
       .eq("numero_fase", 8);
+    logPhase8("marked_processing", { projectId });
 
     // ── 2. Leer el resultado aprobado de la Fase 7 ───────────────────────────
     const { data: fase7Row, error: fase7Error } = await supabase
@@ -372,6 +442,10 @@ serve(async (req: Request) => {
 
     // ── 3. Extraer contenido legible de la Fase 7 ────────────────────────────
     const fase7Content = extractFase7Content(fase7Row.datos_consolidados);
+    logPhase8("fase7_content_extracted", {
+      projectId,
+      contentChars: fase7Content.length,
+    });
 
     if (!fase7Content.trim()) {
       throw new Error("El documento de la Fase 7 está vacío o no tiene contenido procesable.");
@@ -379,12 +453,26 @@ serve(async (req: Request) => {
 
     // ── 4. Construir prompt y llamar a Gemini ─────────────────────────────────
     const prompt = buildPrompt(fase7Content, agentConfig?.prompt_sistema);
+    logPhase8("prompt_start", {
+      projectId,
+      promptChars: prompt.length,
+      contentChars: fase7Content.length,
+    });
     const geminiResponse = await callAi(
       prompt,
       apiKeys,
       modelsToTry,
       agentConfig?.temperatura ? Number(agentConfig.temperatura) : 1
     );
+    logPhase8("ai_response", {
+      projectId,
+      provider: geminiResponse.provider,
+      model: geminiResponse.model,
+      responseChars: geminiResponse.text.length,
+      fallbackUsed: geminiResponse.fallbackUsed,
+      attemptedModels: geminiResponse.attemptedModels,
+      errors: geminiResponse.errors.map((error) => `${error.provider}:${error.model}:${error.message}`),
+    });
 
     // ── 5. Parsear la respuesta JSON ──────────────────────────────────────────
     let resultado: { artefactos_recomendados: string[]; otros_artefactos: string[] };
@@ -400,20 +488,27 @@ serve(async (req: Request) => {
     }
 
     // ── 6. Normalizar, complementar y validar contra la lista maestra ───────
+    logPhase8("json_parsed", {
+      projectId,
+      aiRecommendedRaw: Array.isArray(resultado.artefactos_recomendados) ? resultado.artefactos_recomendados.length : null,
+      aiOtherRaw: Array.isArray(resultado.otros_artefactos) ? resultado.otros_artefactos.length : null,
+    });
+
     const aiRecommended = normalizeArtifactList(resultado.artefactos_recomendados);
     const aiOther = normalizeArtifactList(resultado.otros_artefactos);
     const deterministicRecommended = inferRecommendedFromText(fase7Content);
 
-    const recommendedSet = new Set([...aiRecommended, ...deterministicRecommended]);
-    const usedFallback = recommendedSet.size === 0;
+    const recommendationSource = aiRecommended.length > 0 ? "ai" : deterministicRecommended.length > 0 ? "text_inference" : "base_fallback";
+    const recommendedSet = new Set(recommendationSource === "ai" ? aiRecommended : deterministicRecommended);
+    const usedFallback = recommendationSource === "base_fallback";
     if (usedFallback) {
-      for (const artifact of ARTEFACTOS_BASE_RECOMENDADOS) {
+      for (const artifact of ACTIVE_ARTEFACTOS_BASE_RECOMENDADOS) {
         recommendedSet.add(artifact);
       }
     }
 
-    const finalRecommended = ARTEFACTOS_MAESTROS.filter(artifact => recommendedSet.has(artifact));
-    const finalOther = ARTEFACTOS_MAESTROS.filter(artifact => !recommendedSet.has(artifact));
+    const finalRecommended = ACTIVE_ARTEFACTOS_MAESTROS.filter(artifact => recommendedSet.has(artifact));
+    const finalOther = ACTIVE_ARTEFACTOS_MAESTROS.filter(artifact => !recommendedSet.has(artifact));
 
     resultado = {
       artefactos_recomendados: finalRecommended,
@@ -421,10 +516,20 @@ serve(async (req: Request) => {
     };
 
     // ── 7. Persistir en fases_estado ─────────────────────────────────────────
+    logPhase8("classification_finalized", {
+      projectId,
+      recommendationSource,
+      aiRecommended: aiRecommended.length,
+      aiOther: aiOther.length,
+      inferredByText: deterministicRecommended.length,
+      finalRecommended: finalRecommended.length,
+      finalOther: finalOther.length,
+    });
+
     const datosFinales = {
       artefactos_recomendados: resultado.artefactos_recomendados,
       otros_artefactos: resultado.otros_artefactos,
-      lista_maestra: ARTEFACTOS_MAESTROS,
+      lista_maestra: ACTIVE_ARTEFACTOS_MAESTROS,
       metadata: {
         timestamp: new Date().toISOString(),
         agent_id: "agente-8",
@@ -434,6 +539,7 @@ serve(async (req: Request) => {
         ai_recomendados_normalizados: aiRecommended,
         ai_otros_normalizados: aiOther,
         inferidos_por_texto: deterministicRecommended,
+        fuente_recomendaciones: recommendationSource,
         uso_fallback_base: usedFallback,
         model_provider_configured: modelSettings.provider,
         model_selected: modelSettings.selected_model,
@@ -458,6 +564,11 @@ serve(async (req: Request) => {
       })
       .eq("proyecto_id", projectId)
       .eq("numero_fase", 8);
+    logPhase8("saved_result", {
+      projectId,
+      totalRecommended: resultado.artefactos_recomendados.length,
+      totalOther: resultado.otros_artefactos.length,
+    });
 
     return new Response(
       JSON.stringify({ success: true, data: datosFinales }),

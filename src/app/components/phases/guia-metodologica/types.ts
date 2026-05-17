@@ -1,7 +1,7 @@
 import type { ElementType } from 'react';
 
 type PmoType = 'Ágil' | 'Híbrida' | 'Predictiva';
-type ModuleView = 'auto-trigger' | 'processing' | 'results' | 'approved';
+type ModuleView = 'auto-trigger' | 'processing' | 'results' | 'approved' | 'error';
 
 interface ProcessingStep {
   id: number;
