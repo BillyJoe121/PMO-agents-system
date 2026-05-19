@@ -398,7 +398,7 @@ export default function MadurezModule() {
         projectId={projectId!}
         companyName={project.companyName}
         phaseNumber={5}
-        phaseName="Madurez de la PMO"
+        phaseName="Diagnóstico de madurez"
         onReprocessed={async () => {
           // 1. Block downstream phases (6, 7…)
           await reprocessPhase(projectId!, 5);

@@ -1095,7 +1095,7 @@ export default function EnfoqueModule() {
         projectId={projectId!}
         companyName={project.companyName}
         phaseNumber={6}
-        phaseName="Enfoque para Guía Metodológica"
+        phaseName="Diseño guía metodológica"
         eyebrow={view === 'approved' ? 'Aprobada' : 'Activa'}
         onReprocessed={async () => {
           autoTriggered.current = true;

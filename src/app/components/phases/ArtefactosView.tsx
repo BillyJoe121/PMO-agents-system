@@ -697,7 +697,7 @@ export default function ArtefactosView() {
         projectId={projectId!}
         companyName={project.companyName}
         phaseNumber={8}
-        phaseName="Artefactos y Entrega Final"
+        phaseName="Consolidación de artefactos"
         eyebrow={isCompleted ? 'Completada' : undefined}
         onReprocessed={handleReprocessAgent8}
       />

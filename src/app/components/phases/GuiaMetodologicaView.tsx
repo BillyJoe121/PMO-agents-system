@@ -837,7 +837,7 @@ export default function GuiaMetodologicaView() {
           projectId={projectId!}
           companyName={project.companyName}
           phaseNumber={7}
-          phaseName="Guia Metodologica"
+          phaseName="Construcción guía metodológica"
           eyebrow="Revision requerida"
         />
         <div className="flex-1 flex items-center justify-center px-6">
@@ -875,7 +875,7 @@ export default function GuiaMetodologicaView() {
           projectId={projectId!}
           companyName={project.companyName}
           phaseNumber={7}
-          phaseName="Guía Metodológica"
+          phaseName="Construcción guía metodológica"
         />
         <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={false} phaseProgress={phase7Progress} />
       </div>
@@ -892,7 +892,7 @@ export default function GuiaMetodologicaView() {
           projectId={projectId!}
           companyName={project.companyName}
           phaseNumber={7}
-          phaseName="Guía Metodológica"
+          phaseName="Construcción guía metodológica"
         />
         <div className="flex-1 min-h-0 overflow-hidden">
           <ProcessingView steps={PROCESSING_STEPS} currentStep={processingStep} isAdjustment={isAdjustment} phaseProgress={phase7Progress} />
@@ -908,7 +908,7 @@ export default function GuiaMetodologicaView() {
         projectId={projectId!}
         companyName={project.companyName}
         phaseNumber={7}
-        phaseName="Guía Metodológica"
+        phaseName="Construcción guía metodológica"
         eyebrow={isCompleted ? 'Completada' : undefined}
       />
 

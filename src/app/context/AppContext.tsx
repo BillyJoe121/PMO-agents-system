@@ -49,10 +49,10 @@ const PHASE_NAMES = [
   'Registro de entrevistas',
   'Encuestas de idoneidad',
   'Diagnostico de idoneidad',
-  'Encuestas de Madurez',
-  'Consolidación y pasos para Guía Metodologica',
-  'Diseño Metodologica del proyecto',
-  'Artefactos',
+  'Diagnóstico de madurez',
+  'Diseño guía metodológica',
+  'Construcción guía metodológica',
+  'Consolidación de artefactos',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
